@@ -11,7 +11,7 @@ Pré-requisitos: Git, Python 3, curl, patch e uv para preparar as ferramentas; N
 ```sh
 git clone --recurse-submodules https://github.com/verner-becker/waswan-synth.git
 cd waswan-synth
-git switch feat/polyphony-32
+git switch feat/polyphony-64
 sh scripts/setup-tools.sh
 sh scripts/build-simulator.sh
 sh scripts/check-upstream.sh
@@ -19,6 +19,7 @@ node tests/midi-profile.test.mjs
 node tests/polyphony.test.mjs
 node tests/polyphony-16.test.mjs
 node tests/polyphony-32.test.mjs
+node tests/polyphony-64.test.mjs
 python3 scripts/serve-simulator.py
 ```
 
@@ -40,24 +41,27 @@ A fase de mapeamento está preservada em `v0.2.0`. A etapa seguinte expôs [POLY
 
 A etapa de oito foi validada e preservada na tag `v0.3.0`. A etapa [8 → 16 vozes](docs/polifonia-16.md) passou pelos testes por software e está preservada em `main` e na tag `v0.4.0`.
 
-Nesta branch, a etapa [16 → 32 vozes](docs/polifonia-32.md) foi autorizada, com testes delegados ao agente. POLY oferece 32 notas, DUAL 16, UNISON mantém oito vozes por nota e SUPER mantém teto global de cinco. O patch é aplicado somente à cópia de compilação, com listas e filas ampliadas. O indicador mostra 32 slots e **Sustain MIDI** permite acumular notas em grupos menores. Não foram iniciadas 64 ou 128.
+A etapa [16 → 32 vozes](docs/polifonia-32.md) foi testada por software, aprovada pelo usuário e preservada em main/tag `v0.5.0`.
+
+Nesta branch, a etapa [32 → 64 vozes](docs/polifonia-64.md) usa máscara de alocação de 64 bits, listas de 64 notas e filas de 256 eventos. POLY oferece 64 notas, DUAL 32, UNISON mantém oito vozes por nota e SUPER mantém cinco globais. O indicador mostra 64 slots; **Sustain MIDI** permite acumular notas em grupos menores. Upstream e firmware físico preservados. Não foi iniciada a etapa de 128.
 
 Para atualizar apenas a interface, sem recompilar o DSP, execute `sh scripts/stage-simulator.sh`. Verifique o perfil com `node tests/midi-profile.test.mjs`.
 
-Fluxo Git: commits locais descritivos; atualizar o submódulo apenas por decisão explícita de incorporar uma nova base. Não há CI/CD nesta etapa.
+Fluxo Git: cada fase aprovada é preservada em main/tag e a próxima etapa ocorre em branch isolada, com commits descritivos e push de implementação, testes e relatório. Esse ciclo é parte do trabalho em todas as fases. Atualizar o submódulo apenas por decisão explícita de incorporar uma nova base. Não há CI/CD nesta etapa.
 
 ## Inspecionar o código
 
-A branch principal preserva a entrega de 16; esta branch contém a etapa de 32 testada por software. A tag `v0.1.0` preserva a primeira execução validada, anterior às expansões.
+A branch principal preserva a entrega de 32; esta branch contém a etapa de 64 testada por software. A tag `v0.1.0` preserva a primeira execução validada, anterior às expansões.
 
 - [Auditoria inicial](docs/auditoria-inicial.md): inventário, arquitetura, licenças e testes de áudio/MIDI.
 - [Perfil MIDI](docs/perfil-midi.md): aprendizado, validação física e diagnóstico dos passos de cutoff.
 - [Polifonia de 8 vozes](docs/polifonia-8.md): causa do modo mono, orçamento de vozes, testes e roteiro no SMK-37 Pro.
 - [Polifonia de 16 vozes](docs/polifonia-16.md): revisão de estruturas, patch isolado, custo DSP e validação musical pendente.
 - [Polifonia de 32 vozes](docs/polifonia-32.md): filas maiores, teste da máscara completa, benchmarks e teste reproduzível no Chrome.
+- [Polifonia de 64 vozes](docs/polifonia-64.md): máscara de 64 bits, bit 63 validado, arpejo, regressões e custo DSP/memória.
 - [Adaptador MIDI WASWAN](web/midi.js) e [lógica do perfil](web/midi-profile.js): extensões fora do upstream.
 - [Fontes originais na revisão fixada](https://github.com/4t59m4f784-creator/SMKSYNTH/tree/3f751bc2be066414f204cf44e1aa05d9c7467d7f): consulte `web/simulator/`, `web/sim/sim.c` e `firmware/src/` para interface, integração WASM e DSP. O submódulo aparece como um link no GitHub; o clone recursivo baixa essas fontes.
 
-O usuário confirmou o saw, áudio no navegador, quatro knobs e um slider, e POLY na etapa de oito. Em seguida autorizou 16 e 32, delegando os testes de polifonia ao agente. As verificações automatizadas e no Chrome estão documentadas. Qualquer aumento acima de 32 exige nova autorização explícita. O controle fino de cutoff segue adiado; não há interface modular completa nesta etapa.
+O usuário confirmou o saw, áudio no navegador, quatro knobs e um slider, e POLY na etapa de oito. Em seguida autorizou 16, 32 e 64, delegando os testes de polifonia ao agente. As verificações automatizadas e no Chrome estão documentadas. Qualquer aumento acima de 64 exige nova autorização explícita. O controle fino de cutoff segue adiado; não há interface modular completa nesta etapa.
 
 Código e adaptações: GPL-3.0-only; consulte [LICENSE](LICENSE). Preserve também [os créditos originais](upstream/SMKSYNTH/CREDITS.md) e [as licenças dos componentes](upstream/SMKSYNTH/LICENSING.md). Nenhuma alteração foi enviada ao teclado.
