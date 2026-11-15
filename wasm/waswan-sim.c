@@ -110,3 +110,14 @@ EXPORT int32_t waswan_knob_value(uint32_t k)
     int32_t p = waswan_knob_param(k);
     return p < 0 ? -1 : ed_patch((uint32_t)p)->v[p];
 }
+
+/* Bounds for absolute soft takeover; identical to the original parameter setter. */
+EXPORT int32_t waswan_knob_bound(uint32_t k, uint32_t upper)
+{
+    int32_t p = waswan_knob_param(k);
+    if (p < 0) return -1;
+    patch_t *d = ed_patch((uint32_t)p);
+    if (obv_patch_engine(d) == OBV_DRUMS)
+        for (unsigned l = 0; l < 8u; l++) if ((uint32_t)p == DP_PITCH[l]) return upper ? 76 : 52;
+    return upper ? obv_param_max(d,(uint32_t)p) : 0;
+}

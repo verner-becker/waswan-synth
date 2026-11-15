@@ -9,6 +9,11 @@ export function updateMidiProfile(frame) {
   activePanel.querySelector('[data-fine-context]').textContent=control
     ? 'Fino disponível nesta tela: '+(control.parameters.map((p,k)=>p?'K'+(k+1):null).filter(Boolean).join(', ')||'nenhum')+'. Em menus e camadas especiais, use Normal.'
     : 'Controle fino indisponível neste WASM; recompile a extensão host.';
+  for(const b of activeProfile.bindings){
+    const label=activePanel.querySelector(`[data-pickup="${b.target}"]`);if(!label)continue;
+    const p=control?.parameters[Number(b.target.split(':')[1])];
+    label.textContent=b.behavior!=='fine'||b.mode!=='absolute'?'':!p?' · indisponível nesta tela':p.pickupCC===null?' · recompile o WASM':p.picked&&p.revision===activeProfile.revision?' · posição sincronizada':` · captura suave: alcance CC ${p.pickupCC}`;
+  }
 }
 export function mountProfilePanel(controller) {
   const anchor = document.querySelector('.midi-panel');
@@ -29,15 +34,15 @@ export function mountProfilePanel(controller) {
       </select></label>
       <label>Comportamento do knob <select data-behavior>
         <option value="normal">Normal · passos e aceleração originais</option>
-        <option value="fine">Fino · uma unidade interna por incremento</option>
+        <option value="fine">Fino · controle preciso sem aceleração</option>
       </select></label>
       <button type="button" data-learn>Aprender controle</button>
       <button type="button" data-cancel>Cancelar</button>
     </div>
     <p data-fine-context>Inicie o motor para consultar o controle fino.</p>
-    <p>Fino aplica-se aos parâmetros diretos de K1–K4, preservando a escala original. Depois de mudar página ou preset, o primeiro valor absoluto apenas estabelece a nova referência. K5–K8 e faders mantêm Normal.</p>
+    <p>Fino aplica-se aos parâmetros diretos de K1–K4, preservando a escala original. No Fino absoluto, gire até cruzar a posição do valor atual para assumir o controle sem salto. Depois disso, o curso acompanha os valores e alcança os dois extremos. K5–K8 e faders mantêm Normal.</p>
     <p data-status role="status" aria-live="polite"></p>
-    <p>Knobs absolutos usam a diferença entre movimentos; o primeiro valor após trocar a entrada, soltar tudo ou retornar à janela estabelece a posição inicial. Faders usam o valor recebido diretamente, respeitando JUMP/CATCH do instrumento.</p>
+    <p>No Normal, knobs absolutos usam a diferença entre movimentos; o primeiro valor após trocar a entrada, soltar tudo ou retornar à janela estabelece a posição inicial. Faders usam o valor recebido diretamente, respeitando JUMP/CATCH do instrumento.</p>
     <p>Um CC mapeado substitui sua função original nesta porta e canal. Se mapear CC64, ele passa a controlar esse destino em vez de sustain. Desative o perfil para voltar ao comportamento original. O perfil é salvo apenas neste navegador, separado dos timbres.</p>
     <div class="waswan-table"><table><thead><tr><th>Controle virtual</th><th>Entrada / canal / CC</th><th>Formato MIDI</th><th>Comportamento</th><th>Ação</th></tr></thead><tbody></tbody></table></div>
   `;
@@ -93,10 +98,11 @@ export function mountProfilePanel(controller) {
       const behaviorCell=document.createElement('td'),behavior=document.createElement('select');
       behavior.dataset.bindingBehavior=b.target;behavior.setAttribute('aria-label',`Comportamento ${b.target}`);
       behavior.add(new Option('Normal','normal'));
-      if(fineTarget(b.target))behavior.add(new Option('Fino · unidade interna','fine'));
+      if(fineTarget(b.target))behavior.add(new Option('Fino','fine'));
       behavior.value=b.behavior;behavior.disabled=!fineTarget(b.target);
       behavior.onchange=()=>profile.setBehavior(b.target,behavior.value);
-      behaviorCell.append(behavior);row.append(behaviorCell);
+      const pickup=document.createElement('small');pickup.dataset.pickup=b.target;
+      behaviorCell.append(behavior,pickup);row.append(behaviorCell);
       const cell = document.createElement('td'), button = document.createElement('button');
       button.type='button'; button.textContent='Remover';
       button.setAttribute('aria-label',`Remover mapeamento ${TARGETS.find(t=>t.id===b.target).label}`);

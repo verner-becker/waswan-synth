@@ -22,6 +22,7 @@ export class MidiProfile {
     this.previous = new Map();
     this.learning = null;
     this.context = null;
+    this.revision = 0;
     this.onChange = () => {};
     this.persistenceError = false;
     try {
@@ -43,6 +44,7 @@ export class MidiProfile {
     this.onChange();
   }
   reset() {
+    this.revision=(this.revision+1)>>>0;
     this.previous.clear();
     this.learning = null;
     this.context = null;
@@ -56,18 +58,21 @@ export class MidiProfile {
   setContext(context) {
     if (this.context === context) return;
     this.context = context;
+    this.revision=(this.revision+1)>>>0;
     for (const b of this.bindings) if (b.behavior === 'fine') this.previous.delete(sourceKey(b));
   }
   setBehavior(target, behavior) {
     if (!['normal','fine'].includes(behavior) || (behavior==='fine'&&!fineTarget(target))) return false;
     const binding=this.bindings.find(b=>b.target===target);
     if (!binding) return false;
+    this.revision=(this.revision+1)>>>0;
     binding.behavior=behavior;this.previous.delete(sourceKey(binding));this.save();return true;
   }
   learn(target, mode, behavior='normal') {
     if (!this.enabled || !validTarget(target) || !MODES.includes(mode) ||
       (target.startsWith('fader:') && mode !== 'absolute') || !['normal','fine'].includes(behavior) ||
       (behavior==='fine'&&!fineTarget(target))) return false;
+    this.revision=(this.revision+1)>>>0;
     this.learning = {target,mode,behavior};
     this.onChange();
     return true;
@@ -102,6 +107,11 @@ export class MidiProfile {
     const i = Number(index);
     if (kind === 'fader') {
       send({t:'fader',f:i,v:value});
+      return true;
+    }
+    if (binding.behavior==='fine' && binding.mode==='absolute') {
+      this.previous.set(key,value);
+      send({t:'enc-fine-absolute',e:i,value,context:this.context,revision:this.revision});
       return true;
     }
     let steps;
