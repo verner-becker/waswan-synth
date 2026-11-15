@@ -9,15 +9,15 @@ let saved=JSON.stringify({version:1,enabled:true,bindings:[{port,channel:0,cc:48
 const storage={getItem:()=>saved,setItem:(k,v)=>{assert.equal(k,STORAGE_KEY);saved=v;}};
 const p=new MidiProfile(storage),cc=v=>p.handle([0xb0,48,v],port,m=>messages.push(m));
 assert.equal(p.bindings[0].behavior,'normal');cc(40);cc(41);assert.deepEqual(messages.pop(),{t:'enc',e:0,steps:1});
-assert(p.setBehavior('enc:0','fine'));p.setContext(123);cc(80);assert.equal(messages.length,0);cc(81);assert.deepEqual(messages.pop(),{t:'enc-fine',e:0,steps:1,context:123});
-cc(83);assert.equal(messages.pop().steps,2);cc(80);assert.equal(messages.pop().steps,-3);cc(127);assert.equal(messages.pop().steps,47);cc(0);assert.equal(messages.pop().steps,-127);
-p.setContext(124);cc(100);assert.equal(messages.length,0);cc(101);assert.equal(messages.pop().steps,1);
-p.reset();p.setContext(124);cc(10);assert.equal(messages.length,0);cc(9);assert.equal(messages.pop().steps,-1);
+assert(p.setBehavior('enc:0','fine'));p.setContext(123);cc(80);assert.equal(messages.pop().value,80);cc(81);assert.deepEqual(messages.pop(),{t:'enc-fine-absolute',e:0,value:81,context:123,revision:p.revision});
+for(const v of [83,80,127,0]){cc(v);assert.equal(messages.pop().value,v);}
+const beforeRevision=p.revision;p.setContext(124);cc(100);assert.equal(messages.pop().context,124);assert.notEqual(p.revision,beforeRevision);
+const resetRevision=p.revision;p.reset();assert.equal(p.revision,(resetRevision+1)>>>0);p.setContext(124);cc(10);assert.equal(messages.pop().value,10);cc(9);assert.equal(messages.pop().value,9);
 assert.equal(new MidiProfile(storage).bindings[0].behavior,'fine');assert.equal(p.learn('enc:4','absolute','fine'),false);assert.equal(p.learn('fader:0','absolute','fine'),false);
 for(const [mode,up,down,neutral,jump] of [['offset',65,63,64,67],['twos',1,127,0,3]]){
  p.learn('enc:0',mode,'fine');cc(neutral);cc(up);assert.equal(messages.pop().steps,1);cc(down);assert.equal(messages.pop().steps,-1);cc(neutral);assert.equal(messages.length,0);cc(jump);assert.equal(messages.pop().steps,3);cc(mode==='offset'?127:64);assert.equal(messages.pop().steps,mode==='offset'?63:-64);
 }
-p.learn('enc:0','absolute','fine');cc(0);for(let v=1;v<=127;v++){cc(v);assert.equal(messages.pop().steps,1);}for(let v=126;v>=0;v--){cc(v);assert.equal(messages.pop().steps,-1);}cc(0);assert.equal(messages.length,0);
+p.learn('enc:0','absolute','fine');cc(0);for(let v=1;v<=127;v++){cc(v);assert.equal(messages.pop().value,v);}for(let v=126;v>=0;v--){cc(v);assert.equal(messages.pop().value,v);}messages.length=0;
 assert.equal(p.handle([0x90,60,100],port,()=>{}),false);assert.equal(p.handle([0xe0,0,80],port,()=>{}),false);assert.equal(p.handle([0xb0,64,127],port,()=>{}),false);
 p.learn('fader:0','absolute');p.handle([0xb0,49,0],port,()=>{});p.handle([0xb0,49,127],port,m=>messages.push(m));assert.deepEqual(messages.pop(),{t:'fader',f:0,v:127});
 // Native host adapter and original encoder path, real 256-voice WASM.

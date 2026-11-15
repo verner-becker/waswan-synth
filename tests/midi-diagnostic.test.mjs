@@ -16,6 +16,6 @@ async function fixture(capture){const sent=[],source={id:'test',name:'private so
  await c.connect();c.profile.setEnabled(true);c.profile.learn('enc:0','absolute','fine');c.profile.setContext(42);c.message([181,48,40]);if(capture)c.diagnostic.start();
  for(const raw of [[181,48,41],[181,48,43],[144,60,100],[224,0,80],[176,64,127],[128,60,0],[176,123,0]])c.message(raw);
  return {sent,c};}
-const off=await fixture(false),on=await fixture(true);assert.deepEqual(on.sent,off.sent);const cc=on.c.diagnostic.records.filter(r=>r.type==='cc'&&r.cc===48);assert.equal(cc[0].profilePrevious,40);assert.equal(cc[0].commands[0].steps,1);assert.equal(cc[1].commands[0].steps,2);assert.equal(cc[0].disposition,'mapped-command-sent');
+const off=await fixture(false),on=await fixture(true);assert.deepEqual(on.sent,off.sent);const cc=on.c.diagnostic.records.filter(r=>r.type==='cc'&&r.cc===48);assert.equal(cc[0].profilePrevious,40);assert.equal(cc[0].commands[0].t,'enc-fine-absolute');assert.equal(cc[0].commands[0].value,41);assert.equal(cc[1].commands[0].value,43);assert.equal(cc[0].disposition,'mapped-command-sent');
 assert(!on.c.diagnostic.jsonl().includes('private source name'));assert(!on.c.diagnostic.records.some(r=>r.raw?.[0]===144));
 console.log('PASS MIDI diagnostic: optional, bounded, CC-only, raw deltas, frame snapshots, exact forwarding, markers and privacy');

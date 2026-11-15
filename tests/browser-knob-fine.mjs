@@ -18,9 +18,9 @@ try{
  const value=async()=>p.evaluate(()=>audit.frame.knobControl.parameters[0]?.value);
  const set40=async()=>{await send({t:'midi',st:0xb0,d1:74,d2:40});await p.waitForFunction(()=>audit.frame.knobControl.parameters[0]?.value===40);};
  await set40();await cc(40);await cc(42);await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===52);
- await p.locator('[data-binding-behavior="enc:0"]').selectOption('fine');await set40();await cc(70);await cc(71);await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===41);await cc(73);await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===43);
- await cc(70);await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===40);
- await p.evaluate(()=>{for(const v of [71,72,73,74,75,76,77,78,79,80])audit.source.onmidimessage({data:[0xb0,48,v]});});await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===50);
+ await p.locator('[data-binding-behavior="enc:0"]').selectOption('fine');await set40();await cc(70);await cc(71);await p.waitForTimeout(100);assert.equal(await value(),40);await cc(40);await cc(41);await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===41);await cc(43);await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===43);
+ await cc(40);await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===40);
+ await p.evaluate(()=>{for(const v of [41,42,43,44,45,46,47,48,49,50])audit.source.onmidimessage({data:[0xb0,48,v]});});await p.waitForFunction(()=>audit.frame.knobControl.parameters[0].value===50);
  // Original PARA page button; first absolute value seeds a new reference.
  const oldContext=await p.evaluate(()=>audit.frame.knobControl.context);
  await send({t:'btn',b:13,down:true});await p.waitForTimeout(80);await send({t:'btn',b:13,down:false});await p.waitForFunction(c=>audit.frame.knobControl.context!==c,oldContext);
@@ -44,5 +44,5 @@ try{
  errors.push(...await p.evaluate(()=>audit.errors));
  await p.reload();await p.locator('.waswan-profile summary').click();assert.equal(await p.locator('[data-binding-behavior="enc:0"]').inputValue(),'fine');
  await p.setViewportSize({width:390,height:844});await p.screenshot({path:'.local/validation/knob-fine-mobile.png',fullPage:true});
- errors.push(...await p.evaluate(()=>audit.errors));assert.deepEqual(errors,[]);const report={result:'PASS',legacyMigration:true,normal40plus2:52,fine40plus1:41,finePlus2:43,fastMoves:true,pageReseed:true,presetReseed:true,reconnect:true,focus:true,relativeFormats:['offset','twos'],profilePersists:true,notesPanic:true,dspMonitor:true,errors};fs.writeFileSync('.local/validation/knob-fine-browser.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+ errors.push(...await p.evaluate(()=>audit.errors));assert.deepEqual(errors,[]);const report={result:'PASS',legacyMigration:true,normal40plus2:52,fine40plus1:41,finePlus2:43,absolutePickup:true,fastMoves:true,pageReseed:true,presetReseed:true,reconnect:true,focus:true,relativeFormats:['offset','twos'],profilePersists:true,notesPanic:true,dspMonitor:true,errors};fs.writeFileSync('.local/validation/knob-fine-browser.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{await b.close();}

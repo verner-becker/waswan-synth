@@ -14,10 +14,12 @@ try{
  await page.evaluate(()=>audit.node.port.postMessage({t:'midi',st:0xb0,d1:71,d2:20}));await page.waitForFunction(()=>audit.frame.knobControl.parameters[1].value===20);
  await page.locator('.waswan-midi-diagnostic summary').click();await page.locator('[data-midi-log-start]').click();await page.waitForFunction(()=>document.querySelector('[data-midi-log-status]').textContent.includes('conexão local confirmada'));
  await page.evaluate(()=>{for(const value of [53,54,100,127,127])audit.source.onmidimessage({data:[181,49,value]});audit.source.onmidimessage({data:[144,60,100]});});
- await page.waitForFunction(()=>audit.frame.knobControl.parameters[1].value===94);await page.waitForTimeout(400);await page.locator('[data-midi-log-mark]').click();await page.locator('[data-midi-log-stop]').click();
+ await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>audit.frame.knobControl.parameters[1].value),20);
+ await page.evaluate(()=>{for(const value of [20,21,127,0])audit.source.onmidimessage({data:[181,49,value]});});
+ await page.waitForFunction(()=>audit.frame.knobControl.parameters[1].value===0);await page.waitForTimeout(400);await page.locator('[data-midi-log-mark]').click();await page.locator('[data-midi-log-stop]').click();
  await page.waitForFunction(()=>{const t=document.querySelector('[data-midi-log-status]').textContent;return t.includes('Encerrado')&&!t.includes('falha')&&!document.querySelector('[data-midi-log-start]').disabled;});
  const dp=page.waitForEvent('download');await page.locator('[data-midi-log-export]').click();await(await dp).saveAs('.local/validation/midi-diagnostic-export.jsonl');const raw=fs.readFileSync('.local/validation/midi-diagnostic-export.jsonl','utf8'),rows=raw.trim().split('\n').map(JSON.parse);
- const cc=rows.filter(r=>r.type==='cc');assert.deepEqual(cc.map(r=>r.value),[53,54,100,127,127]);assert.deepEqual(cc.map(r=>r.rawDelta),[null,1,46,27,0]);assert.equal(cc[0].disposition,'mapped-no-command');assert.equal(cc[1].commands[0].steps,1);assert(rows.some(r=>r.type==='marker'));assert(rows.some(r=>r.type==='state'&&r.parameters[1].value===94));assert(!raw.includes('private source'));
+ const cc=rows.filter(r=>r.type==='cc');assert.deepEqual(cc.map(r=>r.value),[53,54,100,127,127,20,21,127,0]);assert.deepEqual(cc.map(r=>r.rawDelta),[null,1,46,27,0,-107,1,106,-127]);assert.equal(cc[0].disposition,'mapped-command-sent');assert.equal(cc[1].commands[0].value,54);assert(rows.some(r=>r.type==='marker'));assert(rows.some(r=>r.type==='state'&&r.parameters[1].value===0));assert(!raw.includes('private source'));
  const live=fs.readFileSync('.local/validation/midi-diagnostic-server/midi-live-'+rows[0].session+'.jsonl','utf8').trim().split('\n').map(JSON.parse);assert.deepEqual(live,rows);
  // Replay a batch: exact retries must not duplicate records.
  const endpoint='http://localhost:8738/diagnostics/midi';const withoutSession=rows.map(({session,...r})=>r);const post=async(body,origin='http://localhost:8738')=>fetch(endpoint,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -27,5 +29,5 @@ try{
  assert.equal((await post({session:crypto.randomUUID(),records:[{type:'marker',seq:0}]},'http://example.com')).status,403);
  assert.equal((await post({session:'../../escape',records:[{type:'marker',seq:0}]})).status,400);
  await page.setViewportSize({width:390,height:844});assert(await page.locator('.waswan-midi-diagnostic').evaluate(e=>e.getBoundingClientRect().width<=innerWidth));
- assert.deepEqual(errors,[]);const report={result:'PASS',rawValues:cc.map(r=>r.value),softwareOffsetReproduced:{midiStart:53,paramStart:20,midiEnd:127,paramEnd:94},identicalLiveAndExport:true,retryIdempotent:true,notesExcluded:true,originChecked:true,privacy:true,errors};fs.writeFileSync('.local/validation/midi-diagnostic-browser.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+ assert.deepEqual(errors,[]);const report={result:'PASS',rawValues:cc.map(r=>r.value),softwareOffsetFixed:{midiStart:53,paramStart:20,pickupAt:20,fullRange:[0,127]},identicalLiveAndExport:true,retryIdempotent:true,notesExcluded:true,originChecked:true,privacy:true,errors};fs.writeFileSync('.local/validation/midi-diagnostic-browser.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{await browser.close();}
