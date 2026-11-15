@@ -3,6 +3,10 @@ import {Engine as OriginalEngine} from './engine-original.js';
 
 export class Engine extends OriginalEngine {
   input(message) {
+    if (message.t === 'voice-sustain') {
+      if (typeof message.enabled === 'boolean') this.ex.waswan_set_sustain(message.enabled ? 1 : 0);
+      return;
+    }
     const part = message.part;
     if (message.t === 'voice-mode' || message.t === 'voice-unison') {
       if (!Number.isInteger(part) || part < 0 || part >= 4) return;
@@ -19,6 +23,8 @@ export class Engine extends OriginalEngine {
     const frame = super.frame(), x = this.ex;
     frame.polyphony = {
       limit:x.waswan_voice_limit(),
+      unisonLimit:x.waswan_unison_limit(),
+      midiSustain:!!x.waswan_midi_sustain(),
       slots:Array.from({length:x.waswan_voice_limit()},(_,i)=>({
         active:!!x.waswan_voice(i,0),gate:!!x.waswan_voice(i,1),
         note:x.waswan_voice(i,2),part:x.waswan_voice(i,3),

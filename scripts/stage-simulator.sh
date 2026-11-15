@@ -5,10 +5,12 @@ set -eu
 cd "$(dirname "$0")/.."
 root=$(pwd)
 upstream="$root/upstream/SMKSYNTH"
-test -f .local/build/waswan-8.wasm || { echo 'Execute sh scripts/build-simulator.sh para compilar a extensão de 8 vozes.' >&2; exit 1; }
+voices="${WASWAN_VOICES:-16}"
+case "$voices" in 8|16) ;; *) echo 'Somente as etapas 8 e 16 estão autorizadas.' >&2; exit 1;; esac
+test -f ".local/build/waswan-$voices.wasm" || { echo "Execute sh scripts/build-simulator.sh para compilar a etapa de $voices vozes." >&2; exit 1; }
 mkdir -p .local/www/simulator
 cp "$upstream"/web/simulator/* .local/www/simulator/
-cp .local/build/waswan-8.wasm .local/www/simulator/obervave-voice.wasm
+cp ".local/build/waswan-$voices.wasm" .local/www/simulator/obervave-voice.wasm
 cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
 cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
 cp web/midi.js web/midi-profile.js web/midi-profile-panel.js web/midi-profile.css web/engine.js web/polyphony-panel.js web/polyphony.css .local/www/simulator/
@@ -26,4 +28,4 @@ PY
 cp "$upstream/web/site/i18n.js" .local/www/i18n.js
 cp "$upstream/LICENSE" .local/www/LICENSE.txt
 cp "$upstream/LICENSING.md" "$upstream/CREDITS.md" .local/www/
-echo 'Simulador e perfil MIDI prontos em .local/www/simulator/'
+echo "Simulador de $voices vozes e perfil MIDI prontos em .local/www/simulator/"

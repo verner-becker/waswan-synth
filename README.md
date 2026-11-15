@@ -6,17 +6,18 @@ O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commi
 
 ## Executar no Ubuntu
 
-Pré-requisitos: Git, Python 3, curl e uv para preparar as ferramentas; Node.js para os testes. Chrome/Chromium com Web Audio e Web MIDI para tocar com o teclado.
+Pré-requisitos: Git, Python 3, curl, patch e uv para preparar as ferramentas; Node.js para os testes. Chrome/Chromium com Web Audio e Web MIDI para tocar com o teclado.
 
 ```sh
 git clone --recurse-submodules https://github.com/verner-becker/waswan-synth.git
 cd waswan-synth
-git switch feat/polyphony-8
+git switch feat/polyphony-16
 sh scripts/setup-tools.sh
 sh scripts/build-simulator.sh
 sh scripts/check-upstream.sh
 node tests/midi-profile.test.mjs
 node tests/polyphony.test.mjs
+node tests/polyphony-16.test.mjs
 python3 scripts/serve-simulator.py
 ```
 
@@ -34,7 +35,9 @@ Veja [a auditoria e a proposta de expansão](docs/auditoria-inicial.md). Os coma
 
 A primeira entrega está marcada como `v0.1.0`. A expansão acrescenta um [perfil MIDI optativo para knobs e faders](docs/perfil-midi.md): abra o painel WASWAN abaixo da entrada MIDI, ative o perfil e aprenda um controle por vez. O código original continua preservado no submódulo.
 
-A fase de mapeamento está preservada em `v0.2.0`. A etapa atual expõe [POLY de até 8 vozes, MONO, DUAL e UNISON](docs/polifonia-8.md), com indicador de slots/gates/release. A sessão de fábrica abre o saw da parte A em MONO: selecione **POLY** no novo painel para tocar acordes, preservando os demais parâmetros. Não foram implementados limites acima de oito vozes.
+A fase de mapeamento está preservada em `v0.2.0`. A etapa seguinte expôs [POLY de até 8 vozes, MONO, DUAL e UNISON](docs/polifonia-8.md), com indicador de slots/gates/release. A sessão de fábrica abre o saw da parte A em MONO: selecione **POLY** no painel WASWAN para tocar acordes, preservando os demais parâmetros.
+
+A etapa de oito foi validada e preservada na tag `v0.3.0`. Nesta branch, a etapa [8 → 16 vozes](docs/polifonia-16.md) foi autorizada e implementada com patch aplicado somente à cópia de compilação. POLY oferece 16 notas, DUAL oito, UNISON mantém oito vozes por nota e SUPER mantém teto global de cinco. O indicador mostra 16 slots e **Sustain MIDI** permite acumular notas em grupos menores. A validação musical de 16 ainda está pendente; 32 ou mais não foram implementadas.
 
 Para atualizar apenas a interface, sem recompilar o DSP, execute `sh scripts/stage-simulator.sh`. Verifique o perfil com `node tests/midi-profile.test.mjs`.
 
@@ -42,14 +45,15 @@ Fluxo Git: commits locais descritivos; atualizar o submódulo apenas por decisã
 
 ## Inspecionar o código
 
-A branch principal contém o perfil MIDI e a documentação atual. A tag `v0.1.0` preserva a primeira execução validada, anterior à expansão.
+A branch principal preserva a entrega de oito vozes validada; esta branch contém a etapa de 16 para validação. A tag `v0.1.0` preserva a primeira execução validada, anterior às expansões.
 
 - [Auditoria inicial](docs/auditoria-inicial.md): inventário, arquitetura, licenças e testes de áudio/MIDI.
 - [Perfil MIDI](docs/perfil-midi.md): aprendizado, validação física e diagnóstico dos passos de cutoff.
 - [Polifonia de 8 vozes](docs/polifonia-8.md): causa do modo mono, orçamento de vozes, testes e roteiro no SMK-37 Pro.
+- [Polifonia de 16 vozes](docs/polifonia-16.md): revisão de estruturas, patch isolado, custo DSP e validação musical pendente.
 - [Adaptador MIDI WASWAN](web/midi.js) e [lógica do perfil](web/midi-profile.js): extensões fora do upstream.
 - [Fontes originais na revisão fixada](https://github.com/4t59m4f784-creator/SMKSYNTH/tree/3f751bc2be066414f204cf44e1aa05d9c7467d7f): consulte `web/simulator/`, `web/sim/sim.c` e `firmware/src/` para interface, integração WASM e DSP. O submódulo aparece como um link no GitHub; o clone recursivo baixa essas fontes.
 
-O usuário confirmou notas com timbre saw, áudio no navegador, quatro knobs da tela mapeados e um slider, além do funcionamento em POLY na etapa de oito vozes. Os testes automatizados e no Chrome estão descritos na documentação. Qualquer aumento acima de oito vozes exige nova autorização explícita. O modo de controle fino ainda não foi implementado; a escala musical do cutoff e a aceleração herdada estão documentadas. Não há interface modular completa nesta etapa.
+O usuário confirmou notas com timbre saw, áudio no navegador, quatro knobs da tela mapeados e um slider, além do funcionamento em POLY na etapa de oito vozes. A etapa de 16 foi autorizada e passou pelos testes automatizados e no Chrome; o usuário testará musicalmente depois. Qualquer aumento acima de 16 exige nova autorização explícita. O modo de controle fino ainda não foi implementado; a escala musical do cutoff e a aceleração herdada estão documentadas. Não há interface modular completa nesta etapa.
 
 Código e adaptações: GPL-3.0-only; consulte [LICENSE](LICENSE). Preserve também [os créditos originais](upstream/SMKSYNTH/CREDITS.md) e [as licenças dos componentes](upstream/SMKSYNTH/LICENSING.md). Nenhuma alteração foi enviada ao teclado.

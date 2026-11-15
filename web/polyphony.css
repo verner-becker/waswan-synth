@@ -6,6 +6,8 @@
 .voice-modes button[aria-pressed="true"] { background:#164860; border-color:#84d5ff; color:white; }
 .waswan-polyphony p { font-size:14px; line-height:1.5; }
 .voice-unison { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:14px; }
+.voice-unison + .voice-unison { margin-top:12px; }
+.voice-unison input { width:18px; height:18px; }
 .voice-unison select { background:#15263b; color:inherit; padding:8px 12px; border:1px solid #647b95; border-radius:6px; }
 .voice-activity { margin-top:18px; }
 .voice-slots { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:8px; margin-top:12px; }

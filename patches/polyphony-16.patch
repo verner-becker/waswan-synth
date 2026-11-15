@@ -1,0 +1,11 @@
+--- a/firmware/src/obv_engine.h
++++ b/firmware/src/obv_engine.h
+@@ -11,7 +11,7 @@
+ #ifndef RING_TAKE
+ #define RING_TAKE() __asm__ volatile("" ::: "memory")
+ #endif
+-#define NV 8u
++#define NV 16u /* WASWAN host-only stage; original submodule stays at eight. */
+ #include "obv_keyboard_config.h"
+ #define NPART 4u                               /* the four tracks' sounds */
+ #define NCARD 8u                                /* the originals' voice cards: the tables below, the LEDs */
