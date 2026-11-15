@@ -1,6 +1,6 @@
 # Perfil MIDI de entrada — primeira expansão
 
-A entrega inicial está preservada pela tag local `v0.1.0`, no commit `e0c9543`. O projeto não tem remoto configurado; não houve push. A expansão foi desenvolvida na branch `feat/smk37-midi-profile`.
+A entrega inicial está preservada pela tag `v0.1.0`, no commit `e0c9543`. A expansão foi desenvolvida na branch `feat/smk37-midi-profile` e incorporada à branch principal para publicação em [verner-becker/waswan-synth](https://github.com/verner-becker/waswan-synth).
 
 ## Usar
 
