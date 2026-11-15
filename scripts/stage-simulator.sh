@@ -13,7 +13,7 @@ cp "$upstream"/web/simulator/* .local/www/simulator/
 cp ".local/build/waswan-$voices.wasm" .local/www/simulator/obervave-voice.wasm
 cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
 cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
-cp web/midi.js web/midi-profile.js web/midi-profile-panel.js web/midi-profile.css web/engine.js web/polyphony-panel.js web/polyphony.css web/dsp-stats.js web/dsp-worklet.js web/dsp-monitor.js web/dsp-monitor.css .local/www/simulator/
+cp web/midi.js web/midi-diagnostic.js web/midi-profile.js web/midi-profile-panel.js web/midi-profile.css web/engine.js web/polyphony-panel.js web/polyphony.css web/dsp-stats.js web/dsp-worklet.js web/dsp-monitor.js web/dsp-monitor.css .local/www/simulator/
 # One explicit hook in the derived app; never edit the submodule.
 python3 - <<'PY'
 from pathlib import Path
@@ -32,7 +32,7 @@ s = p.read_text()
 anchor = 'function frame(m){state=m;'
 if s.count(anchor) != 1:
     raise SystemExit('Contrato de frame upstream mudou; revisar integração de polifonia.')
-s = "import {updateMidiProfile} from './midi-profile-panel.js';\nimport {updatePolyphony} from './polyphony-panel.js';\n" + s.replace(anchor, 'function frame(m){updateMidiProfile(m);updatePolyphony(m);state=m;')
+s = "import {updateMidiDiagnostic} from './midi-diagnostic.js';\nimport {updateMidiProfile} from './midi-profile-panel.js';\nimport {updatePolyphony} from './polyphony-panel.js';\n" + s.replace(anchor, 'function frame(m){updateMidiDiagnostic(m);updateMidiProfile(m);updatePolyphony(m);state=m;')
 receive = 'function receive({data:m}){'
 assert s.count(receive) == 1
 s = "import {updateDspMonitor} from './dsp-monitor.js';\n" + s.replace(receive, receive+'updateDspMonitor(m);')
