@@ -105,3 +105,8 @@ Evidências adicionais: `knob-fine-browser.json`, `knob-fine-browser.log`, `knob
 Git: base `b2a25e5`, implementação `7d7c449`, testes `6681d4b`, documentação em commit separado. Publicar somente `feat/knob-fine-control`, sem merge nem tag. Preservadas `main`, `feat/dsp-monitor`, `experiment/polyphony-256` e o upstream fixado. Nenhuma fase Layer ou outra expansão iniciada.
 
 Arquivos de produção alterados: `wasm/waswan-sim.c`, `web/engine.js`, `web/midi-profile.js`, `web/midi-profile-panel.js`, `scripts/stage-simulator.sh`. Testes novos: `tests/knob-fine-control.test.mjs`, `tests/browser-knob-fine.mjs`, `tests/build-knob-reference.sh`. Documentação: este arquivo, `docs/perfil-midi.md`, `README.md`.
+
+
+## Diagnóstico posterior de alcance absoluto
+
+O teste físico com [telemetria MIDI ao vivo](midi-diagnostic.md) confirmou uma limitação não coberta pelos testes iniciais de incrementos: a referência absoluta pode ficar deslocada do parâmetro e impedir alcançar um extremo sem voltar ao outro. Ressonância começou em 20 com CC53 e terminou em 94 com CC127, exatamente os 74 passos recebidos. O problema foi reproduzido por software; o relatório de diagnóstico registra a evidência. A entrega de telemetria ainda preserva a resposta original Normal/Fino; não implementa uma política nova de captura de posição.

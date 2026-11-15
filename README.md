@@ -39,6 +39,12 @@ Na branch `feat/knob-fine-control`, baseada no DSP Monitor com 256 vozes, o perf
 
 Após trocar para essa branch, execute `sh scripts/build-simulator.sh` uma vez e recarregue o navegador: esta fase acrescenta uma API host ao WASM. Depois, selecione Fino na linha do knob; não precisa reaprender. O cutoff mantém sua escala original em Hz. Veja [contrato, testes, limitações e teste no SMK-37 Pro](docs/knob-fine-control.md).
 
+## Diagnóstico MIDI ao vivo
+
+O painel **WASWAN · Diagnóstico MIDI ao vivo** registra CCs, interpretação do mapeamento e evolução dos parâmetros. **Iniciar captura ao vivo → Marcar problema → Encerrar** envia os registros somente ao servidor local e permite exportar JSONL. Atualize a interface com `sh scripts/stage-simulator.sh` e reinicie o servidor Python para habilitar a recepção. Não grava áudio ou notas.
+
+A captura física confirmou um limite do controle absoluto por deltas: CC53 com parâmetro20 pode chegar a CC127 com parâmetro94. Essa entrega de diagnóstico preserva a resposta dos knobs; a correção da política absoluta está pendente. Veja [evidência, uso e testes](docs/midi-diagnostic.md).
+
 ## DSP Monitor v1 (branch de desenvolvimento)
 
 Em `feat/dsp-monitor`, construída diretamente sobre o experimento de 256 vozes, o botão **Mostrar WASWAN DSP Monitor** habilita a instrumentação opcional. Use **Iniciar captura → Encerrar captura → Exportar JSONL**. O monitor nasce desligado e não altera o DSP. No Chrome instalado, o relógio do worklet tem resolução nominal de 1 ms: percentis são aproximados e exceder o orçamento não comprova underrun. Veja [arquitetura, precisão, testes e resultados](docs/dsp-monitor-v1.md).
