@@ -3,6 +3,7 @@
 import {MidiInputController as OriginalMidiInputController} from './midi-original.js';
 import {MidiProfile} from './midi-profile.js';
 import {mountProfilePanel} from './midi-profile-panel.js';
+import {mountPolyphonyPanel} from './polyphony-panel.js';
 
 export class MidiInputController extends OriginalMidiInputController {
   constructor(options) {
@@ -10,7 +11,10 @@ export class MidiInputController extends OriginalMidiInputController {
     let storage;
     try { storage = globalThis.localStorage; } catch {}
     this.profile = new MidiProfile(storage);
-    if (globalThis.document) mountProfilePanel(this);
+    if (globalThis.document) {
+      mountProfilePanel(this);
+      mountPolyphonyPanel(this);
+    }
   }
   message(data) {
     if (!this.isRunning() || !this.isListening()) return;

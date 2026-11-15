@@ -52,7 +52,7 @@ denied.setEnabled(true);assert(denied.persistenceError);
 
 // The staged adapter, actual original controller and rebuilt DSP together.
 globalThis.localStorage = {getItem:()=>null,setItem(){}};
-const wasm=fs.readFileSync(new URL('../.local/build/SMKSYNTH-1.2.0.wasm',import.meta.url));
+const wasm=fs.readFileSync(new URL('../.local/build/waswan-8.wasm',import.meta.url));
 const seed=fs.readFileSync(new URL('../upstream/SMKSYNTH/web/simulator/factory-session.bin',import.meta.url));
 const engine=new Engine(wasm,seed.buffer.slice(seed.byteOffset,seed.byteOffset+seed.byteLength));
 engine.advance(5000);

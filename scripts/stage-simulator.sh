@@ -5,12 +5,24 @@ set -eu
 cd "$(dirname "$0")/.."
 root=$(pwd)
 upstream="$root/upstream/SMKSYNTH"
-test -f .local/build/SMKSYNTH-1.2.0.wasm || { echo 'Compile o WASM primeiro.' >&2; exit 1; }
+test -f .local/build/waswan-8.wasm || { echo 'Execute sh scripts/build-simulator.sh para compilar a extensão de 8 vozes.' >&2; exit 1; }
 mkdir -p .local/www/simulator
 cp "$upstream"/web/simulator/* .local/www/simulator/
-cp .local/build/SMKSYNTH-1.2.0.wasm .local/www/simulator/obervave-voice.wasm
+cp .local/build/waswan-8.wasm .local/www/simulator/obervave-voice.wasm
 cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
-cp web/midi.js web/midi-profile.js web/midi-profile-panel.js web/midi-profile.css .local/www/simulator/
+cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
+cp web/midi.js web/midi-profile.js web/midi-profile-panel.js web/midi-profile.css web/engine.js web/polyphony-panel.js web/polyphony.css .local/www/simulator/
+# One explicit hook in the derived app; never edit the submodule.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('.local/www/simulator/app.js')
+s = p.read_text()
+anchor = 'function frame(m){state=m;'
+if s.count(anchor) != 1:
+    raise SystemExit('Contrato de frame upstream mudou; revisar integração de polifonia.')
+s = "import {updatePolyphony} from './polyphony-panel.js';\n" + s.replace(anchor, 'function frame(m){updatePolyphony(m);state=m;')
+p.write_text(s)
+PY
 cp "$upstream/web/site/i18n.js" .local/www/i18n.js
 cp "$upstream/LICENSE" .local/www/LICENSE.txt
 cp "$upstream/LICENSING.md" "$upstream/CREDITS.md" .local/www/

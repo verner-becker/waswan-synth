@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+.waswan-polyphony { margin:16px 0; padding:18px; background:#101b2b; border:1px solid #344454; border-radius:12px; color:#e4edf5; }
+.voice-heading { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
+.voice-heading span, .voice-hint { color:#b0c0d3; }
+.voice-modes { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.voice-modes button[aria-pressed="true"] { background:#164860; border-color:#84d5ff; color:white; }
+.waswan-polyphony p { font-size:14px; line-height:1.5; }
+.voice-unison { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:14px; }
+.voice-unison select { background:#15263b; color:inherit; padding:8px 12px; border:1px solid #647b95; border-radius:6px; }
+.voice-activity { margin-top:18px; }
+.voice-slots { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:8px; margin-top:12px; }
+.voice-slot { text-align:center; padding:12px 0; background:#182536; border:1px solid #647b95; border-radius:6px; font-size:13px; }
+.voice-slot[data-state="held"] { background:#16543e; border-color:#86efac; color:white; }
+.voice-slot[data-state="release"] { background:#57421c; border-color:#ffd176; color:white; }
+.waswan-polyphony button:focus-visible, .waswan-polyphony select:focus-visible { outline:2px solid #9bd6ff; outline-offset:3px; }
+@media(max-width:480px) { .voice-slots { grid-template-columns:repeat(4,minmax(0,1fr)); } }
