@@ -74,7 +74,7 @@ Verificações concluídas:
 - PipeWire: stream do processo separado do Chrome conectado aos canais FL/FR da saída `CX11970 Analog`, ativo. Servidor PulseAudio compatível sobre PipeWire a 48 kHz; navegador continua renderizando a 44,1 kHz, com adaptação na pilha de áudio.
 - Web MIDI: porta `SMK-37 Pro-Master` enumerada, aberta e selecionada na interface. O Chrome de teste exigiu concessão das permissões MIDI e MIDI-SysEx pela automação; a aplicação permaneceu solicitando `sysex:false` e sem abrir saídas MIDI.
 
-A captura física ALSA e a produção de áudio pelo navegador foram verificadas separadamente. A confirmação auditiva pelo usuário e uma nova execução física de notas/rodas com a janela do simulador em foco ainda aguardam resposta. A captura Web MIDI dessa janela não havia recebido eventos até o fechamento deste registro; não se declara concluído esse teste integrado.
+Validação integrada confirmada pelo usuário nesta sessão: tocou o teclado físico e ouviu o sintetizador no navegador ("o som saiu [...] consegui tocar"). Isso confirma o caminho completo SMK-37 Pro → navegador → áudio. O coletor da janela automatizada não registrou esses eventos; a evidência desse teste integrado é a confirmação direta do usuário, apoiada pelas verificações técnicas separadas acima. A resposta confirma execução de notas e saída audível; não acrescenta uma avaliação auditiva específica de pitch bend ou modulação, cujas mensagens físicas e caminhos no software foram verificados separadamente.
 
 Evidências brutas locais, ignoradas pelo Git: `.local/validation/` contém capturas ALSA, resumo dos eventos, relatório/screenshot do navegador e rotas PipeWire. Elas servem à validação desta máquina; os resultados relevantes estão consolidados aqui.
 
