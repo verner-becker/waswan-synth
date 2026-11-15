@@ -33,6 +33,12 @@ As ferramentas ficam em `.tools/` e os resultados em `.local/`, ambos ignorados 
 
 O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binaryen 133, e compila separadamente a extensão host em `wasm/waswan-sim.c`. É possível fornecer executáveis próprios pelas variáveis `ZIG` e `WASM_OPT`. Não há npm install para executar o sintetizador; Node é utilizado somente na verificação.
 
+## Controle fino de knobs v1
+
+Na branch `feat/knob-fine-control`, baseada no DSP Monitor com 256 vozes, o perfil permite escolher **Normal / Fino** em cada mapeamento existente de K1–K4. Normal preserva os passos e a aceleração originais; Fino altera uma unidade interna por incremento lógico nos parâmetros diretos da tela. Presets e mapeamentos anteriores são preservados; o padrão continua Normal.
+
+Após trocar para essa branch, execute `sh scripts/build-simulator.sh` uma vez e recarregue o navegador: esta fase acrescenta uma API host ao WASM. Depois, selecione Fino na linha do knob; não precisa reaprender. O cutoff mantém sua escala original em Hz. Veja [contrato, testes, limitações e teste no SMK-37 Pro](docs/knob-fine-control.md).
+
 ## DSP Monitor v1 (branch de desenvolvimento)
 
 Em `feat/dsp-monitor`, construída diretamente sobre o experimento de 256 vozes, o botão **Mostrar WASWAN DSP Monitor** habilita a instrumentação opcional. Use **Iniciar captura → Encerrar captura → Exportar JSONL**. O monitor nasce desligado e não altera o DSP. No Chrome instalado, o relógio do worklet tem resolução nominal de 1 ms: percentis são aproximados e exceder o orçamento não comprova underrun. Veja [arquitetura, precisão, testes e resultados](docs/dsp-monitor-v1.md).

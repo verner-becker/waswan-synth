@@ -55,3 +55,7 @@ No teste com knob em modo absoluto, o usuário relatou passos crescentes no cuto
 - O tratamento dos quatro encoders da tela em `obervave.c` multiplica deltas de módulo maior que 1 por 3 e aplica passos de 2 a parâmetros com máximo de pelo menos 100, como cutoff. Reproduzido no WASM recompilado com cutoff inicial 40 e modo absoluto: delta MIDI +1 → cutoff 42; +2 → 52; +3 → 58. Portanto, saltos ou agrupamentos de valores MIDI também podem produzir aceleração, além da escala em Hz.
 
 O adaptador conserva esse comportamento de encoder. Não foi alterado o DSP, a tabela de frequências ou a aceleração original a partir desse relato. Um controle fino no host é uma melhoria identificada: deve preservar a escala musical e tratar a aceleração dos eventos sem presumir que suavizar o texto em Hz aumentaria a resolução real do parâmetro.
+
+## Controle fino optativo
+
+A fase [Controle fino de knobs v1](knob-fine-control.md), na branch `feat/knob-fine-control`, oferece **Normal/Fino** por mapeamento de K1–K4, sem reaprendizado. Os comportamentos acima continuam valendo para Normal. Fino usa um adaptador host separado para evitar aceleração nos parâmetros diretos; mantém os valores e a apresentação original de cutoff, sem modificar o firmware físico ou o DSP. Perfis v1 anteriores carregam com Normal como padrão.
