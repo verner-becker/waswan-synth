@@ -6,7 +6,7 @@ import shutil
 import subprocess
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--voices', type=int, choices=[16, 32, 64], default=16)
+parser.add_argument('--voices', type=int, choices=[16, 32, 64, 128], default=16)
 voices = parser.parse_args().voices
 root = Path(__file__).resolve().parents[1]
 upstream = root / 'upstream/SMKSYNTH'

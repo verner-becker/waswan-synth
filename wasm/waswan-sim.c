@@ -8,9 +8,9 @@
 #endif
 #include WASWAN_SIM_SOURCE
 
-_Static_assert(WASWAN_VOICES == 8 || WASWAN_VOICES == 16 || WASWAN_VOICES == 32 || WASWAN_VOICES == 64, "Only the stages through sixty-four voices are approved");
+_Static_assert(WASWAN_VOICES == 8 || WASWAN_VOICES == 16 || WASWAN_VOICES == 32 || WASWAN_VOICES == 64 || WASWAN_VOICES == 128, "Only the planned stages through 128 voices are approved");
 _Static_assert(NV == WASWAN_VOICES, "Source must match the selected stage");
-#if WASWAN_VOICES == 64
+#if WASWAN_VOICES >= 64
 _Static_assert(sizeof(voice_mask_t) * 8u >= NV, "The allocation mask must cover all voices");
 #else
 _Static_assert(NV <= 32u, "Original group_pick uses a 32-bit taken mask");
@@ -22,7 +22,7 @@ _Static_assert(SUPER_LIMIT == 5u, "Preserve the independent SUPER limit");
 
 EXPORT uint32_t waswan_voice_limit(void) { return NV; }
 EXPORT uint32_t waswan_group_mask_bits(void) {
-#if WASWAN_VOICES == 64
+#if WASWAN_VOICES >= 64
     return sizeof(voice_mask_t) * 8u;
 #else
     return 32u;
