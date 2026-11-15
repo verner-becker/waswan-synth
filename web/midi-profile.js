@@ -1,0 +1,108 @@
+// SPDX-License-Identifier: GPL-3.0-only
+export const STORAGE_KEY = 'waswan-midi-profile-v1';
+export const TARGETS = [
+  ...Array.from({length:4}, (_, i) => ({id:`fader:${i}`, label:`F${i+1} · Fader ${i+1}`})),
+  ...['Tela 1','Tela 2','Tela 3','Tela 4','Navegação','Parte','Preset','Master']
+    .map((label,i) => ({id:`enc:${i}`, label:`K${i+1} · ${label}`})),
+];
+export const MODES = ['absolute','offset','twos'];
+const validTarget = id => TARGETS.some(t => t.id === id);
+const validBinding = b => b && typeof b.port === 'string' && b.port.length > 0 &&
+  Number.isInteger(b.channel) && b.channel >= 0 && b.channel < 16 &&
+  Number.isInteger(b.cc) && b.cc >= 0 && b.cc < 120 && validTarget(b.target) &&
+  MODES.includes(b.mode) && (!b.target.startsWith('fader:') || b.mode === 'absolute');
+const sourceKey = b => JSON.stringify([b.port,b.channel,b.cc]);
+
+export class MidiProfile {
+  constructor(storage) {
+    this.storage = storage;
+    this.enabled = false;
+    this.bindings = [];
+    this.previous = new Map();
+    this.learning = null;
+    this.onChange = () => {};
+    this.persistenceError = false;
+    try {
+      const saved = JSON.parse(storage?.getItem(STORAGE_KEY) || 'null');
+      if (saved?.version === 1 && typeof saved.enabled === 'boolean' && Array.isArray(saved.bindings)) {
+        for (const b of saved.bindings.filter(validBinding)) {
+          this.bindings = this.bindings.filter(x => x.target !== b.target && sourceKey(x) !== sourceKey(b));
+          this.bindings.push({...b});
+        }
+        this.enabled = saved.enabled;
+      }
+    } catch { /* Um perfil inválido não impede a execução do instrumento. */ }
+  }
+  save() {
+    try {
+      this.storage.setItem(STORAGE_KEY, JSON.stringify({version:1,enabled:this.enabled,bindings:this.bindings}));
+      this.persistenceError = false;
+    } catch { this.persistenceError = true; }
+    this.onChange();
+  }
+  reset() {
+    this.previous.clear();
+    this.learning = null;
+    this.onChange();
+  }
+  setEnabled(enabled) {
+    this.enabled = !!enabled;
+    this.reset();
+    this.save();
+  }
+  learn(target, mode) {
+    if (!this.enabled || !validTarget(target) || !MODES.includes(mode) ||
+      (target.startsWith('fader:') && mode !== 'absolute')) return false;
+    this.learning = {target,mode};
+    this.onChange();
+    return true;
+  }
+  remove(target) {
+    this.bindings = this.bindings.filter(b => b.target !== target);
+    this.reset();
+    this.save();
+  }
+  handle(data, port, send) {
+    if (!this.enabled || !port || !data || data.length !== 3 ||
+      !Array.from(data).every(Number.isInteger)) return false;
+    const [status,cc,value] = data;
+    // Nunca capturar Channel Mode (CC120–127), notas ou rodas de pitch.
+    if (status < 0xb0 || status > 0xbf || cc < 0 || cc >= 120 || value < 0 || value > 127) return false;
+    const source = {port,channel:status&15,cc};
+    const key = sourceKey(source);
+    if (this.learning) {
+      const b = {...source,...this.learning};
+      this.bindings = this.bindings.filter(x => x.target !== b.target && sourceKey(x) !== key);
+      this.bindings.push(b);
+      this.learning = null;
+      this.previous.clear();
+      // Captura somente a identidade. O gesto de aprendizado não altera o som.
+      this.previous.set(key, value);
+      this.save();
+      return true;
+    }
+    const binding = this.bindings.find(b => sourceKey(b) === key);
+    if (!binding) return false;
+    const [kind,index] = binding.target.split(':');
+    const i = Number(index);
+    if (kind === 'fader') {
+      send({t:'fader',f:i,v:value});
+      return true;
+    }
+    let steps;
+    if (binding.mode === 'absolute') {
+      const previous = this.previous.get(key);
+      this.previous.set(key,value);
+      if (previous === undefined) return true;
+      // K8 usa passos de 24 no firmware, com faixa de master 0–1023.
+      const position = v => i === 7 ? Math.round(v*1023/(127*24)) : v;
+      steps = position(value) - position(previous);
+    } else if (binding.mode === 'offset') {
+      steps = value === 0 ? 0 : value - 64;
+    } else {
+      steps = value < 64 ? value : value - 128;
+    }
+    if (steps) send({t:'enc',e:i,steps});
+    return true;
+  }
+}

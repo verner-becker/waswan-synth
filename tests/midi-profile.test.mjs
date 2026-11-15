@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {MidiProfile, STORAGE_KEY} from '../web/midi-profile.js';
+import {MidiInputController} from '../.local/www/simulator/midi.js';
+import {Engine} from '../.local/www/simulator/engine.js';
+
+const data = new Map();
+const storage = {getItem:k=>data.get(k),setItem:(k,v)=>data.set(k,v)};
+const profile = new MidiProfile(storage), sent=[];
+const send = m=>sent.push(m), port='SMK-37 Pro-Master';
+const cc = (number,value,channel=0,p=port)=>profile.handle([0xb0|channel,number,value],p,send);
+assert.equal(profile.enabled,false);
+assert.equal(profile.learn('fader:0','absolute'),false);
+assert.equal(cc(64,100),false);
+profile.setEnabled(true);
+assert(profile.learn('fader:0','absolute'));
+assert.equal(profile.handle([0x90,60,100],port,send),false,'notes never become mappings');
+assert.equal(cc(123,0),false,'panic cannot become a mapping');
+assert(profile.learning);
+assert(cc(64,40));assert.equal(sent.length,0,'learning does not change sound or engage sustain');
+assert(cc(64,0));assert.deepEqual(sent.pop(),{t:'fader',f:0,v:0});
+assert(cc(64,127));assert.deepEqual(sent.pop(),{t:'fader',f:0,v:127});
+assert.equal(cc(64,20,1),false,'channel isolation');
+assert.equal(cc(64,20,0,'Another Keyboard'),false,'port isolation');
+assert.equal(cc(65,20),false,'unmapped CC keeps original behavior');
+profile.learn('enc:0','absolute');cc(48,90,5);
+cc(48,92,5);assert.deepEqual(sent.pop(),{t:'enc',e:0,steps:2});
+cc(48,91,5);assert.deepEqual(sent.pop(),{t:'enc',e:0,steps:-1});
+profile.reset();cc(48,125,5);assert.equal(sent.length,0,'first absolute value after release establishes baseline');
+cc(48,127,5);assert.equal(sent.pop().steps,2);
+profile.learn('enc:7','absolute');cc(55,0,5);cc(55,127,5);assert.equal(sent.pop().steps,43,'master scales to firmware steps');
+profile.learn('enc:1','offset');cc(49,64,5);
+cc(49,65,5);assert.equal(sent.pop().steps,1);cc(49,63,5);assert.equal(sent.pop().steps,-1);
+cc(49,64,5);cc(49,0,5);assert.equal(sent.length,0);
+profile.learn('enc:2','twos');cc(50,0,5);
+cc(50,1,5);assert.equal(sent.pop().steps,1);cc(50,127,5);assert.equal(sent.pop().steps,-1);
+assert.equal(profile.learn('fader:1','twos'),false);
+// A source has only one destination, and a destination has only one source.
+profile.learn('enc:3','absolute');cc(48,20,5);
+assert.equal(profile.bindings.filter(b=>b.cc===48).length,1);
+assert(!profile.bindings.some(b=>b.target==='enc:0'));
+const restored = new MidiProfile(storage);
+assert.equal(restored.enabled,true);assert.deepEqual(restored.bindings,profile.bindings);
+profile.setEnabled(false);assert.equal(cc(64,127),false);
+profile.remove('fader:0');assert(!profile.bindings.some(b=>b.target==='fader:0'));
+for (const value of ['garbage',JSON.stringify({version:1,enabled:true,bindings:[{target:'invalid'}]})]) {
+ data.set(STORAGE_KEY,value);assert.equal(new MidiProfile(storage).bindings.length,0);
+}
+const denied = new MidiProfile({getItem(){throw Error('denied');},setItem(){throw Error('denied');}});
+denied.setEnabled(true);assert(denied.persistenceError);
+
+// The staged adapter, actual original controller and rebuilt DSP together.
+globalThis.localStorage = {getItem:()=>null,setItem(){}};
+const wasm=fs.readFileSync(new URL('../.local/build/SMKSYNTH-1.2.0.wasm',import.meta.url));
+const seed=fs.readFileSync(new URL('../upstream/SMKSYNTH/web/simulator/factory-session.bin',import.meta.url));
+const engine=new Engine(wasm,seed.buffer.slice(seed.byteOffset,seed.byteOffset+seed.byteLength));
+engine.advance(5000);
+const source={id:'master',name:port,state:'connected',async open(){},async close(){}};
+let listening=true;
+const emitted=[];
+const controller=new MidiInputController({navigator:{async requestMIDIAccess(){return {inputs:new Map([['master',source]])};}},secureContext:true,isRunning:()=>true,isListening:()=>listening,send:m=>{emitted.push(m);engine.input(m);}});
+await controller.connect();
+source.onmidimessage({data:[0x90,60,110]});engine.advance(100);
+assert(engine.ex.sim_gates_part(0,0)>0);assert(engine.ex.sim_peak()>0);
+source.onmidimessage({data:[0xe3,127,127]});engine.advance(100);assert(engine.ex.sim_synth_bend()>0);
+source.onmidimessage({data:[0xb2,1,127]});engine.advance(100);assert(engine.ex.sim_synth_vibrato()>0);
+controller.release();engine.advance(2500);assert.equal(engine.ex.sim_melodic_busy(),0);
+controller.profile.setEnabled(true);controller.profile.learn('enc:7','absolute');
+source.onmidimessage({data:[0xb5,55,0]});
+const master=engine.ex.sim_master_current();source.onmidimessage({data:[0xb5,55,10]});engine.advance(100);
+assert(engine.ex.sim_master_current()>master,'mapped absolute knob changes real master');
+controller.profile.learn('fader:0','absolute');source.onmidimessage({data:[0xb0,64,20]});
+const start=emitted.length;source.onmidimessage({data:[0xb0,64,100]});
+assert.deepEqual(emitted.slice(start),[{t:'fader',f:0,v:100}],'CC64 consumed exactly once, no sustain');
+listening=false;source.onmidimessage({data:[0xb0,64,127]});assert.equal(emitted.length,start+1);
+listening=true;controller.profile.learn('enc:0','absolute');
+await controller.select('');assert.equal(controller.profile.learning,null);assert.equal(controller.profile.previous.size,0);
+assert(emitted.some(m=>m.t==='panic'));
+await controller.select('master');controller.profile.setEnabled(false);
+source.onmidimessage({data:[0xb0,64,127]});assert.deepEqual(emitted.at(-1),{t:'midi',st:0xb0,d1:64,d2:127});
+console.log('PASS: MIDI learn, CC64 isolation, absolute/relative encoders, limits/reversal, persistence, port/channel isolation, focus/disconnect/panic, original notes/wheels and rebuilt WASM master');

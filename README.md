@@ -28,6 +28,10 @@ O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binary
 
 Veja [a auditoria e a proposta de expansão](docs/auditoria-inicial.md). Os comandos acima reconstroem o WASM e executam os testes MIDI e musicais originais sobre esse artefato.
 
+A primeira entrega está marcada como `v0.1.0`. A expansão acrescenta um [perfil MIDI optativo para knobs e faders](docs/perfil-midi.md): abra o painel WASWAN abaixo da entrada MIDI, ative o perfil e aprenda um controle por vez. O código original continua preservado no submódulo.
+
+Para atualizar apenas a interface, sem recompilar o DSP, execute `sh scripts/stage-simulator.sh`. Verifique o perfil com `node tests/midi-profile.test.mjs`.
+
 Fluxo Git: commits locais descritivos; atualizar o submódulo apenas por decisão explícita de incorporar uma nova base. Não há CI/CD nesta etapa.
 
 Código e adaptações: GPL-3.0-only; consulte [LICENSE](LICENSE). Preserve também [os créditos originais](upstream/SMKSYNTH/CREDITS.md) e [as licenças dos componentes](upstream/SMKSYNTH/LICENSING.md). Nenhuma alteração foi enviada ao teclado.
