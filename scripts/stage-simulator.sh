@@ -5,8 +5,8 @@ set -eu
 cd "$(dirname "$0")/.."
 root=$(pwd)
 upstream="$root/upstream/SMKSYNTH"
-voices="${WASWAN_VOICES:-32}"
-case "$voices" in 8|16|32) ;; *) echo 'Somente as etapas 8, 16 e 32 estão autorizadas.' >&2; exit 1;; esac
+voices="${WASWAN_VOICES:-64}"
+case "$voices" in 8|16|32|64) ;; *) echo 'Somente as etapas até 64 estão autorizadas.' >&2; exit 1;; esac
 test -f ".local/build/waswan-$voices.wasm" || { echo "Execute sh scripts/build-simulator.sh para compilar a etapa de $voices vozes." >&2; exit 1; }
 mkdir -p .local/www/simulator
 cp "$upstream"/web/simulator/* .local/www/simulator/

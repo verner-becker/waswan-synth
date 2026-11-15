@@ -8,15 +8,26 @@
 #endif
 #include WASWAN_SIM_SOURCE
 
-_Static_assert(WASWAN_VOICES == 8 || WASWAN_VOICES == 16 || WASWAN_VOICES == 32, "Only the stages through thirty-two voices are approved");
+_Static_assert(WASWAN_VOICES == 8 || WASWAN_VOICES == 16 || WASWAN_VOICES == 32 || WASWAN_VOICES == 64, "Only the stages through sixty-four voices are approved");
 _Static_assert(NV == WASWAN_VOICES, "Source must match the selected stage");
-_Static_assert(NV <= 32u, "group_pick uses a 32-bit taken mask");
+#if WASWAN_VOICES == 64
+_Static_assert(sizeof(voice_mask_t) * 8u >= NV, "The allocation mask must cover all voices");
+#else
+_Static_assert(NV <= 32u, "Original group_pick uses a 32-bit taken mask");
+#endif
 _Static_assert(NV <= NHELD, "Held-note capacity must cover the voice pool");
 _Static_assert(NQ >= 2u*NV+2u, "Engine queue must hold a full on/off chord and sustain changes");
 _Static_assert(sizeof mq / sizeof mq[0] >= 2u*NV+2u, "MIDI queue must hold a full on/off chord and sustain changes");
 _Static_assert(SUPER_LIMIT == 5u, "Preserve the independent SUPER limit");
 
 EXPORT uint32_t waswan_voice_limit(void) { return NV; }
+EXPORT uint32_t waswan_group_mask_bits(void) {
+#if WASWAN_VOICES == 64
+    return sizeof(voice_mask_t) * 8u;
+#else
+    return 32u;
+#endif
+}
 EXPORT uint32_t waswan_unison_limit(void) { return PDEF[P_UNI_N].max; }
 EXPORT uint32_t waswan_voice_state_bytes(void) { return sizeof vc + sizeof grp_v + sizeof obv_voice_engine + sizeof ui_vlevel + sizeof ui_vnote + sizeof super_state + sizeof super_plain_state; }
 EXPORT uint32_t waswan_held_limit(void) { return NHELD; }
