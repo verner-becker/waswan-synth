@@ -4,8 +4,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 root=$(pwd)
-voices="${WASWAN_VOICES:-16}"
-case "$voices" in 8|16) ;; *) echo 'Somente as etapas 8 e 16 estão autorizadas.' >&2; exit 1;; esac
+voices="${WASWAN_VOICES:-32}"
+case "$voices" in 8|16|32) ;; *) echo 'Somente as etapas 8, 16 e 32 estão autorizadas.' >&2; exit 1;; esac
 test -f ".local/build/waswan-$voices.wasm" || { echo 'Compile o simulador primeiro.' >&2; exit 1; }
 mkdir -p .local
 fixture=$(mktemp -d "$root/.local/check.XXXXXX")
