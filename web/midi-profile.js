@@ -6,6 +6,7 @@ export const TARGETS = [
     .map((label,i) => ({id:`enc:${i}`, label:`K${i+1} · ${label}`})),
 ];
 export const MODES = ['absolute','offset','twos'];
+export const fineTarget = target => /^enc:[0-3]$/.test(target);
 const validTarget = id => TARGETS.some(t => t.id === id);
 const validBinding = b => b && typeof b.port === 'string' && b.port.length > 0 &&
   Number.isInteger(b.channel) && b.channel >= 0 && b.channel < 16 &&
@@ -20,6 +21,7 @@ export class MidiProfile {
     this.bindings = [];
     this.previous = new Map();
     this.learning = null;
+    this.context = null;
     this.onChange = () => {};
     this.persistenceError = false;
     try {
@@ -27,7 +29,7 @@ export class MidiProfile {
       if (saved?.version === 1 && typeof saved.enabled === 'boolean' && Array.isArray(saved.bindings)) {
         for (const b of saved.bindings.filter(validBinding)) {
           this.bindings = this.bindings.filter(x => x.target !== b.target && sourceKey(x) !== sourceKey(b));
-          this.bindings.push({...b});
+          this.bindings.push({...b,behavior:b.behavior==='fine'&&fineTarget(b.target)?'fine':'normal'});
         }
         this.enabled = saved.enabled;
       }
@@ -43,6 +45,7 @@ export class MidiProfile {
   reset() {
     this.previous.clear();
     this.learning = null;
+    this.context = null;
     this.onChange();
   }
   setEnabled(enabled) {
@@ -50,10 +53,22 @@ export class MidiProfile {
     this.reset();
     this.save();
   }
-  learn(target, mode) {
+  setContext(context) {
+    if (this.context === context) return;
+    this.context = context;
+    for (const b of this.bindings) if (b.behavior === 'fine') this.previous.delete(sourceKey(b));
+  }
+  setBehavior(target, behavior) {
+    if (!['normal','fine'].includes(behavior) || (behavior==='fine'&&!fineTarget(target))) return false;
+    const binding=this.bindings.find(b=>b.target===target);
+    if (!binding) return false;
+    binding.behavior=behavior;this.previous.delete(sourceKey(binding));this.save();return true;
+  }
+  learn(target, mode, behavior='normal') {
     if (!this.enabled || !validTarget(target) || !MODES.includes(mode) ||
-      (target.startsWith('fader:') && mode !== 'absolute')) return false;
-    this.learning = {target,mode};
+      (target.startsWith('fader:') && mode !== 'absolute') || !['normal','fine'].includes(behavior) ||
+      (behavior==='fine'&&!fineTarget(target))) return false;
+    this.learning = {target,mode,behavior};
     this.onChange();
     return true;
   }
@@ -102,7 +117,9 @@ export class MidiProfile {
     } else {
       steps = value < 64 ? value : value - 128;
     }
-    if (steps) send({t:'enc',e:i,steps});
+    if (steps) send(binding.behavior==='fine'
+      ? {t:'enc-fine',e:i,steps,context:this.context}
+      : {t:'enc',e:i,steps});
     return true;
   }
 }

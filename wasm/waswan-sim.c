@@ -77,3 +77,36 @@ EXPORT uint32_t waswan_set_unison(uint32_t p, uint32_t count)
     dirty_hdr = dirty_page = dirty_tags = 1;
     return 1;
 }
+
+/* Host-only direct parameter editing. Never used by physical firmware or normal encoders. */
+EXPORT uint32_t waswan_knob_context(void) { return smk_fader_context(); }
+EXPORT int32_t waswan_knob_param(uint32_t k)
+{
+    if (k >= 4u || mm_on || preset_ui || pb_confirm || save_armed || layer || step_held >= 0 || seq_shown() || page >= NPAGE) return -1;
+    if ((k == 3u && performance_transpose_control()) || page == PG_SUPER || page == PG_KEYBOARD ||
+        page == PG_DSOUND || page == PG_MIXER || page == PG_DRIVE || page == PG_GLOBAL ||
+        page == PG_THEME || page == PG_CONTROLS || page == PG_MIDI || (page == PG_ENGINE && k < 2u)) return -1;
+    return obv_page_param(page,k);
+}
+EXPORT uint32_t waswan_knob_fine(uint32_t k, int32_t delta, uint32_t context)
+{
+    int32_t p = waswan_knob_param(k);
+    if (p < 0 || !delta || delta < -127 || delta > 127 || context != smk_fader_context()) return 0;
+    /* A queued panel navigation may not have reached the coroutine yet. Refuse rather than target the old page. */
+    if (host_edges || host_rel || host_rel_next || host_qw[0] != host_qr[0] || req_page || pf_page_request || host_enc[ENC_SELECT] || host_enc[ENC_ALGORITHM] || host_enc[ENC_PRESETS]) return 0;
+    for (uint32_t q = mq_r; q != mq_w; q++)
+        if ((mq[q % (sizeof mq / sizeof mq[0])][0] & 0xF0u) == 0xC0u) return 0;
+    set_param((uint32_t)p, (int32_t)ed_patch((uint32_t)p)->v[p] + delta);
+    auto_rec((uint32_t)p);
+    if (p == P_CUTOFF) cut_shown_t = fm1_ms + 1u;
+    if (p == P_MODE || p == P_FTYPE || p == P_ARP_MODE || p >= P_CHO_RATE) dirty_tags = 1;
+    dirty_hdr = dirty_page = 1;
+    zm_focus_capture(k,p);
+    return 1;
+}
+
+EXPORT int32_t waswan_knob_value(uint32_t k)
+{
+    int32_t p = waswan_knob_param(k);
+    return p < 0 ? -1 : ed_patch((uint32_t)p)->v[p];
+}

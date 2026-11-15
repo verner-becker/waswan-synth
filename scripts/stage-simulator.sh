@@ -32,7 +32,7 @@ s = p.read_text()
 anchor = 'function frame(m){state=m;'
 if s.count(anchor) != 1:
     raise SystemExit('Contrato de frame upstream mudou; revisar integração de polifonia.')
-s = "import {updatePolyphony} from './polyphony-panel.js';\n" + s.replace(anchor, 'function frame(m){updatePolyphony(m);state=m;')
+s = "import {updateMidiProfile} from './midi-profile-panel.js';\nimport {updatePolyphony} from './polyphony-panel.js';\n" + s.replace(anchor, 'function frame(m){updateMidiProfile(m);updatePolyphony(m);state=m;')
 receive = 'function receive({data:m}){'
 assert s.count(receive) == 1
 s = "import {updateDspMonitor} from './dsp-monitor.js';\n" + s.replace(receive, receive+'updateDspMonitor(m);')

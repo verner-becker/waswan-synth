@@ -3,6 +3,13 @@ import {Engine as OriginalEngine} from './engine-original.js';
 
 export class Engine extends OriginalEngine {
   input(message) {
+    if (message.t === 'enc-fine') {
+      if (Number.isInteger(message.e) && message.e>=0 && message.e<4 && Number.isInteger(message.steps) && Math.abs(message.steps)<=127 &&
+          Number.isInteger(message.context) && message.context>=0 && message.context<=0xffffffff) {
+        this.ex.waswan_knob_fine?.(message.e,message.steps,message.context);
+      }
+      return;
+    }
     if (message.t === 'voice-sustain') {
       if (typeof message.enabled === 'boolean') this.ex.waswan_set_sustain(message.enabled ? 1 : 0);
       return;
@@ -21,6 +28,8 @@ export class Engine extends OriginalEngine {
   }
   frame() {
     const frame = super.frame(), x = this.ex;
+    if (x.waswan_knob_context) frame.knobControl={context:x.waswan_knob_context()>>>0,
+      parameters:Array.from({length:4},(_,k)=>{const p=x.waswan_knob_param(k);return p<0?null:{id:p,value:x.waswan_knob_value?.(k)??null};})};
     frame.polyphony = {
       limit:x.waswan_voice_limit(),
       unisonLimit:x.waswan_unison_limit(),

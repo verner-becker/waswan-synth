@@ -1,12 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import {TARGETS} from './midi-profile.js';
+import {TARGETS,fineTarget} from './midi-profile.js';
 
+let activeProfile,activePanel;
+export function updateMidiProfile(frame) {
+  if (!activeProfile) return;
+  const control=frame.knobControl;
+  activeProfile.setContext(control?.context??null);
+  activePanel.querySelector('[data-fine-context]').textContent=control
+    ? 'Fino disponível nesta tela: '+(control.parameters.map((p,k)=>p?'K'+(k+1):null).filter(Boolean).join(', ')||'nenhum')+'. Em menus e camadas especiais, use Normal.'
+    : 'Controle fino indisponível neste WASM; recompile a extensão host.';
+}
 export function mountProfilePanel(controller) {
   const anchor = document.querySelector('.midi-panel');
   if (!anchor) return;
-  const profile = controller.profile;
+  const profile = controller.profile;activeProfile=profile;
   const panel = document.createElement('details');
-  panel.className = 'waswan-profile';
+  panel.className = 'waswan-profile';activePanel=panel;
   panel.innerHTML = `
     <summary>WASWAN · Mapeamento de knobs e faders</summary>
     <label class="waswan-enable"><input type="checkbox" data-enabled> Ativar meu perfil MIDI</label>
@@ -18,13 +27,19 @@ export function mountProfilePanel(controller) {
         <option value="offset">Relativa · 65 aumenta / 63 diminui</option>
         <option value="twos">Relativa · 1 aumenta / 127 diminui</option>
       </select></label>
+      <label>Comportamento do knob <select data-behavior>
+        <option value="normal">Normal · passos e aceleração originais</option>
+        <option value="fine">Fino · uma unidade interna por incremento</option>
+      </select></label>
       <button type="button" data-learn>Aprender controle</button>
       <button type="button" data-cancel>Cancelar</button>
     </div>
+    <p data-fine-context>Inicie o motor para consultar o controle fino.</p>
+    <p>Fino aplica-se aos parâmetros diretos de K1–K4, preservando a escala original. Depois de mudar página ou preset, o primeiro valor absoluto apenas estabelece a nova referência. K5–K8 e faders mantêm Normal.</p>
     <p data-status role="status" aria-live="polite"></p>
     <p>Knobs absolutos usam a diferença entre movimentos; o primeiro valor após trocar a entrada, soltar tudo ou retornar à janela estabelece a posição inicial. Faders usam o valor recebido diretamente, respeitando JUMP/CATCH do instrumento.</p>
     <p>Um CC mapeado substitui sua função original nesta porta e canal. Se mapear CC64, ele passa a controlar esse destino em vez de sustain. Desative o perfil para voltar ao comportamento original. O perfil é salvo apenas neste navegador, separado dos timbres.</p>
-    <div class="waswan-table"><table><thead><tr><th>Controle virtual</th><th>Entrada / canal / CC</th><th>Modo</th><th>Ação</th></tr></thead><tbody></tbody></table></div>
+    <div class="waswan-table"><table><thead><tr><th>Controle virtual</th><th>Entrada / canal / CC</th><th>Formato MIDI</th><th>Comportamento</th><th>Ação</th></tr></thead><tbody></tbody></table></div>
   `;
   anchor.after(panel);
   const css = document.createElement('link');
@@ -36,9 +51,13 @@ export function mountProfilePanel(controller) {
     const fader = $('[data-target]').value.startsWith('fader:');
     if (fader) $('[data-mode]').value = 'absolute';
     $('[data-mode]').disabled = fader;
+    const fine=fineTarget($('[data-target]').value);
+    $('[data-behavior]').disabled=!fine;
+    if(!fine)$('[data-behavior]').value='normal';
   };
   $('[data-target]').onchange = () => { updateMode(); profile.reset(); };
   $('[data-mode]').onchange = () => profile.reset();
+  $('[data-behavior]').onchange = () => profile.reset();
   updateMode();
   $('[data-enabled]').onchange = e => {
     const enabled = e.target.checked;
@@ -51,7 +70,7 @@ export function mountProfilePanel(controller) {
       return;
     }
     controller.release();
-    profile.learn($('[data-target]').value,$('[data-mode]').value);
+    profile.learn($('[data-target]').value,$('[data-mode]').value,$('[data-behavior]').value);
   };
   $('[data-cancel]').onclick = () => profile.reset();
   profile.onChange = () => {
@@ -71,6 +90,13 @@ export function mountProfilePanel(controller) {
       for (const text of [TARGETS.find(t=>t.id===b.target).label,`${b.port} · canal ${b.channel+1} · CC${b.cc}`,mode]) {
         const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
       }
+      const behaviorCell=document.createElement('td'),behavior=document.createElement('select');
+      behavior.dataset.bindingBehavior=b.target;behavior.setAttribute('aria-label',`Comportamento ${b.target}`);
+      behavior.add(new Option('Normal','normal'));
+      if(fineTarget(b.target))behavior.add(new Option('Fino · unidade interna','fine'));
+      behavior.value=b.behavior;behavior.disabled=!fineTarget(b.target);
+      behavior.onchange=()=>profile.setBehavior(b.target,behavior.value);
+      behaviorCell.append(behavior);row.append(behaviorCell);
       const cell = document.createElement('td'), button = document.createElement('button');
       button.type='button'; button.textContent='Remover';
       button.setAttribute('aria-label',`Remover mapeamento ${TARGETS.find(t=>t.id===b.target).label}`);
