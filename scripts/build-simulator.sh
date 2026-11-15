@@ -13,8 +13,8 @@ export WASM_OPT="${WASM_OPT:-$root/.tools/binaryen-version_133/bin/wasm-opt}"
 export ZIG_GLOBAL_CACHE_DIR="$root/.tools/zig-cache"
 export SIM_VERSION=1.2.0
 export SIM_OUT="$root/.local/build"
-export WASWAN_VOICES="${WASWAN_VOICES:-128}"
-case "$WASWAN_VOICES" in 8) stages='' ;; 16) stages='16' ;; 32) stages='16 32' ;; 64) stages='16 32 64' ;; 128) stages='16 32 64 128' ;; *) echo 'Somente as etapas planejadas até 128 estão autorizadas.' >&2; exit 1;; esac
+export WASWAN_VOICES="${WASWAN_VOICES:-256}"
+case "$WASWAN_VOICES" in 8) stages='' ;; 16) stages='16' ;; 32) stages='16 32' ;; 64) stages='16 32 64' ;; 128) stages='16 32 64 128' ;; 256) stages='16 32 64 128 256' ;; *) echo 'Etapas aceitas: 8, 16, 32, 64, 128 e o experimento de 256.' >&2; exit 1;; esac
 sh "$upstream/tools/build_controls_sim.sh"
 # Thin host extension: original DSP/allocator compiled unchanged, plus mode API and telemetry.
 "$ZIG" cc --target=wasm32-freestanding -mcpu=generic+bulk_memory -O2 \

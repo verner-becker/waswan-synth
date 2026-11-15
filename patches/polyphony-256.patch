@@ -1,0 +1,45 @@
+--- a/firmware/src/obv_engine.h
++++ b/firmware/src/obv_engine.h
+@@ -14 +14 @@
+-#define NV 8u
++#define NV 256u /* WASWAN host-only stage; original submodule stays at eight. */
+@@ -18 +18 @@
+-#define NHELD 16u
++#define NHELD 128u
+@@ -71 +71 @@
+-#define NQ 64u
++#define NQ 1024u
+@@ -76 +76 @@
+-    if (nq_w - nq_r >= NQ) return;              /* a flood: drop (the ISR drains 64 per block) */
++    if (nq_w - nq_r >= NQ) return;              /* a flood: drop (the ISR drains NQ per block) */
+@@ -286,0 +287 @@
++typedef struct { uint32_t word[8]; } voice_mask_t; /* 256 bits without oversized shifts. */
+@@ -289 +290,2 @@
+-    uint32_t i, v, taken = 0;
++    uint32_t i, v;
++    voice_mask_t taken = {{0}};
+@@ -293 +295 @@
+-            if (taken >> v & 1u) continue;
++            if (taken.word[v >> 5] >> (v & 31u) & 1u) continue;
+@@ -301 +303 @@
+-        taken |= 1u << pick;
++        taken.word[pick >> 5] |= 1u << (pick & 31u);
+--- a/tests/host.c
++++ b/tests/host.c
+@@ -231 +231,2 @@
+-static uint8_t mq[64][3];
++#define HOST_MIDI_CAPACITY 1024u
++static uint8_t mq[HOST_MIDI_CAPACITY][3];
+@@ -236 +237 @@
+-    *st = mq[mq_r % 64u][0]; *d1 = mq[mq_r % 64u][1]; *d2 = mq[mq_r % 64u][2];
++    *st = mq[mq_r % HOST_MIDI_CAPACITY][0]; *d1 = mq[mq_r % HOST_MIDI_CAPACITY][1]; *d2 = mq[mq_r % HOST_MIDI_CAPACITY][2];
+@@ -405 +406 @@
+-            mq[mq_w % 64u][0] = script[step].st; mq[mq_w % 64u][1] = script[step].d1; mq[mq_w % 64u][2] = script[step].d2;
++            mq[mq_w % HOST_MIDI_CAPACITY][0] = script[step].st; mq[mq_w % HOST_MIDI_CAPACITY][1] = script[step].d1; mq[mq_w % HOST_MIDI_CAPACITY][2] = script[step].d2;
+--- a/web/sim/sim.c
++++ b/web/sim/sim.c
+@@ -183,2 +183,2 @@
+-    if (st < 0x80u || st == 0xF0u || st == 0xF7u || st == 0xFEu || mq_w - mq_r >= 64u) return;
+-    mq[mq_w % 64u][0] = (uint8_t)st; mq[mq_w % 64u][1] = (uint8_t)(d1 & 0x7Fu); mq[mq_w % 64u][2] = (uint8_t)(d2 & 0x7Fu);
++    if (st < 0x80u || st == 0xF0u || st == 0xF7u || st == 0xFEu || mq_w - mq_r >= HOST_MIDI_CAPACITY) return;
++    mq[mq_w % HOST_MIDI_CAPACITY][0] = (uint8_t)st; mq[mq_w % HOST_MIDI_CAPACITY][1] = (uint8_t)(d1 & 0x7Fu); mq[mq_w % HOST_MIDI_CAPACITY][2] = (uint8_t)(d2 & 0x7Fu);

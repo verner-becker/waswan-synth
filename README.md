@@ -11,7 +11,7 @@ Pré-requisitos: Git, Python 3, curl, patch e uv para preparar as ferramentas; N
 ```sh
 git clone --recurse-submodules https://github.com/verner-becker/waswan-synth.git
 cd waswan-synth
-git switch feat/polyphony-128
+git switch experiment/polyphony-256
 sh scripts/setup-tools.sh
 sh scripts/build-simulator.sh
 sh scripts/check-upstream.sh
@@ -21,6 +21,7 @@ node tests/polyphony-16.test.mjs
 node tests/polyphony-32.test.mjs
 node tests/polyphony-64.test.mjs
 node tests/polyphony-128.test.mjs
+node tests/polyphony-256.test.mjs
 python3 scripts/serve-simulator.py
 ```
 
@@ -46,7 +47,9 @@ A etapa [16 → 32 vozes](docs/polifonia-32.md) foi testada por software, aprova
 
 A etapa [32 → 64 vozes](docs/polifonia-64.md) foi aprovada e preservada em main/tag `v0.6.0`.
 
-Nesta branch, a etapa [64 → 128 vozes](docs/polifonia-128.md) alcança o limite alvo. Usa máscara de quatro palavras de 32 bits, listas de 128 notas e filas de 512 eventos. POLY oferece até 128 notas, DUAL 64, UNISON mantém oito vozes por nota e SUPER mantém cinco globais. O indicador mostra 128 slots; **Sustain MIDI** permite acumular notas em grupos menores. Testes automatizados e no Chrome passaram. Upstream, presets, perfil MIDI e firmware físico preservados.
+A etapa [64 → 128 vozes](docs/polifonia-128.md), preservada em `feat/polyphony-128` no commit `00293b3`, alcançou o limite alvo inicial. Usa máscara de quatro palavras de 32 bits, listas de 128 notas e filas de 512 eventos. POLY oferece até 128 notas, DUAL 64, UNISON mantém oito vozes por nota e SUPER mantém cinco globais. O indicador mostra 128 slots; **Sustain MIDI** permite acumular notas em grupos menores. Testes automatizados e no Chrome passaram. Upstream, presets, perfil MIDI e firmware físico preservados.
+
+Nesta branch, o [experimento autorizado de 256 vozes](docs/polifonia-256.md) passou nos testes do motor e do Chrome. O build serve 256 por padrão. O pool compartilhado suporta duas partes POLY com 128 notas cada ou uma parte DUAL com 128 notas. Cada parte continua limitada às 128 alturas MIDI; a interface distingue esse limite da capacidade de vozes. Máscara de 256 bits e filas de 1024, com UNISON de oito e SUPER de cinco preservados. A referência de 128 permanece intacta e o experimento ainda não foi incorporado a main.
 
 Para atualizar apenas a interface, sem recompilar o DSP, execute `sh scripts/stage-simulator.sh`. Verifique o perfil com `node tests/midi-profile.test.mjs`.
 
@@ -54,7 +57,7 @@ Fluxo Git: cada fase aprovada é preservada em main/tag e a próxima etapa ocorr
 
 ## Inspecionar o código
 
-A branch principal preserva a entrega aprovada de 64; esta branch contém a etapa de 128 testada por software. A tag `v0.1.0` preserva a primeira execução validada, anterior às expansões.
+A branch principal preserva a entrega aprovada de 64; `feat/polyphony-128` preserva a meta inicial e esta branch contém o experimento de 256 testado por software. A tag `v0.1.0` preserva a primeira execução validada, anterior às expansões.
 
 - [Auditoria inicial](docs/auditoria-inicial.md): inventário, arquitetura, licenças e testes de áudio/MIDI.
 - [Perfil MIDI](docs/perfil-midi.md): aprendizado, validação física e diagnóstico dos passos de cutoff.
@@ -63,9 +66,10 @@ A branch principal preserva a entrega aprovada de 64; esta branch contém a etap
 - [Polifonia de 32 vozes](docs/polifonia-32.md): filas maiores, teste da máscara completa, benchmarks e teste reproduzível no Chrome.
 - [Polifonia de 64 vozes](docs/polifonia-64.md): máscara de 64 bits, bit 63 validado, arpejo, regressões e custo DSP/memória.
 - [Polifonia de 128 vozes](docs/polifonia-128.md): máscara de múltiplas palavras, faixa MIDI completa, sustain, voice stealing e custo de processamento.
+- [Experimento de 256 vozes](docs/polifonia-256.md): duas partes POLY, DUAL completo, slot 255, limites de índices e medição no navegador.
 - [Adaptador MIDI WASWAN](web/midi.js) e [lógica do perfil](web/midi-profile.js): extensões fora do upstream.
 - [Fontes originais na revisão fixada](https://github.com/4t59m4f784-creator/SMKSYNTH/tree/3f751bc2be066414f204cf44e1aa05d9c7467d7f): consulte `web/simulator/`, `web/sim/sim.c` e `firmware/src/` para interface, integração WASM e DSP. O submódulo aparece como um link no GitHub; o clone recursivo baixa essas fontes.
 
-O usuário confirmou o saw, áudio no navegador, quatro knobs e um slider, e POLY na etapa de oito. Em seguida autorizou as etapas de 16, 32, 64 e 128, delegando os testes de polifonia ao agente. As verificações automatizadas e no Chrome estão documentadas. A meta de 128 foi alcançada por software; qualquer expansão adicional exige nova autorização explícita. O controle fino de cutoff segue adiado; não há interface modular completa nesta etapa.
+O usuário confirmou o saw, áudio no navegador, quatro knobs e um slider, e POLY na etapa de oito. Em seguida autorizou as etapas de 16, 32, 64 e 128, delegando os testes de polifonia ao agente. As verificações automatizadas e no Chrome estão documentadas. Após alcançar 128, o usuário autorizou o experimento de 256 em branch isolada. Qualquer expansão acima de 256 exige nova autorização explícita. O controle fino de cutoff segue adiado; não há interface modular completa nesta etapa.
 
 Código e adaptações: GPL-3.0-only; consulte [LICENSE](LICENSE). Preserve também [os créditos originais](upstream/SMKSYNTH/CREDITS.md) e [as licenças dos componentes](upstream/SMKSYNTH/LICENSING.md). Nenhuma alteração foi enviada ao teclado.

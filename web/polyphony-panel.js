@@ -71,7 +71,7 @@ export function updatePolyphony(frame) {
   unison.disabled=!melodic||frame.midiMode||part.mode!==2;
   panel.querySelector('[data-sustain]').checked=state.midiSustain;
   panel.querySelector('[data-sustain]').disabled=!melodic||frame.midiMode;
-  const notes=part.mode===0?part.limit:part.mode===1?Math.floor(part.limit/2):1;
+  const notes=part.mode===0?Math.min(128,part.limit):part.mode===1?Math.floor(part.limit/2):1;
   const mode=MODES.find(m=>m.id===part.mode)?.label;
   panel.querySelector('[data-mode-help]').textContent=!melodic
     ? 'Esta parte usa DRUM-X; escolha uma parte ANALOG para editar POLY, MONO, DUAL ou UNISON.'

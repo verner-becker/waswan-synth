@@ -8,14 +8,16 @@
 #endif
 #include WASWAN_SIM_SOURCE
 
-_Static_assert(WASWAN_VOICES == 8 || WASWAN_VOICES == 16 || WASWAN_VOICES == 32 || WASWAN_VOICES == 64 || WASWAN_VOICES == 128, "Only the planned stages through 128 voices are approved");
+_Static_assert(WASWAN_VOICES == 8 || WASWAN_VOICES == 16 || WASWAN_VOICES == 32 || WASWAN_VOICES == 64 || WASWAN_VOICES == 128 || WASWAN_VOICES == 256, "Only approved stages and the 256-voice experiment are supported");
 _Static_assert(NV == WASWAN_VOICES, "Source must match the selected stage");
 #if WASWAN_VOICES >= 64
 _Static_assert(sizeof(voice_mask_t) * 8u >= NV, "The allocation mask must cover all voices");
 #else
 _Static_assert(NV <= 32u, "Original group_pick uses a 32-bit taken mask");
 #endif
-_Static_assert(NV <= NHELD, "Held-note capacity must cover the voice pool");
+_Static_assert(NHELD >= (NV < 128u ? NV : 128u), "Held notes must cover the available MIDI pitches per part");
+_Static_assert(NV <= 256u, "uint8 group indices must cover every voice");
+_Static_assert(NHELD <= 255u, "Preserve uint8 held-release and pending counters");
 _Static_assert(NQ >= 2u*NV+2u, "Engine queue must hold a full on/off chord and sustain changes");
 _Static_assert(sizeof mq / sizeof mq[0] >= 2u*NV+2u, "MIDI queue must hold a full on/off chord and sustain changes");
 _Static_assert(SUPER_LIMIT == 5u, "Preserve the independent SUPER limit");
