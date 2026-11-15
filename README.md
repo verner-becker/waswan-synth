@@ -33,6 +33,12 @@ As ferramentas ficam em `.tools/` e os resultados em `.local/`, ambos ignorados 
 
 O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binaryen 133, e compila separadamente a extensão host em `wasm/waswan-sim.c`. É possível fornecer executáveis próprios pelas variáveis `ZIG` e `WASM_OPT`. Não há npm install para executar o sintetizador; Node é utilizado somente na verificação.
 
+## DSP Monitor v1 (branch de desenvolvimento)
+
+Em `feat/dsp-monitor`, construída diretamente sobre o experimento de 256 vozes, o botão **Mostrar WASWAN DSP Monitor** habilita a instrumentação opcional. Use **Iniciar captura → Encerrar captura → Exportar JSONL**. O monitor nasce desligado e não altera o DSP. No Chrome instalado, o relógio do worklet tem resolução nominal de 1 ms: percentis são aproximados e exceder o orçamento não comprova underrun. Veja [arquitetura, precisão, testes e resultados](docs/dsp-monitor-v1.md).
+
+Para essa versão: `git switch feat/dsp-monitor` e `sh scripts/stage-simulator.sh` após gerar os artefatos WASM. Recarregue o navegador. A branch experimental de 256 e as referências anteriores permanecem preservadas; não há merge ou tag de release nesta fase.
+
 ## Resultados e próximo passo
 
 Veja [a auditoria e a proposta de expansão](docs/auditoria-inicial.md). Os comandos acima reconstroem o WASM e executam os testes MIDI e musicais originais sobre esse artefato.
