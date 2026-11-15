@@ -61,7 +61,9 @@ Na medição desta máquina, dez segundos de áudio com oito notas sustentadas r
 
 Os testes MIDI e musicais originais passaram sobre o WASM estendido, preservando cinco patterns e oito favoritos. O teste do perfil MIDI também passou.
 
-No Chrome, uma entrada MIDI sintética exercitou os quatro modos, acorde de oito notas, nona nota, sustain, release, UNISON de oito e preservação do mapeamento. AudioContext ativo a 44,1 kHz, áudio não nulo, nenhuma exceção JS e painel inspecionado em 1440 e 390 px. Evidências locais ignoradas pelo Git: `.local/validation/polyphony-*`. A validação musical no teclado físico ainda depende da confirmação do usuário.
+No Chrome, uma entrada MIDI sintética exercitou os quatro modos, acorde de oito notas, nona nota, sustain, release, UNISON de oito e preservação do mapeamento. AudioContext ativo a 44,1 kHz, áudio não nulo, nenhuma exceção JS e painel inspecionado em 1440 e 390 px. Evidências locais ignoradas pelo Git: `.local/validation/polyphony-*`.
+
+O usuário confirmou o funcionamento da etapa de oito vozes no teste musical solicitado no SMK-37 Pro: "funcionou". A confirmação se refere à execução em POLY; os casos individuais de sustain, release, voice stealing e demais modos têm as verificações automatizadas descritas acima.
 
 ## Validação objetiva no SMK-37 Pro
 
@@ -75,6 +77,6 @@ No Chrome, uma entrada MIDI sintética exercitou os quatro modos, acorde de oito
 
 ## Limite da fase e próximas aprovações
 
-Esta fase não autoriza a etapa 8 → 16. Aguarda-se validação musical e técnica e uma autorização explícita antes de qualquer aumento.
+Esta fase tem verificações técnicas concluídas e confirmação musical do usuário. Isso não autoriza a etapa 8 → 16: é necessária uma nova autorização explícita antes de qualquer aumento.
 
 Antes de uma expansão futura, revisar ao menos: `vc[NV]`, `grp_v[NPART][NV]`, índices, o bitmask `taken` de 32 bits e deslocamentos `1u << pick` em `group_pick`; `NHELD=16`, filas de eventos `NQ=64`, buffers de áudio de até 1024 frames, matrizes de envelopes/estado por voz, tabelas de oito voice cards e caminhos de mix/acumulação. Preservar ou justificar separadamente `SUPER_LIMIT=5`; medir custo DSP e margem por quantum de áudio real no navegador. Essa revisão não equivale à implementação de nenhuma dessas expansões.
