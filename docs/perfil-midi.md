@@ -43,6 +43,15 @@ sh scripts/check-upstream.sh
 
 Os testes do perfil cobrem aprendizado, limites/reversão, formatos relativos, escala do master, persistência, perfis inválidos, armazenamento bloqueado, isolamento de porta/canal, CC64 sem sustain duplicado, foco, desconexão e panic. Também verificam notas, pitch, modulação e alteração do master no WASM recompilado através da classe original com o novo adaptador.
 
-Os testes MIDI e musicais originais continuam passando. A associação física de cada knob/fader permanece a ser aprendida pelo usuário no painel; não se criou um mapa presumido com base na captura coletiva da primeira entrega. Esta expansão não remapeia pads nem adiciona novos motores.
+Os testes MIDI e musicais originais continuam passando. O usuário confirmou no hardware o aprendizado e funcionamento dos quatro controles da tela em knobs físicos e de um slider. Também confirmou o teste de liberação/retorno das notas ao trocar de janela. A associação dos demais controles continua disponível no painel; não se criou um mapa presumido com base na captura coletiva da primeira entrega. Esta expansão não remapeia pads nem adiciona novos motores.
 
 No Chrome, eventos MIDI sintéticos exercitaram o aprendizado, o consumo exclusivo de CC64, diferenças de knobs e persistência após recarregar. O AudioWorklet permaneceu ativo a 44,1 kHz, com sinal não nulo e sem exceções JS. O painel foi inspecionado em larguras de 1440 e 390 px. Evidências locais: `.local/validation/midi-profile-*`. Esse teste automatizado não substitui a associação física pelo usuário.
+
+## Precisão do cutoff observada no hardware
+
+No teste com knob em modo absoluto, o usuário relatou passos crescentes no cutoff exibido em Hz. Há duas características distintas na base original:
+
+- `firmware/src/obervave.c`, `param_value`, apresenta o cutoff pela tabela musical `CUT_HZ[(v+8)%137]`, em `firmware/gen/obv_tables.h`. O parâmetro interno possui valores 0–127; os passos em Hz crescem com a frequência. Por exemplo, os valores internos 40 e 42 exibem 131 e 147 Hz. Isso não é uma escala linear em Hz.
+- O tratamento dos quatro encoders da tela em `obervave.c` multiplica deltas de módulo maior que 1 por 3 e aplica passos de 2 a parâmetros com máximo de pelo menos 100, como cutoff. Reproduzido no WASM recompilado com cutoff inicial 40 e modo absoluto: delta MIDI +1 → cutoff 42; +2 → 52; +3 → 58. Portanto, saltos ou agrupamentos de valores MIDI também podem produzir aceleração, além da escala em Hz.
+
+O adaptador conserva esse comportamento de encoder. Não foi alterado o DSP, a tabela de frequências ou a aceleração original a partir desse relato. Um controle fino no host é uma melhoria identificada: deve preservar a escala musical e tratar a aceleração dos eventos sem presumir que suavizar o texto em Hz aumentaria a resolução real do parâmetro.
