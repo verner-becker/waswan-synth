@@ -62,3 +62,10 @@ python3 scripts/serve-simulator.py --port 8738 --diagnostic-dir .local/validatio
 # Em outro terminal:
 node tests/browser-midi-diagnostic.mjs
 ```
+
+
+## Após a correção absoluta
+
+O caso 53/20→127/94 acima documenta a captura física anterior à correção. Na versão corrigida, o Fino absoluto envia intenções `enc-fine-absolute` (valor e revisão), e o Engine aguarda captura de posição; o registro de comando enviado não significa que o parâmetro já mudou. `parameters` inclui limites e estado de posse reportado. A UI também verifica a revisão atual do perfil, pois um reset pode invalidar a posse antes do próximo CC.
+
+O teste sintético agora exige que a ressonância20 permaneça20 até capturar em CC20, e confirme alcance de0/127 depois disso, mantendo igualdade dos logs exportados/recebidos. O arquivo físico original permanece preservado. Detalhes e teste manual em [correção de alinhamento absoluto](knob-fine-control.md#correção-de-alinhamento-absoluto--captura-suave).

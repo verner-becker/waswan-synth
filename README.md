@@ -35,7 +35,7 @@ O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binary
 
 ## Controle fino de knobs v1
 
-Na branch `feat/knob-fine-control`, baseada no DSP Monitor com 256 vozes, o perfil permite escolher **Normal / Fino** em cada mapeamento existente de K1–K4. Normal preserva os passos e a aceleração originais; Fino altera uma unidade interna por incremento lógico nos parâmetros diretos da tela. Presets e mapeamentos anteriores são preservados; o padrão continua Normal.
+Na branch `feat/knob-fine-control`, baseada no DSP Monitor com 256 vozes, o perfil permite escolher **Normal / Fino** em cada mapeamento existente de K1–K4. Normal preserva os passos e a aceleração originais; Fino absoluto usa posição com captura suave; relativos finos alteram uma unidade interna por incremento lógico nos parâmetros diretos da tela. Presets e mapeamentos anteriores são preservados; o padrão continua Normal.
 
 Após trocar para essa branch, execute `sh scripts/build-simulator.sh` uma vez e recarregue o navegador: esta fase acrescenta uma API host ao WASM. Depois, selecione Fino na linha do knob; não precisa reaprender. O cutoff mantém sua escala original em Hz. Veja [contrato, testes, limitações e teste no SMK-37 Pro](docs/knob-fine-control.md).
 
@@ -43,7 +43,7 @@ Após trocar para essa branch, execute `sh scripts/build-simulator.sh` uma vez e
 
 O painel **WASWAN · Diagnóstico MIDI ao vivo** registra CCs, interpretação do mapeamento e evolução dos parâmetros. **Iniciar captura ao vivo → Marcar problema → Encerrar** envia os registros somente ao servidor local e permite exportar JSONL. Atualize a interface com `sh scripts/stage-simulator.sh` e reinicie o servidor Python para habilitar a recepção. Não grava áudio ou notas.
 
-A captura física confirmou um limite do controle absoluto por deltas: CC53 com parâmetro20 pode chegar a CC127 com parâmetro94. Essa entrega de diagnóstico preserva a resposta dos knobs; a correção da política absoluta está pendente. Veja [evidência, uso e testes](docs/midi-diagnostic.md).
+A captura física confirmou um limite do controle absoluto por deltas: CC53 com parâmetro20 pode chegar a CC127 com parâmetro94. O Fino absoluto agora corrige esse desalinhamento com captura suave: gire até o CC indicado na linha do mapeamento e, após sincronizar, use todo o curso. Normal mantém o contrato original. Veja [evidência, uso e testes](docs/midi-diagnostic.md).
 
 ## DSP Monitor v1 (branch de desenvolvimento)
 

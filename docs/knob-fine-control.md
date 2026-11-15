@@ -1,5 +1,7 @@
 # Controle fino de knobs v1
 
+Estado atual: **Fino + Absoluto usa captura suave de posição**, corrigindo o desalinhamento físico confirmado por telemetria. Veja [a correção e as instruções de teste](#correção-de-alinhamento-absoluto--captura-suave). A auditoria e os resultados iniciais abaixo registram a implementação anterior por deltas.
+
 ## Auditoria e decisão técnica
 
 Base limpa e igual ao remoto: `feat/dsp-monitor`, `b2a25e5994761564f79be734ac0a5d68d3dbe353`. Branch nova: `feat/knob-fine-control`. Referências preservadas, nenhum arquivo do submódulo alterado.
@@ -110,3 +112,38 @@ Arquivos de produção alterados: `wasm/waswan-sim.c`, `web/engine.js`, `web/mid
 ## Diagnóstico posterior de alcance absoluto
 
 O teste físico com [telemetria MIDI ao vivo](midi-diagnostic.md) confirmou uma limitação não coberta pelos testes iniciais de incrementos: a referência absoluta pode ficar deslocada do parâmetro e impedir alcançar um extremo sem voltar ao outro. Ressonância começou em 20 com CC53 e terminou em 94 com CC127, exatamente os 74 passos recebidos. O problema foi reproduzido por software; o relatório de diagnóstico registra a evidência. A entrega de telemetria ainda preserva a resposta original Normal/Fino; não implementa uma política nova de captura de posição.
+
+## Correção de alinhamento absoluto — captura suave
+
+Após a evidência física, **Fino + Absoluto** passa a controlar posição com captura suave. Normal conserva deltas/aceleração originais e os dois formatos relativos finos conservam incrementos unitários.
+
+O parâmetro é preservado até o controle alcançar ou cruzar sua posição atual. Depois da captura, posição MIDI 0–127 é convertida para `min + round(CC * (max-min) / 127)`. Cutoff e ressonância têm limites 0–127: cada unidade MIDI corresponde exatamente ao mesmo valor interno, sem offset. Para parâmetros de faixa menor, os mesmos valores originais são distribuídos pelo curso; nenhum valor DSP novo é criado. Os Hz do cutoff continuam na tabela musical original.
+
+Na situação registrada, ressonância20 / knob53: valores físicos 53→127 agora mantêm a ressonância20 enquanto aguardam captura. Ao voltar até CC20, o controle assume a posição. A partir daí 21→21, 127→127 e 0→0, inclusive após várias idas e voltas. Não é necessário levar ao mínimo para alinhar quando o valor atual for diferente do mínimo.
+
+A tabela mostra **captura suave: alcance CC N** e depois **posição sincronizada**. Isso distingue espera deliberada de ausência de MIDI. As escolhas Normal/Fino e os formatos de mensagem continuam nas linhas dos mapeamentos existentes; não é preciso reaprender.
+
+### Contrato e rearme
+
+`waswan_knob_bound(k, upper)` acrescenta leitura dos limites do setter original: máximo contextual por `obv_param_max` e o mínimo/máximo especial 52/76 para parâmetros de pitch DRUM quando aplicáveis. É extensão somente host, sem mudanças no firmware fixado, DSP ou blobs.
+
+O perfil envia `enc-fine-absolute` com valor cru, token de contexto e revisão transitória do perfil. Não converte essa combinação em deltas de posições físicas. O Engine mantém quatro pequenos estados de posse no worklet. Captura ao igualar ou cruzar o valor atual, inclusive se o CC saltar sobre ele. Uma vez adquirido, a diferença entre posição desejada e valor atual é aplicada pela API fina existente, com setter/limites/auto-record originais; não há séries artificiais de eventos. Relativos continuam em `enc-fine`.
+
+Revisão muda em reset, troca de contexto, aprendizado e troca Normal/Fino. Não é persistida. Reset por reconexão/foco rearma a captura mesmo quando o contexto do firmware permanece igual. Edição por outro controle também rearma, se o valor atual divergir do último valor aplicado pelo proprietário. Preset/página e tokens antigos conservam as proteções anteriores; navegação pendente pode recusar a aplicação sem editar o destino errado. A UI compara a revisão atual com a posse reportada para não indicar sincronização antiga depois de um reset.
+
+### Validação da correção
+
+- `tests/knob-pickup.test.mjs`: reprodução 53/20, espera/captura, varredura unitária de ressonância e cutoff, extremos, dez ciclos completos, cruzamento de valor pulado, revisões/rearme, edição externa, contexto antigo e parâmetro pequeno (wave0–4): passou no WASM256.
+- `tests/browser-knob-pickup.mjs`: Chrome, caso físico, indicador de captura, extremos e inversões, reconexão, blur e recarga completa com mapeamento fine preservado: passou, sem exceções.
+- Testes existentes de knobs e diagnóstico atualizados para o contrato absoluto de posição; Normal e relativos conservam as expectativas anteriores. Teste Chrome de telemetria confirma parâmetros0/127 e igualdade integral entre logs recebidos/exportados: passou.
+- Chrome: regressão de knobs, notas/panic, DSP Monitor com captura/exportação e polifonia256 completa passaram, incluindo POLY A/B, DUAL, roubo e sustain/release. Contextos sintéticos isolados, sem alterar perfil pessoal.
+
+Evidências novas: `.local/validation/knob-pickup-native.json`, `knob-pickup-browser.json`, `knob-pickup-mobile.png`, `knob-pickup-build.log`, além dos relatórios de knobs/telemetria atualizados. Reproduzir com build completo, `node tests/knob-pickup.test.mjs` e `node tests/browser-knob-pickup.mjs`, com servidor local ativo.
+
+### Testar no teclado
+
+Recarregar com Ctrl+F5, iniciar, conectar Master e manter **Fino + Absoluto** no knob. Observar o CC indicado na linha: girar até cruzá-lo uma vez, sem esperar alteração do parâmetro antes dessa captura. Depois testar lentamente nos dois sentidos e alcançar ambos os extremos. Repetir com ressonância/cutoff, após recarga e reconexão. Se algo parecer travado, iniciar a telemetria e marcar o problema antes de fazer movimentos de recuperação.
+
+A sensação física ainda depende da validação do usuário. Na troca de preset/página/foco, é esperado esperar nova captura. O modo Normal continua tendo o contrato antigo por diferenças e pode apresentar desalinhamento de curso; a correção desta etapa aplica-se ao Fino absoluto.
+
+As regressões nativas 8/16/32/64/128/256, MIDI/profile, comparação de áudio/patches/blobs e testes originais passaram novamente após a correção. O DSP Monitor nativo passou com amostras idênticas entre desligado/visível/captura; a captura/exportação no Chrome também passou. O teste prolongado de três minutos não foi repetido nesta correção; não houve alteração no callback original ou na agregação do monitor. Logs: `knob-pickup-regressions.log` e `knob-pickup-dsp-native.log` em `.local/validation/`. A validação física da nova captura suave está pendente do usuário; o teste físico anterior permanece preservado como evidência do defeito original.
