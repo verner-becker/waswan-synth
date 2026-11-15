@@ -1,0 +1,3 @@
+[submodule "upstream/SMKSYNTH"]
+	path = upstream/SMKSYNTH
+	url = https://github.com/4t59m4f784-creator/SMKSYNTH.git
