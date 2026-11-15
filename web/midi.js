@@ -3,6 +3,7 @@
 import {MidiInputController as OriginalMidiInputController} from './midi-original.js';
 import {MidiProfile} from './midi-profile.js';
 import {mountProfilePanel} from './midi-profile-panel.js';
+import {mountDspMonitor} from './dsp-monitor.js';
 import {mountPolyphonyPanel} from './polyphony-panel.js';
 
 export class MidiInputController extends OriginalMidiInputController {
@@ -14,6 +15,7 @@ export class MidiInputController extends OriginalMidiInputController {
     if (globalThis.document) {
       mountProfilePanel(this);
       mountPolyphonyPanel(this);
+      mountDspMonitor(this);
     }
   }
   message(data) {

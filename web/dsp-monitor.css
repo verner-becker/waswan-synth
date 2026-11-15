@@ -1,0 +1,2 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+.waswan-dsp{box-sizing:border-box;margin:10px auto;padding:12px;max-width:1100px;width:calc(100% - 28px);background:#181d24;color:#eee;border:1px solid #56606c;border-radius:8px;font:14px/1.5 system-ui;overflow-wrap:anywhere}.waswan-dsp[hidden]{display:none}.waswan-dsp button,[data-dsp-toggle]{padding:8px;margin:4px;border:1px solid #677888;border-radius:5px;background:#263747;color:#fff;cursor:pointer}.waswan-dsp button:disabled{opacity:.5;cursor:default}[data-dsp-toggle]{display:block;margin:10px auto}
