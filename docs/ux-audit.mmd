@@ -1,0 +1,32 @@
+flowchart LR
+  subgraph Main[Thread principal - interface atual]
+    DOM[HTML CSS controles e canvas upstream]
+    App[app.js original com hooks gerados]
+    Midi[OriginalMidiInputController + adaptador WASWAN]
+    Profile[MidiProfile + painel e captura suave]
+    Panels[Polifonia + DSP Monitor + diagnostico MIDI]
+    Store[localStorage sessao e perfil separados]
+    DOM --> App
+    Midi --> Profile
+    Profile --> App
+    App --> Panels
+    App <--> Store
+    Profile <--> Store
+  end
+  Device[Entrada Web MIDI selecionada] --> Midi
+  App <-->|MessagePort: comandos frame store ready error dsp-window| Worklet
+  subgraph Audio[Thread de audio]
+    Worklet[Worklet upstream + wrapper DSP Monitor]
+    Engine[Engine original + adaptador WASWAN]
+    WASM[WASM: simulador host + exports isolados]
+    DSP[DSP upstream e patch de 256 aplicado em copia]
+    Worklet --> Engine --> WASM --> DSP
+  end
+  DSP --> Worklet --> Gain[GainNode silenciar] --> Out[AudioDestination]
+  App -. fallback sem audio .-> Worker[Worker original com Engine]
+  Worker --> WASM
+  Panels -->|CC em lotes locais| Server[Servidor Python loopback]
+  Server --> Logs[Arquivos JSONL locais ignorados pelo Git]
+  Panels --> Export[Download JSONL por acao do usuario]
+  Build[stage-simulator.sh] -. copia e injeta hooks .-> App
+  Build -. preserva originais no submodulo .-> DOM

@@ -1,0 +1,852 @@
+{
+  "auditedCommit": "7dc36c8d97eb19ac084d5401864d51532a5c16e6",
+  "upstreamCommit": "3f751bc2be066414f204cf44e1aa05d9c7467d7f",
+  "chrome": "157.0.8103.78",
+  "capture": "real Chrome / isolated context / factory session and synthetic MIDI; screenshots unmodified",
+  "screenshots": [
+    {
+      "file": "01-desktop-inicial.png",
+      "width": 1440,
+      "height": 1873,
+      "bytes": 608679,
+      "sha256": "8886ef36cf08382f2f6534c55adb35bc9bb5cef5d7b595cd3e5261667e5d1653",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": null,
+      "part": null
+    },
+    {
+      "file": "02-desktop-execucao.png",
+      "width": 1440,
+      "height": 3529,
+      "bytes": 811840,
+      "sha256": "4b8c39e4edcd2a685a37c6ef51700a99b5eb08a53bb0d95c984df83ee7b20b13",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "03-mobile-execucao.png",
+      "width": 390,
+      "height": 6241,
+      "bytes": 503424,
+      "sha256": "8fd883fe4caf695d725022123e7ba8c5ee3a208d7fbe15e84569f8b6bf3e4496",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "04-perfil-midi-vazio.png",
+      "width": 1184,
+      "height": 588,
+      "bytes": 101226,
+      "sha256": "3dd2088a40dd72f897c9111be32ad2f00ee0a03a96f04821816f0fed3c68eb68",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "05-midi-learn-aguardando.png",
+      "width": 1184,
+      "height": 588,
+      "bytes": 102966,
+      "sha256": "20d9c62e036aee0f1e28321096543b908df37f9b356e99bf950de0a511361752",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "06-midi-captura-suave.png",
+      "width": 1184,
+      "height": 646,
+      "bytes": 112092,
+      "sha256": "369f81c36aec81d7eaecf0acd5c789622e90b7a74a4e23989fea916401c1fdd0",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "07-midi-sincronizado.png",
+      "width": 1184,
+      "height": 646,
+      "bytes": 111669,
+      "sha256": "eb695637d1ea32708adf2c144dbe185be60c507668f7999437a9addbfa75a3b2",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "08-diagnostico-midi.png",
+      "width": 1184,
+      "height": 269,
+      "bytes": 29903,
+      "sha256": "f3febb13d313968f4563a8ff4bdf377a1113828f7c616a4c68513e1b136aeb79",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "09-diagnostico-midi-ativo.png",
+      "width": 1184,
+      "height": 313,
+      "bytes": 44334,
+      "sha256": "6507a5a3184fdafad1f40ae7793c5623bafd8d5f0a05e78a123af609a40ff894",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "10-dsp-monitor.png",
+      "width": 1100,
+      "height": 351,
+      "bytes": 47127,
+      "sha256": "d3874e8880e1f28c7f881a2b19d99cda131305d7d38c3d049e9b5add0cb1beb4",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "11-dsp-capturando.png",
+      "width": 1100,
+      "height": 351,
+      "bytes": 47459,
+      "sha256": "4c04bfce596b47db678c6490aa236dba473b1b1caf820acabc935571969b3c66",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "12-polifonia-ativa.png",
+      "width": 1184,
+      "height": 2047,
+      "bytes": 165064,
+      "sha256": "37fff486de3a23ebe4f8e93257c8c39f2aae3c22d94473c10a1df5d633f0c12a",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "13-ajuda-sessao.png",
+      "width": 1184,
+      "height": 279,
+      "bytes": 68598,
+      "sha256": "b43be1bada0aceb72911b5c2e553eaa1d232f844616e892b9eedf835acc8ec80",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "14-instrumento-performance.png",
+      "width": 1184,
+      "height": 603,
+      "bytes": 197448,
+      "sha256": "d8870426bff19dcf5b43b9f9764113bb3809ad0257d2344dc8aca6017b971ac8",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "15-oscillator-1.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7824,
+      "sha256": "1bcb72b856e7de11af2a1eddb42a31f9f362caad8a42f34599e1bcdf6ba80320",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "16-oscillator-2.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7789,
+      "sha256": "e4b12e26eddb2c99c8a59234070133180dae8632329d2d257bc7fa9110e65c66",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "17-osciladores-modulacao.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7620,
+      "sha256": "511003799438b84c82da9ddd9e6efeb1cdd95c192e21a9e04c390e1e8b517fa9",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "18-filter.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7840,
+      "sha256": "c68480ac3cc26510d2bac4bd901b1a67910bef86c8bef6d754d231602ede6627",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "19-filter-plus.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7687,
+      "sha256": "e1fd9221bb1b748292ff2d65e32aa15144dc7ce89188ba0bb9c42736d042e459",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "20-super.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7478,
+      "sha256": "e4b0dec73c8dd4fa275c751149e072fe0a42bcc667cf64a537d91e31214a564d",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "21-filter-envelope.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7923,
+      "sha256": "65f4349d274da4a4f32be3f889a40c770e77bafdb48209e3ac3384a43c73ddca",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "22-amp-envelope.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7915,
+      "sha256": "0e8a47f220e576369526e2317ffae7e9ab4f4dc48b78a1ba0395bf51e2fc2b9b",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "23-lfo.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7797,
+      "sha256": "731093cf4023a6dd0c5ce68a8aff0cd2919213683cf27ee78c194e0d7a08baa6",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "24-lfo-destinations.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7449,
+      "sha256": "6aa51892282174bed9160005a8f934bdd47312689bcccbb01480089c68f97082",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "25-lfo-routing.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7276,
+      "sha256": "633cc3e0b45cd63ff2571f4e298fe0b75cedc5a14cffc3c31c07e3ece6473647",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "26-arpeggiator.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7736,
+      "sha256": "20838154ccda366c31bb987e09be9ab141b39e3eea58afa60ee7c4250ca0d705",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "27-chorus.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7618,
+      "sha256": "d814c914139ffc2ab741e7b610253855b13b21ed3aaa308217bec3f0bb6d99f3",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "28-delay.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7774,
+      "sha256": "d09dc4670b214b7fc45b810147cb61f522e031f8c667ed935e42ec4b50522345",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "29-reverb.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7914,
+      "sha256": "fb570cc7080357a1a9c86fa1c391617b81d2fdab2a92bf4f500319febe9de0ea",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "30-drive.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7922,
+      "sha256": "9206a44e5e49434c8bc37dcd93e5e3677a4a234080d66d9619648489b72ce559",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "31-global.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7941,
+      "sha256": "d3a64e44cfa9be0fcb84d3b9ae7c76422dc7f38b11e545226b88a02ed59727f3",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "32-voice-mode.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7808,
+      "sha256": "be96848a191a528f8e22615074377a09836e32f46a351928621abf58f085e00e",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "33-output.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7832,
+      "sha256": "bcaaeb07b866da9a737c6cee2d0edf90711dd0e8c2461b4b30f96c06726cdcc1",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "34-part-setup.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7731,
+      "sha256": "da7ed854bf979a419f470437054d3d5d8a4b9895e16904b566df6b45066598c6",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "35-fader-mode.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7251,
+      "sha256": "5616ccd54887c2fa384ee062f84677432abf30128d03f61f21817efeb342a720",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "36-theme.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7162,
+      "sha256": "d15ff787a4976df8d7392370183bcd90bc0e64dc98557d514789a75137c41c21",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "37-midi-mode-config.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7201,
+      "sha256": "38c286dc66c46455c650ec3cad640842052247a8108204670276f63e0da51e9a",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "38-midi-mode-ativo.png",
+      "width": 1184,
+      "height": 603,
+      "bytes": 195079,
+      "sha256": "0a18d4b6859ea5a1d5989c980d97de6c59836a8d94dc0aab35b3f1b1e5d95b69",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "39-midi-mode-settings.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 8296,
+      "sha256": "f1d751cbd3fffa2b2ceb157b83406ed883beb85a4b7f5e0257ef8da0a5d80e76",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "40-performance-scope.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 5644,
+      "sha256": "ebe51c16bd5a981a6ddebd2ecb903e8f7b6024f100dc7e0f404bfc3aa0cd61c8",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "41-mixer-level.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7984,
+      "sha256": "c88d2f3145a13630f23801b62fb244373714769cc736614236778d673ce07444",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "42-mixer-pan.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7952,
+      "sha256": "1c6a0e986954a2935dbd7f4311c5959154098c2f825329b8cce86aa8cabaf8dd",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "43-mixer-send-chorus.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 8031,
+      "sha256": "25fd7484a2812f9174a67a55e72a3d98409e8e521acb1f78acd699227302b4a1",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "44-mixer-send-delay.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 8092,
+      "sha256": "07df947670aedfa1661f9b20f5fede798d0f87be6256f0bd17c2d4de8198cfcd",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "45-mixer-send-reverb.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 8162,
+      "sha256": "51907d84f90193dbc47db4d563146c6021aca4a1fb73ddb0e52733c993e907ec",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "46-mixer-send-drive.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7761,
+      "sha256": "06394a23a94af0a668dfd74f601978a6a09fb9f22ba750b72c265e05305028f6",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "47-mixer-master.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 8164,
+      "sha256": "a0b13173e7e518293b599514fac835d8e592f81225c1e13f99148a7115d409a1",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "48-preset-save.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 6081,
+      "sha256": "19531d7692be06c83decba6a7465cc376c0134f60ec715c587eb5b4f41550653",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "49-preset-save-result.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 8136,
+      "sha256": "3bbb1dd9933a94322525bb135a610d51debbd9ce159facaac3f90cb1e5d7b698",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "50-preset-save-as.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 6455,
+      "sha256": "8aad02b83de935af29067de8de2158e51168013b9ce580dfab150a7d24641fbc",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "51-preset-review.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 6216,
+      "sha256": "20c37e449a93814d678aaff6b630691a19a80e72117749655c1e4d7947b54c5f",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "52-preset-saved.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 5924,
+      "sha256": "907b2879301c5baacef832b0763cff9a1747e1bdc93f3c3e9d0643a42bc8dbf7",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "53-split-layer.png",
+      "width": 1184,
+      "height": 605,
+      "bytes": 212406,
+      "sha256": "4610259f91fa3e154dd49a2b41fdf489c3e2f2f61393a041d9e1840c1e419260",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 3,
+      "part": 0
+    },
+    {
+      "file": "53b-status-salvamento.png",
+      "width": 1184,
+      "height": 46,
+      "bytes": 10171,
+      "sha256": "97ed98d20b423528138f8410d31c8178fcd73aebb6a824b95df2b25ed55b76fb",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 3,
+      "part": 0
+    },
+    {
+      "file": "54-patterns.png",
+      "width": 1184,
+      "height": 603,
+      "bytes": 201999,
+      "sha256": "08f22a54b09fe6b82f8095fe28e208e93812b599da8a43741ca5afeddaff9188",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 2,
+      "part": 0
+    },
+    {
+      "file": "55-sequencer-tracks.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7460,
+      "sha256": "9b2465de4c4da60c81deedd4c06a45cbb5c087f05e703cf03ce45a524b804e54",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 1,
+      "part": 0
+    },
+    {
+      "file": "56-sequencer-steps.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 6587,
+      "sha256": "c755796d2ca5188b1d95eddbd9495519b150624b27011c3f0ef42acc6e8a5a89",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 1,
+      "part": 0
+    },
+    {
+      "file": "57-drum-kit.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 7903,
+      "sha256": "91b8b873c48941d10a3ce1ef1da8bef8d447d3a83815019deb20484e339cb498",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 1,
+      "part": 0
+    },
+    {
+      "file": "58-drum-sound.png",
+      "width": 250,
+      "height": 300,
+      "bytes": 8128,
+      "sha256": "1d9a59c2cc53bcc3bc9b35cad7950d2a092b4b28d0844054892ccda68fe4aec9",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 1,
+      "part": 0
+    },
+    {
+      "file": "59-drum-performance.png",
+      "width": 1184,
+      "height": 603,
+      "bytes": 199249,
+      "sha256": "8759d3f00f91ea9bfdc2731682203831c53241bebcdbcddb216266752e23b8de",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "60-importacao-invalida.png",
+      "width": 1184,
+      "height": 45,
+      "bytes": 23115,
+      "sha256": "c53a55bbf2e35f01ef4a0ac2c114318722b9ee350d6213a098c6425ebfa57c1e",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 0,
+      "part": 0
+    },
+    {
+      "file": "61-drum-pads.png",
+      "width": 1184,
+      "height": 605,
+      "bytes": 211439,
+      "sha256": "a7327da967b624168b3ed35011e2b7658401550adedfe4ab42700e8ae8553008",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "bank": 4,
+      "part": 0
+    }
+  ],
+  "observations": {
+    "desktopInstrumentTopPx": 2766.375,
+    "desktopPolyphonyHeightPx": 2046,
+    "mobileInstrumentTopPx": 4985.34375,
+    "mobileGridHeightPx": 3320,
+    "mobileDocumentHeightPx": 6241,
+    "mobileDocumentWidthPx": 390,
+    "mobileWhiteKeyWidthPx": 14.53125,
+    "mobileBlackKeyWidthPx": 9.296875,
+    "mobileEncoderPlusMinusPx": [
+      15,
+      25
+    ],
+    "javascriptErrors": [],
+    "staleSaveState": {
+      "uiText": "Salvamento manual das configurações aguardando conclusão",
+      "manualPending": 0,
+      "presetSave": 0,
+      "writes": [
+        2,
+        2,
+        0,
+        0
+      ],
+      "laterStoreEventUpdatedText": true
+    },
+    "nativeMidiMode": {
+      "midiMode": true,
+      "topStatus": "SMKSYNTH 1.2.0 executando · áudio ativo · memória independente do teclado",
+      "sessionSummary": "MIDI MODE · MAP 1 · synth e áudio suspensos"
+    },
+    "virtualDialExample": {
+      "label": "Screen 2",
+      "ariaValueNow": "0",
+      "ariaValueMax": "999",
+      "actualResonance": 22
+    }
+  }
+}
