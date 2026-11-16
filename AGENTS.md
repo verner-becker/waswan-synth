@@ -2,7 +2,7 @@
 
 ## Current Baseline
 
-`main` is the official functional reference: UI Foundation v0.1, 256 voices, DSP Monitor, MIDI diagnostics, knob soft takeover, and the UX audit. Historical branch names are not checkout instructions; use commit SHAs or tags.
+`main` is the official functional reference: UI Foundation v0.2, 256 voices, DSP Monitor, MIDI diagnostics, knob soft takeover, and the UX audit. Historical branch names are not checkout instructions; use commit SHAs or tags.
 
 ## Project Structure
 
