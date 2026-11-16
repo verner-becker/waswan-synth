@@ -12,7 +12,7 @@ try{
   const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;}};
   const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...a){super(...a);audit.node=this;this.port.addEventListener('message',e=>{if(e.data.t==='frame')audit.frame=e.data;if(e.data.t==='error')audit.errors.push(e.data.message);});}};
  });
- await p.goto('http://localhost:8737/simulator/');await p.locator('#power').click();await p.waitForFunction(()=>audit.frame?.ms>5000);await p.locator('#midiConnect').click();await p.waitForFunction(()=>document.querySelector('#midiStatus').textContent.includes('conectada:'));await p.locator('.waswan-profile summary').click();
+ await p.goto('http://localhost:8737/simulator/?legacy=1&lang=pt');await p.locator('#power').click();await p.waitForFunction(()=>audit.frame?.ms>5000);await p.locator('#midiConnect').click();await p.waitForFunction(()=>document.querySelector('#midiStatus').textContent.includes('conectada:'));await p.locator('.waswan-profile summary').click();
  assert.equal(await p.locator('[data-binding-behavior="enc:0"]').inputValue(),'normal');
  const send=async m=>p.evaluate(m=>audit.node.port.postMessage(m),m),cc=async v=>p.evaluate(v=>audit.source.onmidimessage({data:[0xb0,48,v]}),v);
  const value=async()=>p.evaluate(()=>audit.frame.knobControl.parameters[0]?.value);

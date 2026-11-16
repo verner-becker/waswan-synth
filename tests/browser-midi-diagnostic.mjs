@@ -10,7 +10,7 @@ try{
   localStorage.setItem('waswan-midi-profile-v1',JSON.stringify({version:1,enabled:true,bindings:[{port:source.name,channel:5,cc:49,target:'enc:1',mode:'absolute',behavior:'fine'}]}));
   const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...a){super(...a);audit.node=this;this.port.addEventListener('message',e=>{if(e.data.t==='frame')audit.frame=e.data;});}};
  });
- await page.goto('http://localhost:8738/simulator/');await page.locator('#power').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('#midiConnect').click();await page.waitForFunction(()=>document.querySelector('#midiStatus').textContent.includes('conectada:'));
+ await page.goto('http://localhost:8738/simulator/?legacy=1&lang=pt');await page.locator('#power').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('#midiConnect').click();await page.waitForFunction(()=>document.querySelector('#midiStatus').textContent.includes('conectada:'));
  await page.evaluate(()=>audit.node.port.postMessage({t:'midi',st:0xb0,d1:71,d2:20}));await page.waitForFunction(()=>audit.frame.knobControl.parameters[1].value===20);
  await page.locator('.waswan-midi-diagnostic summary').click();await page.locator('[data-midi-log-start]').click();await page.waitForFunction(()=>document.querySelector('[data-midi-log-status]').textContent.includes('conexão local confirmada'));
  await page.evaluate(()=>{for(const value of [53,54,100,127,127])audit.source.onmidimessage({data:[181,49,value]});audit.source.onmidimessage({data:[144,60,100]});});

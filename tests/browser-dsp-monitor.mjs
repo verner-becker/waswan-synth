@@ -10,7 +10,7 @@ try{
   window.audit={errors:[],windows:0};const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;}};
   const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...args){super(...args);audit.node=this;this.port.addEventListener('message',e=>{if(e.data.t==='frame')audit.frame=e.data;if(e.data.t==='dsp-window'){audit.latest=e.data;audit.windows++;}if(e.data.t==='error')audit.errors.push(e.data.message);});}};
  });
- await page.goto('http://localhost:8737/simulator/');
+ await page.goto('http://localhost:8737/simulator/?legacy=1&lang=pt');
  // Showing before startup must activate correctly after original ready handling.
  await page.locator('[data-dsp-toggle]').click();assert(await page.locator('[data-dsp-start]').isDisabled());
  await page.locator('#power').click();await page.waitForFunction(()=>audit.frame?.ms>5000);

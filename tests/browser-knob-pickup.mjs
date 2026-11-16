@@ -9,7 +9,7 @@ try{
  async function boot(){await p.locator('#power').click();await p.waitForFunction(()=>audit.frame?.ms>5000);await p.locator('#midiConnect').click();await p.waitForFunction(()=>document.querySelector('#midiStatus').textContent.includes('conectada:'));await p.locator('.waswan-profile summary').click();}
  const cc=async v=>p.evaluate(v=>audit.source.onmidimessage({data:[181,49,v]}),v);
  const waitVal=async v=>p.waitForFunction(v=>audit.frame.knobControl.parameters[1].value===v,v);
- await p.goto('http://localhost:8737/simulator/');await boot();await waitVal(20);
+ await p.goto('http://localhost:8737/simulator/?legacy=1&lang=pt');await boot();await waitVal(20);
  for(const v of [53,100,127])await cc(v);await p.waitForTimeout(120);assert.equal(await p.evaluate(()=>audit.frame.knobControl.parameters[1].value),20);assert((await p.locator('[data-pickup="enc:1"]').textContent()).includes('CC 20'));
  await cc(20);await p.waitForFunction(()=>document.querySelector('[data-pickup="enc:1"]').textContent.includes('sincronizada'));
  for(const v of [21,22,127,126,0,1,127,0]){await cc(v);await waitVal(v);}

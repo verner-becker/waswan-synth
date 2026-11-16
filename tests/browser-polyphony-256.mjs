@@ -18,7 +18,7 @@ try {
   const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;}};
   const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...a){super(...a);audit.node=this;this.port.addEventListener('message',e=>{if(e.data.t==='frame')audit.frame=e.data;if(e.data.t==='error')audit.errors.push(e.data.message);});}};
  });
- await page.goto('http://localhost:8737/simulator/');await page.locator('#power').click();
+ await page.goto('http://localhost:8737/simulator/?legacy=1&lang=pt');await page.locator('#power').click();
  await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('áudio ativo'));
  await page.waitForTimeout(5200);
  assert.equal(await page.locator('[data-voice-mode="3"]').getAttribute('aria-pressed'),'true');
