@@ -50,6 +50,13 @@ export class Engine extends OriginalEngine {
     x.waswan_ui_set(id,value,m.scope);
   }
   input(message) {
+    if(message.t==='program-select'){
+      if(Number.isSafeInteger(message.request)&&message.request>0&&Number.isInteger(message.program)&&message.program>=1&&
+         message.program<=this.ex.waswan_program_count()&&Number.isInteger(message.scope)&&message.scope>=0&&message.scope<=0xffffffff&&
+         Number.isInteger(message.token)&&message.token>=0&&message.token<=0xffffffff&&typeof message.discard==='boolean')
+        this.programSelection={request:message.request,applied:!!this.ex.waswan_program_select(message.program-1,message.scope,message.token,message.discard?1:0)};
+      return;
+    }
     if(message.t==='ui-control'){this.controlInput(message);return;}
     if(message.t==='enc-fine-absolute'){this.absoluteKnob(message);return;}
     if (message.t === 'enc-fine') {
@@ -77,12 +84,22 @@ export class Engine extends OriginalEngine {
   }
   frame() {
     const frame = super.frame(), x = this.ex;
+    if(x.waswan_program_count){
+      const catalog=x.waswan_program_catalog();
+      if(catalog!==this.programCatalog){
+        this.programCatalog=catalog;
+        frame.programLibrary=Array.from({length:x.waswan_program_count()},(_,n)=>({number:n+1,
+          name:String.fromCharCode(...Array.from({length:10},(_,i)=>x.sim_program_name(n,i))).replace(/[^\x20-\x7e]/g,'').trim()}));
+      }
+      frame.programSelection=this.programSelection;
+    }
     if (x.waswan_knob_context) frame.knobControl={context:x.waswan_knob_context()>>>0,
       parameters:Array.from({length:4},(_,k)=>{const p=x.waswan_knob_param(k);if(p<0)return null;
         const value=x.waswan_knob_value?.(k)??null,min=x.waswan_knob_bound?.(k,0)??null,max=x.waswan_knob_bound?.(k,1)??null,o=this.fineAbsolute[k];
         return {id:p,value,min,max,revision:o?.revision??null,picked:!!(o?.picked&&o.context===(x.waswan_knob_context()>>>0)&&o.param===p&&o.expected===value),pickupCC:min===null?null:Math.round(127*(value-min)/Math.max(1,max-min))};})};
     if(x.waswan_ui_scope)frame.instrument={
       scope:x.waswan_ui_scope()>>>0,
+      programToken:x.waswan_program_token?.()>>>0,programAvailable:!!x.waswan_program_available?.(),
       name:String.fromCharCode(...Array.from({length:10},(_,i)=>x.waswan_ui_name(i))).replace(/[^\x20-\x7e]/g,'').trim(),
       edited:!!x.waswan_ui_edited(),bpm:x.sim_tempo(),playing:!!x.waswan_ui_playing(),
       controls:Array.from({length:12},(_,id)=>{const value=x.waswan_ui_value(id),o=this.controlOwners[id];return {

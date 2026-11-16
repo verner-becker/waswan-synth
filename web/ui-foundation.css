@@ -83,3 +83,10 @@
 .ww-midi-setup .midi-controls label {display:flex;flex-direction:column;align-items:stretch;margin:0;}
 .ww-midi-setup .midi-controls select {min-width:0;width:100%;max-width:100%;}
 .ww-midi-setup #midiStatus {overflow-wrap:anywhere;}
+
+/* The native select occupies the former tone-name line; stored names remain in its popup. */
+.ww-preset {min-width:0;flex-basis:165px;overflow:hidden;}
+.ww-tone-selector {font:600 16px var(--ww-font);color:var(--ww-text);background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:6px;max-width:100%;width:100%;height:24px;padding:0 5px;text-overflow:ellipsis;}
+.ww-tone-selector:hover,.ww-tone-selector:focus-visible {border-color:var(--ww-accent);outline:1px solid var(--ww-accent);}
+.ww-preset small {overflow-wrap:anywhere;}
+.ww-tone-confirm {max-height:calc(100dvh - 32px);overflow:auto;}

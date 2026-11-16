@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {CONTROLS,controlTarget,displayValue} from './ui-controls.js';
 import {TARGETS,fineTarget} from './midi-profile.js';
+import {ToneSelector} from './ui-tone-selector.js';
 import {MidiSetup} from './ui-midi-setup.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
@@ -28,7 +29,7 @@ class Foundation {
     this.main=el('main','ww-main');this.shell.append(this.main);
     this.views=new Map();this.buildPerformance();this.buildFutureViews();this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
     const footer=el('div','ww-footer');
-    footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.2'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
+    footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.3'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);
     const credits=el('div','ww-credits');credits.append(el('span','','Based on SMKSYNTH · OberVave / zvenson and contributors · DRUM-X / JIANT · '));
     const license=el('a','','GPL-3.0');license.href='../LICENSE.txt';credits.append(license);this.shell.append(credits);
@@ -38,7 +39,7 @@ class Foundation {
   }
   buildHeader() {
     const top=TopBar(),brand=el('div','ww-brand');brand.append(el('strong','','WASWAN'),el('span','','SYNTH'));
-    const preset=el('div','ww-preset');this.presetName=el('strong','','Instrument not started');this.presetDetail=el('small','ww-muted','Original sound engine · 256-voice pool');preset.append(this.presetName,this.presetDetail);
+    const preset=el('div','ww-preset');this.toneSelector=new ToneSelector(m=>this.bridge.send(m));preset.append(this.toneSelector.node,this.toneSelector.detail);
     this.part=el('span','ww-part','Part —');this.midiStatus=StatusIndicator('MIDI · Not connected');this.mode=el('span','ww-chip','Mode —');this.voices=el('span','ww-chip','Voices — / —');this.bpm=el('span','ww-chip','— BPM');
     this.start=action('Start audio',()=>this.startAudio(),'ww-primary');this.settings=action('Settings',()=>this.showSettings());
     top.append(brand,preset,this.part,this.midiStatus,this.mode,this.voices,this.bpm,this.start,this.settings);this.shell.append(top);
@@ -204,12 +205,11 @@ class Foundation {
       this.failed=false;this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();
       if(this.midiSetupPending){this.midiSetupPending=false;this.midiSetup.open();}
     }
-    if(m.t==='error'){this.midiSetupPending=false;this.midiSetup.close();this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
+    if(m.t==='error'){this.toneSelector.node.disabled=true;this.midiSetupPending=false;this.midiSetup.close();this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
     if(m.t!=='frame')return;
     const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
-    this.presetName.textContent=f?.name||`Program ${m.programs[part]}`;
-    this.presetDetail.textContent=`Program ${m.programs[part]}${f?.edited?' · Edited · save in Legacy SMK':''}`;
+    this.toneSelector.update(m,this.running);
     this.part.textContent=`Part ${'ABCD'[part]}`;const connected=!!this.bridge.midi.input;
     this.midiStatus.textContent=connected?'MIDI · Connected':'MIDI · Not connected';this.midiStatus.dataset.state=connected?'on':'off';
     this.mode.textContent=m.engines[part]===2?'DRUM-X':['POLY','DUAL','UNISON','MONO'][poly.parts[part].mode];

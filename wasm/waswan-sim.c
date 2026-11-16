@@ -168,3 +168,34 @@ EXPORT uint32_t waswan_ui_edited(void) { return ed_edited(); }
 EXPORT uint32_t waswan_ui_cut_hz(uint32_t v) { return CUT_HZ[(v > 127u ? 127u : v) + 8u]; }
 EXPORT uint32_t waswan_ui_release_x10(uint32_t v) { return TIME_MS_X10[v > 127u ? 127u : v]; }
 EXPORT uint32_t waswan_ui_playing(void) { return !!ctl_seq_run; }
+
+/* Program browsing uses the original library and loader; no new storage or DSP. */
+EXPORT uint32_t waswan_program_count(void) { return NPROG; }
+EXPORT uint32_t waswan_program_catalog(void) {
+    uint32_t h = 2166136261u;
+    for (uint32_t n = 0; n < NPROG; n++) {
+        uint32_t used = psect[n / PS_N].used[n % PS_N];
+        h = (h ^ used) * 16777619u;
+        if (used) for (uint32_t i = 0; i < PATCH_NAME; i++)
+            h = (h ^ psect[n / PS_N].p[n % PS_N].v[NPARAM+i]) * 16777619u;
+    }
+    return h;
+}
+EXPORT uint32_t waswan_program_token(void) {
+    uint32_t h = 2166136261u;
+    for (uint32_t i = 0; i < PATCH_BYTES; i++) h = (h ^ live_p[seq_trk % NTRK].v[i]) * 16777619u;
+    return h;
+}
+EXPORT uint32_t waswan_program_available(void) {
+    return !mm_on && !preset_ui && !pb_confirm && !save_armed && !layer && step_held < 0 && !pat_queue;
+}
+EXPORT uint32_t waswan_program_select(uint32_t n, uint32_t scope, uint32_t token, uint32_t discard) {
+    if (n >= NPROG || !waswan_program_available() || scope != waswan_ui_scope() || token != waswan_program_token()) return 0;
+    if (host_edges || host_rel || host_rel_next || host_qw[0] != host_qr[0] || host_enc[ENC_ALGORITHM] || host_enc[ENC_PRESETS]) return 0;
+    for (uint32_t q = mq_r; q != mq_w; q++) if ((mq[q % (sizeof mq / sizeof mq[0])][0] & 0xF0u) == 0xC0u) return 0;
+    if (n == ed_prog()) return 1;
+    if (ed_edited() && !discard) return 0;
+    trk_load(seq_trk, n);
+    dirty_hdr = dirty_page = dirty_tags = dirty_steps = 1;
+    return 1;
+}
