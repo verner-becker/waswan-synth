@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {CONTROLS,controlId,controlTarget} from './ui-controls.js';
 export const STORAGE_KEY = 'waswan-midi-profile-v1';
 export const TARGETS = [
+  ...CONTROLS.map(c=>({id:controlTarget(c.id),label:`Performance · ${c.name}`})),
   ...Array.from({length:4}, (_, i) => ({id:`fader:${i}`, label:`F${i+1} · Fader ${i+1}`})),
-  ...['Tela 1','Tela 2','Tela 3','Tela 4','Navegação','Parte','Preset','Master']
+  ...['Screen 1','Screen 2','Screen 3','Screen 4','Navigation','Part','Preset','Master']
     .map((label,i) => ({id:`enc:${i}`, label:`K${i+1} · ${label}`})),
 ];
 export const MODES = ['absolute','offset','twos'];
-export const fineTarget = target => /^enc:[0-3]$/.test(target);
+export const fineTarget = target => /^enc:[0-3]$/.test(target) || controlId(target)!==undefined;
 const validTarget = id => TARGETS.some(t => t.id === id);
 const validBinding = b => b && typeof b.port === 'string' && b.port.length > 0 &&
   Number.isInteger(b.channel) && b.channel >= 0 && b.channel < 16 &&
@@ -22,6 +24,7 @@ export class MidiProfile {
     this.previous = new Map();
     this.learning = null;
     this.context = null;
+    this.controlScope = null;
     this.revision = 0;
     this.onChange = () => {};
     this.persistenceError = false;
@@ -48,6 +51,7 @@ export class MidiProfile {
     this.previous.clear();
     this.learning = null;
     this.context = null;
+    this.controlScope = null;
     this.onChange();
   }
   setEnabled(enabled) {
@@ -103,6 +107,14 @@ export class MidiProfile {
     }
     const binding = this.bindings.find(b => sourceKey(b) === key);
     if (!binding) return false;
+    if(binding.target.startsWith('control:')){
+      const steps=binding.mode==='offset'?(value===0?0:value-64):value<64?value:value-128;
+      this.previous.set(key,value);
+      send({t:'ui-control',source:'midi',id:controlId(binding.target),scope:this.controlScope,
+        revision:this.revision,mode:binding.mode,behavior:binding.behavior,
+        ...(binding.mode==='absolute'?{value}:{steps})});
+      return true;
+    }
     const [kind,index] = binding.target.split(':');
     const i = Number(index);
     if (kind === 'fader') {

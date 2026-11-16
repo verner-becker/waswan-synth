@@ -2,7 +2,7 @@
 import {Engine as OriginalEngine} from './engine-original.js';
 
 export class Engine extends OriginalEngine {
-  constructor(...args){super(...args);this.fineAbsolute=Array(4).fill(null);}
+  constructor(...args){super(...args);this.fineAbsolute=Array(4).fill(null);this.controlOwners=Array(12).fill(null);}
   absoluteKnob(m) {
     const x=this.ex;
     if(!Number.isInteger(m.e)||m.e<0||m.e>3||!Number.isInteger(m.value)||m.value<0||m.value>127||
@@ -22,7 +22,35 @@ export class Engine extends OriginalEngine {
     if(delta&&!x.waswan_knob_fine(m.e,delta,m.context)){this.fineAbsolute[m.e]=null;return;}
     owner.expected=x.waswan_knob_value(m.e);
   }
+  controlInput(m) {
+    const x=this.ex,id=m.id;
+    if(!x.waswan_ui_set||!Number.isInteger(id)||id<0||id>=12||!Number.isInteger(m.scope)||m.scope!==(x.waswan_ui_scope()>>>0))return;
+    if(!x.waswan_ui_available(id))return;
+    const current=x.waswan_ui_value(id),max=x.waswan_ui_max(id);
+    if(m.source==='ui'){
+      if(Number.isInteger(m.value)&&m.value>=0&&m.value<=max)x.waswan_ui_set(id,m.value,m.scope);
+      return;
+    }
+    if(m.source!=='midi'||!Number.isInteger(m.revision)||m.revision<0||m.revision>0xffffffff)return;
+    let value;
+    if(m.mode==='absolute'){
+      if(!Number.isInteger(m.value)||m.value<0||m.value>127)return;
+      const position=Math.round(m.value*max/127);
+      let o=this.controlOwners[id];
+      if(!o||o.scope!==m.scope||o.revision!==m.revision||o.expected!==current)
+        o=this.controlOwners[id]={scope:m.scope,revision:m.revision,expected:current,previous:null,picked:false};
+      if(!o.picked&&(position===current||(o.previous!==null&&Math.min(o.previous,position)<=current&&Math.max(o.previous,position)>=current)))o.picked=true;
+      o.previous=position;
+      if(!o.picked)return;
+      if(!x.waswan_ui_set(id,position,m.scope)){this.controlOwners[id]=null;return;}
+      o.expected=x.waswan_ui_value(id);return;
+    }
+    if(!['offset','twos'].includes(m.mode)||!Number.isInteger(m.steps)||Math.abs(m.steps)>64)return;
+    value=Math.max(0,Math.min(max,current+m.steps*(m.behavior==='fine'?1:2)));
+    x.waswan_ui_set(id,value,m.scope);
+  }
   input(message) {
+    if(message.t==='ui-control'){this.controlInput(message);return;}
     if(message.t==='enc-fine-absolute'){this.absoluteKnob(message);return;}
     if (message.t === 'enc-fine') {
       if (Number.isInteger(message.e) && message.e>=0 && message.e<4 && Number.isInteger(message.steps) && Math.abs(message.steps)<=127 &&
@@ -53,6 +81,16 @@ export class Engine extends OriginalEngine {
       parameters:Array.from({length:4},(_,k)=>{const p=x.waswan_knob_param(k);if(p<0)return null;
         const value=x.waswan_knob_value?.(k)??null,min=x.waswan_knob_bound?.(k,0)??null,max=x.waswan_knob_bound?.(k,1)??null,o=this.fineAbsolute[k];
         return {id:p,value,min,max,revision:o?.revision??null,picked:!!(o?.picked&&o.context===(x.waswan_knob_context()>>>0)&&o.param===p&&o.expected===value),pickupCC:min===null?null:Math.round(127*(value-min)/Math.max(1,max-min))};})};
+    if(x.waswan_ui_scope)frame.instrument={
+      scope:x.waswan_ui_scope()>>>0,
+      name:String.fromCharCode(...Array.from({length:10},(_,i)=>x.waswan_ui_name(i))).replace(/[^\x20-\x7e]/g,'').trim(),
+      edited:!!x.waswan_ui_edited(),bpm:x.sim_tempo(),playing:!!x.waswan_ui_playing(),
+      controls:Array.from({length:12},(_,id)=>{const value=x.waswan_ui_value(id),o=this.controlOwners[id];return {
+        value,min:0,max:x.waswan_ui_max(id),available:!!x.waswan_ui_available(id),
+        physical:id===0?x.waswan_ui_cut_hz(value):id===3?x.waswan_ui_release_x10(value)/10:null,
+        picked:!!(o?.picked&&o.scope===(x.waswan_ui_scope()>>>0)&&o.expected===value),revision:o?.revision??null,
+      };}),
+    };
     frame.polyphony = {
       limit:x.waswan_voice_limit(),
       unisonLimit:x.waswan_unison_limit(),

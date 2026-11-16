@@ -121,3 +121,50 @@ EXPORT int32_t waswan_knob_bound(uint32_t k, uint32_t upper)
         for (unsigned l = 0; l < 8u; l++) if ((uint32_t)p == DP_PITCH[l]) return upper ? 76 : 52;
     return upper ? obv_param_max(d,(uint32_t)p) : 0;
 }
+
+/* UI Foundation contract. IDs are host-only; no patch/storage layout changes.
+ * 0..3: selected ANALOG part; 4..6: selected part sends; 7: physical master;
+ * 8..11: fixed mixer parts A..D. Navigation never calls these setters. */
+static const uint8_t waswan_ui_params[4] = {P_CUTOFF,P_RESO,P_FENV_AMT,P_AR};
+EXPORT uint32_t waswan_ui_scope(void) { return (seq_trk % NTRK) | (trk_prog[seq_trk % NTRK] << 2); }
+EXPORT uint32_t waswan_ui_available(uint32_t id) {
+    return id < 12u && !mm_on && !preset_ui && !pb_confirm && !save_armed &&
+        (id >= 4u || obv_patch_engine(&live_p[seq_trk % NTRK]) == OBV_ANALOG);
+}
+EXPORT int32_t waswan_ui_value(uint32_t id) {
+    uint32_t t = seq_trk % NTRK;
+    if (id < 4u) return live_p[t].v[waswan_ui_params[id]];
+    if (id == 4u) return set.mix_cho[t];
+    if (id == 5u) return set.mix_dly[t];
+    if (id == 6u) return set.mix_rev[t];
+    if (id == 7u) return smk_master;
+    return id < 12u ? set.mix_lvl[id - 8u] : -1;
+}
+EXPORT uint32_t waswan_ui_max(uint32_t id) { return id == 7u ? 1023u : 127u; }
+EXPORT uint32_t waswan_ui_set(uint32_t id, int32_t value, uint32_t scope) {
+    if (!waswan_ui_available(id) || scope != waswan_ui_scope() || value < 0 || value > (int32_t)waswan_ui_max(id)) return 0;
+    /* Refuse edits racing queued part/program navigation. */
+    if (host_enc[ENC_ALGORITHM] || host_enc[ENC_PRESETS]) return 0;
+    for (uint32_t q = mq_r; q != mq_w; q++) if ((mq[q % (sizeof mq / sizeof mq[0])][0] & 0xF0u) == 0xC0u) return 0;
+    if (id < 4u) {
+        uint32_t p = waswan_ui_params[id];
+        set_param_in(&live_p[seq_trk % NTRK],p,value);
+        auto_rec(p);
+        if (p == P_CUTOFF) cut_shown_t = fm1_ms + 1u;
+    } else if (id == 7u) sim_master((uint32_t)value);
+    else {
+        uint32_t t = seq_trk % NTRK;
+        if (id == 4u) set.mix_cho[t] = (uint8_t)value;
+        else if (id == 5u) set.mix_dly[t] = (uint8_t)value;
+        else if (id == 6u) set.mix_rev[t] = (uint8_t)value;
+        else set.mix_lvl[id - 8u] = (uint8_t)value;
+        mix_apply(); set_dirty = 1; set_t = fm1_ms; dirty_steps = 1;
+    }
+    dirty_hdr = dirty_page = 1;
+    return 1;
+}
+EXPORT uint32_t waswan_ui_name(uint32_t i) { return i < PATCH_NAME ? live_p[seq_trk % NTRK].v[NPARAM+i] : 0; }
+EXPORT uint32_t waswan_ui_edited(void) { return ed_edited(); }
+EXPORT uint32_t waswan_ui_cut_hz(uint32_t v) { return CUT_HZ[(v > 127u ? 127u : v) + 8u]; }
+EXPORT uint32_t waswan_ui_release_x10(uint32_t v) { return TIME_MS_X10[v > 127u ? 127u : v]; }
+EXPORT uint32_t waswan_ui_playing(void) { return !!ctl_seq_run; }

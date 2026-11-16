@@ -4,6 +4,7 @@ import {TARGETS,fineTarget} from './midi-profile.js';
 let activeProfile,activePanel;
 export function updateMidiProfile(frame) {
   if (!activeProfile) return;
+  activeProfile.controlScope=frame.instrument?.scope??null;
   const control=frame.knobControl;
   activeProfile.setContext(control?.context??null);
   activePanel.querySelector('[data-fine-context]').textContent=control
@@ -11,6 +12,7 @@ export function updateMidiProfile(frame) {
     : 'Controle fino indisponível neste WASM; recompile a extensão host.';
   for(const b of activeProfile.bindings){
     const label=activePanel.querySelector(`[data-pickup="${b.target}"]`);if(!label)continue;
+    if(b.target.startsWith('control:'))continue;
     const p=control?.parameters[Number(b.target.split(':')[1])];
     label.textContent=b.behavior!=='fine'||b.mode!=='absolute'?'':!p?' · indisponível nesta tela':p.pickupCC===null?' · recompile o WASM':p.picked&&p.revision===activeProfile.revision?' · posição sincronizada':` · captura suave: alcance CC ${p.pickupCC}`;
   }
