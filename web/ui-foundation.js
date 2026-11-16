@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {CONTROLS,controlTarget,displayValue} from './ui-controls.js';
 import {TARGETS,fineTarget} from './midi-profile.js';
+import {MidiSetup} from './ui-midi-setup.js';
+import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,CompactMeter,RotaryKnob,VerticalFader,PlaceholderWorkspace,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
 
@@ -24,9 +26,9 @@ class Foundation {
     this.buildHeader();
     this.navigation=WorkspaceNavigation(WORKSPACES,id=>this.selectWorkspace(id));this.shell.append(this.navigation);
     this.main=el('main','ww-main');this.shell.append(this.main);
-    this.views=new Map();this.buildPerformance();this.buildFutureViews();this.buildDiagnostics();this.buildSettings();this.buildDock();this.buildMidiDialog();
+    this.views=new Map();this.buildPerformance();this.buildFutureViews();this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
     const footer=el('div','ww-footer');
-    footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.1'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
+    footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.2'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);
     const credits=el('div','ww-credits');credits.append(el('span','','Based on SMKSYNTH · OberVave / zvenson and contributors · DRUM-X / JIANT · '));
     const license=el('a','','GPL-3.0');license.href='../LICENSE.txt';credits.append(license);this.shell.append(credits);
@@ -38,7 +40,7 @@ class Foundation {
     const top=TopBar(),brand=el('div','ww-brand');brand.append(el('strong','','WASWAN'),el('span','','SYNTH'));
     const preset=el('div','ww-preset');this.presetName=el('strong','','Instrument not started');this.presetDetail=el('small','ww-muted','Original sound engine · 256-voice pool');preset.append(this.presetName,this.presetDetail);
     this.part=el('span','ww-part','Part —');this.midiStatus=StatusIndicator('MIDI · Not connected');this.mode=el('span','ww-chip','Mode —');this.voices=el('span','ww-chip','Voices — / —');this.bpm=el('span','ww-chip','— BPM');
-    this.start=action('Start audio',()=>{if(this.failed){location.reload();return;}if(this.audioContext?.state==='suspended')void this.audioContext.resume();else document.querySelector('#power').click();},'ww-primary');this.settings=action('Settings',()=>this.showSettings());
+    this.start=action('Start audio',()=>this.startAudio(),'ww-primary');this.settings=action('Settings',()=>this.showSettings());
     top.append(brand,preset,this.part,this.midiStatus,this.mode,this.voices,this.bpm,this.start,this.settings);this.shell.append(top);
     this.notice=el('p','ww-notice','Start audio, then connect your MIDI controller in Settings.');this.notice.setAttribute('role','status');this.shell.append(this.notice);
   }
@@ -59,7 +61,9 @@ class Foundation {
     const notes=Panel('Notes / chord','Selected part · gated voices');this.chord=el('strong','ww-chord','—');this.notes=el('p','ww-muted','No gated notes');this.voiceState=el('p','ww-muted','Allocated voices include release.');notes.append(this.chord,this.notes,this.voiceState);
     const state=Panel('Performance state','Shared with Legacy SMK');this.performanceState=el('p','','Waiting for instrument');this.patternState=el('p','ww-muted','Pattern —');
     this.transport=action('Play / stop',()=>this.hardware(16));this.sustain=action('Sustain MIDI · off',()=>{if(this.frame)this.bridge.send({t:'voice-sustain',enabled:!this.frame.polyphony.midiSustain});});this.sustain.setAttribute('aria-pressed','false');
-    state.append(this.performanceState,this.patternState,this.transport,this.sustain);
+    this.voiceModes=el('div','ww-performance-modes');this.voiceModes.setAttribute('role','group');this.voiceModes.setAttribute('aria-label','Voice mode');
+    for(const mode of MODES){const button=action(mode.label,()=>selectVoiceMode(this.bridge.midi,this.frame,mode.id));button.dataset.performanceMode=mode.id;button.disabled=true;button.setAttribute('aria-pressed','false');this.voiceModes.append(button);}
+    state.append(this.performanceState,this.patternState,this.transport,this.sustain,this.voiceModes);
     middle.append(scopePanel,levels,notes,state);view.append(middle);this.addView('perf',view);
   }
   buildFutureViews() {
@@ -186,12 +190,21 @@ class Foundation {
     if(this.legacy)for(const button of this.navigation.children)button.setAttribute('aria-pressed','false');
     else this.selectWorkspace(this.workspace);
   }
+  startAudio() {
+    if(this.failed){location.reload();return;}
+    this.midiSetupPending=true;
+    const context=this.bridge.getAudio().context;
+    if(this.running&&context?.state==='suspended'){
+      void context.resume().then(()=>{if(this.midiSetupPending){this.midiSetupPending=false;this.midiSetup.open();}}).catch(()=>{this.midiSetupPending=false;this.notice.textContent='Unable to resume audio. Try again.';});
+    }else document.querySelector('#power').click();
+  }
   showSettings() {this.settingsPanel.hidden=false;this.settingsPanel.scrollIntoView({block:'nearest'});}
   receive(m) {
     if(m.t==='ready'){
       this.failed=false;this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();
+      if(this.midiSetupPending){this.midiSetupPending=false;this.midiSetup.open();}
     }
-    if(m.t==='error'){this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
+    if(m.t==='error'){this.midiSetupPending=false;this.midiSetup.close();this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
     if(m.t!=='frame')return;
     const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
@@ -200,6 +213,7 @@ class Foundation {
     this.part.textContent=`Part ${'ABCD'[part]}`;const connected=!!this.bridge.midi.input;
     this.midiStatus.textContent=connected?'MIDI · Connected':'MIDI · Not connected';this.midiStatus.dataset.state=connected?'on':'off';
     this.mode.textContent=m.engines[part]===2?'DRUM-X':['POLY','DUAL','UNISON','MONO'][poly.parts[part].mode];
+    for(const button of this.voiceModes.children){button.disabled=!this.running||m.midiMode||m.engines[part]!==0;button.setAttribute('aria-pressed',String(m.engines[part]===0&&Number(button.dataset.performanceMode)===poly.parts[part].mode));}
     const active=poly.slots.filter(v=>v.active),gate=active.filter(v=>v.gate);this.voices.textContent=`Voices ${active.length} / ${poly.limit}`;this.bpm.textContent=f?`${f.bpm} BPM`:'— BPM';
     this.notice.textContent=m.midiMode?'Legacy MIDI MODE is active: synthesis is suspended. Return to synth mode in Legacy SMK.':this.audio?(connected?'MIDI connected · use Assign MIDI to map your controls.':'Ready to play · connect a MIDI input in Settings.'):this.running?'Silent interface mode · audio unavailable in this browser.':'Start audio, then connect your MIDI controller in Settings.';
     for(const c of CONTROLS){const state=f?.controls[c.id],analogOnly=c.id<4&&m.engines[part]!==0,display=analogOnly?'—':displayValue(c.id,state?.value,state?.physical);this.controls[c.id].update(state,display,analogOnly?'ANALOG only':state?`${state.value} / ${state.max} · ${c.section}`:'Not available');}

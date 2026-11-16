@@ -74,3 +74,12 @@
    original composition at ?legacy=1. */
 .ww-page>nav[aria-label="Language / Idioma"] {display:none;}
 @media(min-width:1300px){.ww-fader input[type="range"] {height:110px;margin:8px 0;}.ww-control {gap:3px;}.ww-musical-grid .ww-section-header {min-height:26px;padding-bottom:8px;margin-bottom:8px;}.ww-meter {margin:8px 0;gap:6px;}.ww-musical-grid p {font-size:11px;line-height:1.4;}.ww-musical-grid .ww-panel {min-height:210px;}.ww-dock .instrumentfoot {margin-top:8px;padding-top:0;}.ww-dock .instrumentfoot input {min-height:0;height:18px;padding:0;}}
+/* v0.2: compact execution modes occupy the existing Performance State space. */
+.ww-performance-modes {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin-top:8px;}
+.ww-musical-grid .ww-performance-modes button {min-width:0;min-height:28px;margin:0;padding:5px 2px;font-size:10px;line-height:1.2;}
+.ww-midi-setup {max-height:calc(100dvh - 32px);overflow:auto;}
+.ww-midi-setup .midi-panel {margin:16px 0;padding:12px;background:var(--ww-bg);border-color:var(--ww-border);}
+.ww-midi-setup .midi-controls {align-items:stretch;flex-direction:column;gap:8px;}
+.ww-midi-setup .midi-controls label {display:flex;flex-direction:column;align-items:stretch;margin:0;}
+.ww-midi-setup .midi-controls select {min-width:0;width:100%;max-width:100%;}
+.ww-midi-setup #midiStatus {overflow-wrap:anywhere;}

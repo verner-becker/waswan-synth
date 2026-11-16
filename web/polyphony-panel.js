@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-const MODES = [{id:0,label:'POLY'},{id:3,label:'MONO'},{id:1,label:'DUAL'},{id:2,label:'UNISON'}];
+export const MODES = [{id:0,label:'POLY'},{id:3,label:'MONO'},{id:1,label:'DUAL'},{id:2,label:'UNISON'}];
 let controller, panel, latest;
 const noteName = n => ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'][n%12] + (Math.floor(n/12)-1);
+
+// Shared user action for Diagnostics and the Performance surface.
+export function selectVoiceMode(inputController,frame,mode) {
+  if (!frame || !inputController.isRunning() || frame.midiMode || frame.engines[frame.track]!==0 || !MODES.some(m=>m.id===mode)) return false;
+  inputController.release();
+  inputController.send({t:'voice-mode',part:frame.track,mode});
+  return true;
+}
 
 export function mountPolyphonyPanel(inputController) {
   controller = inputController;
@@ -25,11 +33,7 @@ export function mountPolyphonyPanel(inputController) {
     const button = document.createElement('button');
     button.type='button';button.textContent=mode.label;button.dataset.voiceMode=mode.id;
     button.setAttribute('aria-pressed','false');button.disabled=true;
-    button.onclick=()=>{
-      if (!latest || !controller.isRunning()) return;
-      controller.release();
-      controller.send({t:'voice-mode',part:latest.track,mode:mode.id});
-    };
+    button.onclick=()=>selectVoiceMode(controller,latest,mode.id);
     panel.querySelector('.voice-modes').append(button);
   }
   const unison = panel.querySelector('[data-unison]');
