@@ -38,7 +38,7 @@ class Foundation {
     const top=TopBar(),brand=el('div','ww-brand');brand.append(el('strong','','WASWAN'),el('span','','SYNTH'));
     const preset=el('div','ww-preset');this.presetName=el('strong','','Instrument not started');this.presetDetail=el('small','ww-muted','Original sound engine · 256-voice pool');preset.append(this.presetName,this.presetDetail);
     this.part=el('span','ww-part','Part —');this.midiStatus=StatusIndicator('MIDI · Not connected');this.mode=el('span','ww-chip','Mode —');this.voices=el('span','ww-chip','Voices — / —');this.bpm=el('span','ww-chip','— BPM');
-    this.start=action('Start audio',()=>{if(this.audioContext?.state==='suspended')void this.audioContext.resume();else document.querySelector('#power').click();},'ww-primary');this.settings=action('Settings',()=>this.showSettings());
+    this.start=action('Start audio',()=>{if(this.failed){location.reload();return;}if(this.audioContext?.state==='suspended')void this.audioContext.resume();else document.querySelector('#power').click();},'ww-primary');this.settings=action('Settings',()=>this.showSettings());
     top.append(brand,preset,this.part,this.midiStatus,this.mode,this.voices,this.bpm,this.start,this.settings);this.shell.append(top);
     this.notice=el('p','ww-notice','Start audio, then connect your MIDI controller in Settings.');this.notice.setAttribute('role','status');this.shell.append(this.notice);
   }
@@ -109,7 +109,8 @@ class Foundation {
   buildDock() {
     this.dock=BottomPerformanceDock();this.dock.classList.add('ww-dock');const row=el('div','ww-dock-row'),keyboard=el('div','ww-keyboard-area'),pads=el('div','ww-pad-area');
     const actions=el('div','ww-play-actions');
-    actions.append(action('Oct −',()=>this.hardware(4)),action('Oct +',()=>this.hardware(5)),action('Release all',()=>document.querySelector('#panic').click()),action('Mute / unmute',()=>document.querySelector('#mute').click()));
+    this.mute=action('Mute output',()=>document.querySelector('#mute').click());
+    actions.append(action('Oct −',()=>this.hardware(4)),action('Oct +',()=>this.hardware(5)),action('Release all',()=>document.querySelector('#panic').click()),this.mute);
     const keys=document.querySelector('.keybed');keyboard.append(actions,keys);
     const velocity=document.querySelector('.instrumentfoot');if(velocity){velocity.querySelector('span')?.remove();keyboard.append(velocity);}
     pads.append(el('h3','','Pads · current legacy bank'),document.querySelector('.padheading'),document.querySelector('#pads'),document.querySelector('#padHelp'));
@@ -188,10 +189,11 @@ class Foundation {
   showSettings() {this.settingsPanel.hidden=false;this.settingsPanel.scrollIntoView({block:'nearest'});}
   receive(m) {
     if(m.t==='ready'){
-      this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();
+      this.failed=false;this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();
     }
-    if(m.t==='error'){this.running=false;this.start.disabled=false;this.start.textContent='Retry audio';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
+    if(m.t==='error'){this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
     if(m.t!=='frame')return;
+    const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
     this.presetName.textContent=f?.name||`Program ${m.programs[part]}`;
     this.presetDetail.textContent=`Program ${m.programs[part]}${f?.edited?' · Edited · save in Legacy SMK':''}`;
@@ -204,7 +206,7 @@ class Foundation {
     const held=gate.filter(v=>v.part===part&&!v.sequenced).map(v=>v.note),chord=chordLabel(held);
     this.chord.textContent=m.engines[part]===2?'DRUM-X':chord.name;this.notes.textContent=m.engines[part]===2?'Chord view applies to ANALOG voices.':chord.notes;
     this.voiceState.textContent=`${gate.length} gated · ${active.length-gate.length} release · sustain included`;
-    this.performanceState.textContent=`${f?.playing?'Playing':'Stopped'} · Part ${'ABCD'[part]} · ${m.engines[part]===2?'DRUM-X':'ANALOG'}`;
+    this.performanceState.textContent=`Transport ${f?.playing?'playing':'stopped'} · Part ${'ABCD'[part]} · ${m.engines[part]===2?'DRUM-X':'ANALOG'}`;
     this.patternState.textContent=`Pattern ${m.pattern}${m.patternQueue?' · queued '+m.patternQueue:''} · ${m.patternPending?'save pending':'existing sequencer'}`;
     this.sustain.textContent=`Sustain MIDI · ${poly.midiSustain?'on':'off'}`;this.sustain.setAttribute('aria-pressed',String(poly.midiSustain));this.sustain.disabled=m.midiMode;this.transport.disabled=m.midiMode;
     this.updateBadges();

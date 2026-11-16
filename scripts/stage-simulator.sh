@@ -32,7 +32,7 @@ p = root / 'app.js'
 s = p.read_text()
 s = "import {mountFoundation,updateFoundation} from './ui-foundation.js';\n" + s
 # One shared instrument instance: the shell receives snapshots and delegates commands.
-s += "\nmountFoundation({send,midi,isRunning:()=>on,getAudio:()=>({context,node,gain})});\n"
+s += "\nmountFoundation({send,midi,isRunning:()=>on,getAudio:()=>({context,node,gain,muted})});\n"
 
 anchor = 'function frame(m){state=m;'
 if s.count(anchor) != 1:
