@@ -4,6 +4,18 @@ Sintetizador web em desenvolvimento a partir do [SMKSYNTH](https://github.com/4t
 
 O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commit `3f751bc2be066414f204cf44e1aa05d9c7467d7f` (release declarada: 1.2.0). A árvore original permanece intacta.
 
+## UI Foundation v0.1
+
+A branch `feat/ui-foundation-v1`, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
+
+```sh
+git switch feat/ui-foundation-v1
+sh scripts/build-simulator.sh
+python3 scripts/serve-simulator.py
+```
+
+Abra http://localhost:8737/simulator/, use **Start audio** e conecte MIDI em **Settings**. Perfis existentes são preservados; nenhum mapeamento é instalado automaticamente. A composição legada completa está em `http://localhost:8737/simulator/?legacy=1&lang=pt`. Consulte [arquitetura, testes, limites e cinco screenshots](docs/ui-foundation-v1.md).
+
 ## Executar no Ubuntu
 
 Pré-requisitos: Git, Python 3, curl, patch e uv para preparar as ferramentas; Node.js para os testes. Chrome/Chromium com Web Audio e Web MIDI para tocar com o teclado.
