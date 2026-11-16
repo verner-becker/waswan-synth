@@ -6,10 +6,10 @@ O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commi
 
 ## UI Foundation v0.1
 
-A branch `feat/ui-foundation-v1`, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
+A `main` reúne a UI Foundation v0.1, o motor de 256 vozes, o DSP Monitor e as correções de knobs. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
 
 ```sh
-git switch feat/ui-foundation-v1
+git switch main
 sh scripts/build-simulator.sh
 python3 scripts/serve-simulator.py
 ```
@@ -23,7 +23,6 @@ Pré-requisitos: Git, Python 3, curl, patch e uv para preparar as ferramentas; N
 ```sh
 git clone --recurse-submodules https://github.com/verner-becker/waswan-synth.git
 cd waswan-synth
-git switch experiment/polyphony-256
 sh scripts/setup-tools.sh
 sh scripts/build-simulator.sh
 sh scripts/check-upstream.sh
@@ -37,9 +36,9 @@ node tests/polyphony-256.test.mjs
 python3 scripts/serve-simulator.py
 ```
 
-Abra **http://localhost:8737/simulator/**, clique em **Iniciar simulador**, depois em **Conectar teclado MIDI**, autorize o acesso e escolha **SMK-37 Pro-Master**. Mantenha a aba em foco: o original ignora entrada MIDI em abas ocultas e solta notas ao perder o foco. `Soltar tudo` libera as notas e o sustain.
+Abra **http://localhost:8737/simulator/**, clique em **Start audio**, abra **Settings** e use **Connect MIDI keyboard**, autorize o acesso e escolha **SMK-37 Pro-Master**. Mantenha a aba em foco: o original ignora entrada MIDI em abas ocultas e solta notas ao perder o foco. **Release all** libera as notas e o sustain. Para escolher POLY, MONO, DUAL ou UNISON, abra **DIAG → Voice allocation & execution modes**.
 
-Para ouvir os exemplos, use PLAY no painel. Para tocar pela entrada MIDI na parte selecionada, mantenha `GLOBAL → MIDI CH = OMNI`. O `MIDI MODE` do painel simulado suspende o sintetizador; deixe esse modo desligado para produzir áudio.
+Para ouvir os exemplos, use **Play / stop** ou PLAY no **Legacy SMK**. Para tocar pela entrada MIDI na parte selecionada, mantenha `GLOBAL → MIDI CH = OMNI`. O `MIDI MODE` do painel simulado suspende o sintetizador; deixe esse modo desligado para produzir áudio.
 
 As ferramentas ficam em `.tools/` e os resultados em `.local/`, ambos ignorados pelo Git. O servidor usa apenas o loopback e serve o simulador, a tradução e os avisos de licença. Os instaladores de firmware não são publicados por esse servidor. Os links originais de instalação no rodapé não possuem destino nesta execução local.
 
@@ -47,9 +46,9 @@ O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binary
 
 ## Controle fino de knobs v1
 
-Na branch `feat/knob-fine-control`, baseada no DSP Monitor com 256 vozes, o perfil permite escolher **Normal / Fino** em cada mapeamento existente de K1–K4. Normal preserva os passos e a aceleração originais; Fino absoluto usa posição com captura suave; relativos finos alteram uma unidade interna por incremento lógico nos parâmetros diretos da tela. Presets e mapeamentos anteriores são preservados; o padrão continua Normal.
+O perfil MIDI, integrado à `main`, permite escolher **Normal / Fino** em cada mapeamento existente de K1–K4. Normal preserva os passos e a aceleração originais; Fino absoluto usa posição com captura suave; relativos finos alteram uma unidade interna por incremento lógico nos parâmetros diretos da tela. Presets e mapeamentos anteriores são preservados; o padrão continua Normal.
 
-Após trocar para essa branch, execute `sh scripts/build-simulator.sh` uma vez e recarregue o navegador: esta fase acrescenta uma API host ao WASM. Depois, selecione Fino na linha do knob; não precisa reaprender. O cutoff mantém sua escala original em Hz. Veja [contrato, testes, limitações e teste no SMK-37 Pro](docs/knob-fine-control.md).
+Após atualizar o repositório, execute `sh scripts/build-simulator.sh` uma vez e recarregue o navegador: esta fase acrescenta uma API host ao WASM. Depois, selecione Fino na linha do knob; não precisa reaprender. O cutoff mantém sua escala original em Hz. Veja [contrato, testes, limitações e teste no SMK-37 Pro](docs/knob-fine-control.md).
 
 ## Diagnóstico MIDI ao vivo
 
@@ -57,11 +56,11 @@ O painel **WASWAN · Diagnóstico MIDI ao vivo** registra CCs, interpretação d
 
 A captura física confirmou um limite do controle absoluto por deltas: CC53 com parâmetro20 pode chegar a CC127 com parâmetro94. O Fino absoluto agora corrige esse desalinhamento com captura suave: gire até o CC indicado na linha do mapeamento e, após sincronizar, use todo o curso. Normal mantém o contrato original. Veja [evidência, uso e testes](docs/midi-diagnostic.md).
 
-## DSP Monitor v1 (branch de desenvolvimento)
+## DSP Monitor v1
 
-Em `feat/dsp-monitor`, construída diretamente sobre o experimento de 256 vozes, o botão **Mostrar WASWAN DSP Monitor** habilita a instrumentação opcional. Use **Iniciar captura → Encerrar captura → Exportar JSONL**. O monitor nasce desligado e não altera o DSP. No Chrome instalado, o relógio do worklet tem resolução nominal de 1 ms: percentis são aproximados e exceder o orçamento não comprova underrun. Veja [arquitetura, precisão, testes e resultados](docs/dsp-monitor-v1.md).
+Em **DIAG**, o botão **Mostrar WASWAN DSP Monitor** habilita a instrumentação opcional. Use **Iniciar captura → Encerrar captura → Exportar JSONL**. O monitor nasce desligado e não altera o DSP. No Chrome instalado, o relógio do worklet tem resolução nominal de 1 ms: percentis são aproximados e exceder o orçamento não comprova underrun. Veja [arquitetura, precisão, testes e resultados](docs/dsp-monitor-v1.md).
 
-Para essa versão: `git switch feat/dsp-monitor` e `sh scripts/stage-simulator.sh` após gerar os artefatos WASM. Recarregue o navegador. A branch experimental de 256 e as referências anteriores permanecem preservadas; não há merge ou tag de release nesta fase.
+Use `sh scripts/stage-simulator.sh` para atualizar somente a interface após gerar os artefatos WASM e recarregue o navegador. As etapas anteriores estão preservadas no histórico e nas tags existentes.
 
 ## Resultados e próximo passo
 
@@ -77,18 +76,20 @@ A etapa [16 → 32 vozes](docs/polifonia-32.md) foi testada por software, aprova
 
 A etapa [32 → 64 vozes](docs/polifonia-64.md) foi aprovada e preservada em main/tag `v0.6.0`.
 
-A etapa [64 → 128 vozes](docs/polifonia-128.md), preservada em `feat/polyphony-128` no commit `00293b3`, alcançou o limite alvo inicial. Usa máscara de quatro palavras de 32 bits, listas de 128 notas e filas de 512 eventos. POLY oferece até 128 notas, DUAL 64, UNISON mantém oito vozes por nota e SUPER mantém cinco globais. O indicador mostra 128 slots; **Sustain MIDI** permite acumular notas em grupos menores. Testes automatizados e no Chrome passaram. Upstream, presets, perfil MIDI e firmware físico preservados.
+A etapa [64 → 128 vozes](docs/polifonia-128.md), preservada no commit `00293b3`, alcançou o limite alvo inicial. Usa máscara de quatro palavras de 32 bits, listas de 128 notas e filas de 512 eventos. POLY oferece até 128 notas, DUAL 64, UNISON mantém oito vozes por nota e SUPER mantém cinco globais. O indicador mostra 128 slots; **Sustain MIDI** permite acumular notas em grupos menores. Testes automatizados e no Chrome passaram. Upstream, presets, perfil MIDI e firmware físico preservados.
 
-Nesta branch, o [experimento autorizado de 256 vozes](docs/polifonia-256.md) passou nos testes do motor e do Chrome. O build serve 256 por padrão. O pool compartilhado suporta duas partes POLY com 128 notas cada ou uma parte DUAL com 128 notas. Cada parte continua limitada às 128 alturas MIDI; a interface distingue esse limite da capacidade de vozes. Máscara de 256 bits e filas de 1024, com UNISON de oito e SUPER de cinco preservados. A referência de 128 permanece intacta e o experimento ainda não foi incorporado a main.
+Integrado à `main`, o [experimento autorizado de 256 vozes](docs/polifonia-256.md) passou nos testes do motor e do Chrome. O build serve 256 por padrão. O pool compartilhado suporta duas partes POLY com 128 notas cada ou uma parte DUAL com 128 notas. Cada parte continua limitada às 128 alturas MIDI; a interface distingue esse limite da capacidade de vozes. Máscara de 256 bits e filas de 1024, com UNISON de oito e SUPER de cinco preservados. A etapa de 128 permanece acessível pelo histórico; o limite experimental de 256 foi incorporado à `main` com autorização do usuário.
 
 Para atualizar apenas a interface, sem recompilar o DSP, execute `sh scripts/stage-simulator.sh`. Verifique o perfil com `node tests/midi-profile.test.mjs`.
 
-Fluxo Git: cada fase aprovada é preservada em main/tag e a próxima etapa ocorre em branch isolada, com commits descritivos e push de implementação, testes e relatório. Esse ciclo é parte do trabalho em todas as fases. Atualizar o submódulo apenas por decisão explícita de incorporar uma nova base. Não há CI/CD nesta etapa.
+Fluxo Git: cada próxima etapa ocorre em branch isolada, com commits descritivos e push de implementação, testes e relatório. A incorporação à `main` exige aprovação do usuário; tags são criadas somente quando solicitadas. Branches concluídas podem ser removidas após confirmar que seus commits estão na `main`. Esse ciclo é parte do trabalho em todas as fases. Atualizar o submódulo apenas por decisão explícita de incorporar uma nova base. Não há CI/CD nesta etapa.
 
 ## Inspecionar o código
 
-A branch principal preserva a entrega aprovada de 64; `feat/polyphony-128` preserva a meta inicial e esta branch contém o experimento de 256 testado por software. A tag `v0.1.0` preserva a primeira execução validada, anterior às expansões.
+A branch principal contém a UI Foundation, 256 vozes, diagnósticos e controle fino. A consolidação de 16/11/2026 também incorporou a auditoria de UX e o guia de contribuição; as branches concluídas foram removidas sem descartar seus históricos. A tag `v0.1.0` preserva a primeira execução validada, anterior às expansões.
 
+- [Auditoria de UX](docs/ux-audit.md): inventário, arquitetura, capturas e roadmap que orientaram a nova interface.
+- [UI Foundation v0.1](docs/ui-foundation-v1.md): contrato dos controles, workspaces, validação e limitações.
 - [Auditoria inicial](docs/auditoria-inicial.md): inventário, arquitetura, licenças e testes de áudio/MIDI.
 - [Perfil MIDI](docs/perfil-midi.md): aprendizado, validação física e diagnóstico dos passos de cutoff.
 - [Polifonia de 8 vozes](docs/polifonia-8.md): causa do modo mono, orçamento de vozes, testes e roteiro no SMK-37 Pro.
@@ -100,6 +101,6 @@ A branch principal preserva a entrega aprovada de 64; `feat/polyphony-128` prese
 - [Adaptador MIDI WASWAN](web/midi.js) e [lógica do perfil](web/midi-profile.js): extensões fora do upstream.
 - [Fontes originais na revisão fixada](https://github.com/4t59m4f784-creator/SMKSYNTH/tree/3f751bc2be066414f204cf44e1aa05d9c7467d7f): consulte `web/simulator/`, `web/sim/sim.c` e `firmware/src/` para interface, integração WASM e DSP. O submódulo aparece como um link no GitHub; o clone recursivo baixa essas fontes.
 
-O usuário confirmou o saw, áudio no navegador, quatro knobs e um slider, e POLY na etapa de oito. Em seguida autorizou as etapas de 16, 32, 64 e 128, delegando os testes de polifonia ao agente. As verificações automatizadas e no Chrome estão documentadas. Após alcançar 128, o usuário autorizou o experimento de 256 em branch isolada. Qualquer expansão acima de 256 exige nova autorização explícita. O controle fino de cutoff segue adiado; não há interface modular completa nesta etapa.
+O usuário confirmou o saw, áudio no navegador, quatro knobs e um slider, e POLY na etapa de oito. Em seguida autorizou as etapas de 16, 32, 64 e 128, delegando os testes de polifonia ao agente. As verificações automatizadas e no Chrome estão documentadas. Após alcançar 128, o usuário autorizou o experimento de 256 em branch isolada. Qualquer expansão acima de 256 exige nova autorização explícita. O controle fino percorre a escala original do cutoff. A fundação modular está disponível; os novos editores especializados permanecem planejados.
 
 Código e adaptações: GPL-3.0-only; consulte [LICENSE](LICENSE). Preserve também [os créditos originais](upstream/SMKSYNTH/CREDITS.md) e [as licenças dos componentes](upstream/SMKSYNTH/LICENSING.md). Nenhuma alteração foi enviada ao teclado.
