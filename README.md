@@ -4,6 +4,12 @@ Sintetizador web em desenvolvimento a partir do [SMKSYNTH](https://github.com/4t
 
 O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commit `3f751bc2be066414f204cf44e1aa05d9c7467d7f` (release declarada: 1.2.0). A árvore original permanece intacta.
 
+## Manual de uso
+
+[Manual completo em PDF](MANUAL-WASWAN-SYNTH.pdf), na raiz: 44 páginas em português, com sumário clicável, capturas reais, referência dos 63 parâmetros ANALOG, Studio/SEQ, recursos Legacy, exercícios e ficha de avaliação de usabilidade. A edição descreve a revisão `04dc1c8`, incluindo o Studio da branch de desenvolvimento; não pressupõe sua integração na `main`.
+
+Fonte editável: [docs/manual-waswan-synth.html](docs/manual-waswan-synth.html). Para gerar novamente com o Chrome/Playwright já preparado no projeto: `node scripts/build-manual.mjs`. O gerador verifica imagens, links e conteúdo fora dos limites de página antes de escrever o PDF.
+
 ## UI Foundation v0.3
 
 A `main` reúne a UI Foundation v0.3 com seletor de timbres, MIDI Setup e modos de voz na Performance, o motor de 256 vozes, o DSP Monitor e as correções de knobs. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
