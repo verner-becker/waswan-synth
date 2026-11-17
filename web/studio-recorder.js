@@ -65,7 +65,7 @@ export class StudioRecorder {
     if(m.t==='progress'){this.frames=m.frames;this.eventCount=m.eventCount;}
     if(m.t==='finished'){
       this.cleanup();
-      try{this.take=await this.readLocal(m.id);this.frames=m.frames;this.eventCount=m.eventCount;this.state='ready';this.message=m.status==='complete'?(m.reason==='duration-limit'?'Take ready · 20 minute limit reached':'Take ready'):'Incomplete take · use Save project to preserve the recovered audio';}
+      try{this.take=await this.readLocal(m.id);this.frames=m.frames;this.eventCount=this.take.project.events.length;this.state='ready';this.message=m.status==='complete'?(m.reason==='duration-limit'?'Take ready · 20 minute limit reached':'Take ready'):'Incomplete take · use Save project to preserve the recovered audio';}
       catch(error){this.failed(error.message);return;}
     }
     if(m.t==='error'){this.failed(m.message);return;}
@@ -77,6 +77,7 @@ export class StudioRecorder {
     this.state='finalizing';this.message='Finalizing local take';listenStudioInput(null);this.worker?.postMessage({t:'stop',reason});this.changed();
     clearTimeout(this.stopTimer);this.stopTimer=setTimeout(()=>{if(this.state==='finalizing')this.failed('Recording interrupted; use Recover local take');},5000);
   }
+  stopAtFrame(frame){if(this.state==='recording'&&Number.isSafeInteger(frame))this.worker.postMessage({t:'stop-at',frame,reason:'arrangement-end'});}
   cleanup(){
     clearTimeout(this.startTimer);clearTimeout(this.stopTimer);listenStudioInput(null);
     if(this.capture){try{this.instrument.disconnect(this.capture);}catch{}try{this.capture.disconnect();}catch{}this.capture=null;}
@@ -153,6 +154,21 @@ export class StudioRecorder {
   download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   exportWav(){if(this.take?.project.frames&&!this.busy)this.download(this.take.audio,'waswan-take.wav');}
   exportProject(){if(this.take&&!this.busy)this.download(projectBlob(this.take.project,this.take.audio),'waswan-project.wsproj');}
+  exportMp3(){
+    if(this.busy||this.encoding||!this.take?.project.frames)return;
+    const take=this.take;this.encoding=true;this.mp3Source=take.project.name;this.mp3Message='Encoding MP3 · '+this.mp3Source;
+    const worker=new Worker(new URL('./studio-mp3-worker.js',import.meta.url));this.mp3Worker=worker;
+    const finish=message=>{worker.terminate();if(this.mp3Worker===worker){this.mp3Worker=null;this.encoding=false;this.mp3Message=message;this.changed();}};
+    worker.onerror=()=>finish('MP3 export failed · WAV and project remain available');
+    worker.onmessage=({data:m})=>{
+      if(this.mp3Worker!==worker)return;
+      if(m.t==='progress'){this.mp3Message=`Encoding MP3 ${Math.floor(m.frames/m.total*100)}% · ${this.mp3Source}`;this.changed();}
+      if(m.t==='finished'){this.download(m.audio,'waswan-take.mp3');finish('MP3 ready · '+this.mp3Source);}
+      if(m.t==='error')finish('MP3 export failed · '+m.message);
+    };
+    worker.postMessage({t:'encode',audio:take.audio,frames:take.project.frames});this.changed();
+  }
+  cancelMp3(){this.mp3Worker?.terminate();this.mp3Worker=null;this.encoding=false;this.mp3Message='MP3 export cancelled · source unchanged';this.changed();}
   async play(){
     if(!this.take?.project.frames||this.busy)return;this.stopPlayback();
     const {context,gain}=this.bridge.getAudio();if(!context||!gain)throw Error('Start audio before listening to a take');

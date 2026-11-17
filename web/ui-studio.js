@@ -3,6 +3,7 @@ import {el,action,Panel} from './ui-primitives.js';
 import {StudioRecorder} from './studio-recorder.js';
 import {RATE} from './studio-format.js';
 import {CONTROLS} from './ui-controls.js';
+import {automationTarget} from './studio-automation.js';
 const pitch=n=>['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'][n%12]+(Math.floor(n/12)-1);
 function midiLabel(st,a,b){
   const channel=(st&15)+1,kind=st&240;
@@ -13,6 +14,7 @@ function midiLabel(st,a,b){
 }
 function eventLabel(e){
   if(e.kind==='input')return midiLabel(...e.data);
+  if(e.kind==='parameter')return `${automationTarget(e.target).name} · ${e.value}`;
   const m=e.command;
   if(m.t==='midi')return midiLabel(m.st,m.d1,m.d2);
   if(m.t==='ui-control')return `${CONTROLS[m.id]?.name||'Control'} · ${m.value??(m.steps>0?'+':'')+m.steps}`;
@@ -43,15 +45,17 @@ export class StudioWorkspace {
     this.play=action('Listen to take',()=>run(()=>this.recorder.play()));
     this.stopPlay=action('Stop take playback',()=>{this.recorder.stopPlayback();this.draw();});
     this.wav=action('Export WAV',()=>run(()=>this.recorder.exportWav()));
+    this.mp3=action('Export MP3',()=>run(()=>this.recorder.exportMp3()));this.cancelMp3=action('Cancel MP3 export',()=>this.recorder.cancelMp3());
+    this.mp3Status=el('p','ww-muted');this.mp3Status.setAttribute('role','status');
     this.save=action('Save project',()=>run(async()=>{await this.recorder.prepareProject?.();this.recorder.exportProject();}));
     this.applyContext=action('Apply saved tones and mixer',()=>run(()=>this.recorder.applyContext()));
     this.recover=action('Recover local take',()=>run(()=>this.recorder.recover()));
     this.open=el('input');this.open.type='file';this.open.accept='.wsproj';this.open.setAttribute('aria-label','Open Studio project');
     this.open.onchange=()=>{const file=this.open.files[0];if(file)run(()=>this.recorder.open(file));this.open.value='';};
-    controls.append(this.record,this.stop,this.play,this.stopPlay,this.wav,this.save,this.recover,this.applyContext);
+    controls.append(this.record,this.stop,this.play,this.stopPlay,this.wav,this.mp3,this.cancelMp3,this.save,this.recover,this.applyContext);
     const openLabel=el('label','ww-studio-open','Open project ');openLabel.append(this.open);
     this.counter=el('p','ww-studio-counter');this.context=el('p','ww-muted');this.events=el('div','ww-studio-events');
-    this.node.append(this.status,controls,openLabel,this.counter,
+    this.node.append(this.status,controls,this.mp3Status,openLabel,this.counter,
       el('p','ww-muted','Records the synth after master and effects, before monitoring mute. Stop ends capture without releasing notes; wait for effect tails before stopping.'),
       this.context,el('p','ww-muted','Local recovery is not a backup. Save a project file to preserve the take. Opening a project does not replace the live instrument. Maximum: 20 minutes.'),
       el('h3','','Recorded events'),el('p','ww-muted','MIDI input and instrument actions are listed separately. Legacy arp and sequence notes are not transcribed. A MIDI control waiting for pickup may leave the sound unchanged.'),this.events);
@@ -67,6 +71,7 @@ export class StudioWorkspace {
     this.record.disabled=r.busy||audio.context?.state!=='running';this.stop.disabled=!['starting','recording'].includes(r.state);
     for(const b of [this.play,this.wav,this.save])b.disabled=r.busy||!r.take;
     this.applyContext.disabled=r.busy||!r.take||!audio.node;
+    this.mp3.disabled=r.busy||r.encoding||!r.take?.project.frames;this.cancelMp3.disabled=!r.encoding;this.mp3Status.textContent=r.mp3Message||'MP3 is encoded locally at 192 kbps. WAV remains the lossless reference.';
     if(!r.take?.project.frames){this.play.disabled=true;this.wav.disabled=true;}
     this.stopPlay.disabled=!r.player;this.open.disabled=r.busy;this.recover.disabled=r.busy;
     this.counter.textContent=`${(r.frames/RATE).toFixed(1)} s · ${r.eventCount} events · ${r.state}`;
@@ -76,7 +81,7 @@ export class StudioWorkspace {
     if(!p){this.events.append(el('p','ww-muted','No take loaded'));return;}
     const table=el('table'),head=el('tr');for(const name of ['Time','Source','Event'])head.append(el('th','',name));table.append(head);
     for(const e of p.events.slice(0,100)){
-      const row=el('tr');row.append(el('td','',(e.frame/RATE).toFixed(3)+' s'),el('td','',e.kind==='input'?'MIDI input':'Instrument action'),el('td','',eventLabel(e)));table.append(row);
+      const row=el('tr');row.append(el('td','',(e.frame/RATE).toFixed(3)+' s'),el('td','',e.kind==='input'?'MIDI input':e.kind==='parameter'?'Applied control':'Instrument action'),el('td','',eventLabel(e)));table.append(row);
     }
     this.events.append(table);if(p.events.length>100)this.events.append(el('p','ww-muted',`Showing first 100 of ${p.events.length} events. All events remain in the project.`));
   }

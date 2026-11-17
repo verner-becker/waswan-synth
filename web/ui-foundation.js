@@ -36,7 +36,8 @@ class Foundation {
     footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.3'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);
     const credits=el('div','ww-credits');credits.append(el('span','','Based on SMKSYNTH · OberVave / zvenson and contributors · DRUM-X / JIANT · '));
-    const license=el('a','','GPL-3.0');license.href='../LICENSE.txt';credits.append(license);this.shell.append(credits);
+    const license=el('a','','GPL-3.0');license.href='../LICENSE.txt';credits.append(license);
+    const lame=el('a','','LAME / lamejs'),source=el('a','','source & license');lame.href='https://lame.sourceforge.net/';source.href='./vendor/lamejs/index.html';credits.append(el('span','',' · MP3: '),lame,el('span','',' · '),source);this.shell.append(credits);
     const previous=this.bridge.midi.profile.onChange;
     this.bridge.midi.profile.onChange=()=>{previous();this.updateBadges();this.updateLearnState();this.updateAssignments();};
     this.updateAssignments();this.selectWorkspace('perf');this.animate=()=>{this.drawAudio();this.animation=requestAnimationFrame(this.animate);};this.animate();

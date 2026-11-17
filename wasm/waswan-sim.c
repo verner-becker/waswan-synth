@@ -303,6 +303,19 @@ EXPORT uint32_t waswan_studio_patch(uint32_t part,uint32_t byte) {return part<NP
 EXPORT uint32_t waswan_studio_tempo(uint32_t bpm) {
     if(bpm<40u||bpm>240u||mm_on)return 0;set.tempo=(uint16_t)bpm;ctl_tempo=bpm;set_dirty=1;set_t=fm1_ms;dirty_hdr=dirty_page=1;return 1;
 }
+EXPORT uint32_t waswan_studio_parameter_set(uint32_t part,uint32_t parameter,int32_t value) {
+    if(part>=NPART||parameter>=NPARAM||mm_on||preset_ui||pb_confirm||save_armed||obv_patch_engine(&live_p[part])!=OBV_ANALOG||value<0||value>(int32_t)obv_param_max(&live_p[part],parameter)||((parameter==P_UNI_N||parameter==P_ARP_OCT)&&value<1))return 0;
+    if(is_a_only(parameter))part=0;
+    if(live_p[part].v[parameter]==value)return 1;
+    set_param_in(&live_p[part],parameter,value);if(is_a_only(parameter))fx_sync();dirty_hdr=dirty_page=1;return 1;
+}
+EXPORT int32_t waswan_studio_expression_value(uint32_t field) {return field==0u?ctl_bend:field==1u?ctl_vib:field==2u?ctl_wheel_bend:0;}
+EXPORT uint32_t waswan_studio_expression_set(uint32_t field,int32_t value) {
+    if(mm_on||field>2u)return 0;
+    if(field==0u||field==2u){if(value< -8192||value>8191)return 0;if(field==0u)ctl_bend=value;else ctl_wheel_bend=value;}
+    else {if(value<0||value>127)return 0;ctl_vib=value;}
+    return 1;
+}
 static patch_t studio_context_patches[NPART];
 EXPORT uint32_t waswan_studio_context_buffer(void) {return (uint32_t)(uintptr_t)studio_context_patches;}
 EXPORT uint32_t waswan_studio_context_token(void) {

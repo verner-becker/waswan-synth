@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import {Engine} from '../.local/www/simulator/engine.js';
+import {emptySequence,PPQ} from '../web/studio-sequence.js';
+import {projectBlob,readProject,wavHeader} from '../web/studio-format.js';
+const root='.local/validation/studio-wave-4';fs.mkdirSync(root,{recursive:true});
+const seed=fs.readFileSync('upstream/SMKSYNTH/web/simulator/factory-session.bin'),engine=new Engine(fs.readFileSync('.local/build/waswan-256.wasm'),seed.buffer.slice(seed.byteOffset,seed.byteOffset+seed.byteLength));engine.advance(5000);const x=engine.ex;
+const contextData={version:1,tempo:x.sim_tempo(),master:x.sim_master_current(),session:seed.toString('base64'),selectedPart:0,parts:Array.from({length:4},(_,p)=>({program:x.sim_program(p)+1,engine:x.sim_engine_patch(p),parameters:Array.from({length:63},(_,i)=>x.sim_param(p,i)),patch:Array.from({length:80},(_,i)=>x.waswan_studio_patch(p,i))}))};
+const sequence=emptySequence(120);sequence.length=PPQ*4;sequence.loop=true;sequence.notes=[{id:'a',part:0,note:60,velocity:100,start:0,duration:PPQ*2}];
+const fixture=Buffer.from(await projectBlob({format:'waswan-studio-project',version:1,name:'Automation fixture',frames:0,status:'complete',sampleRate:44100,channels:2,context:contextData,sequence,events:[]},new Blob([wavHeader(0)])).arrayBuffer());
+const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
+try{
+ const context=await browser.newContext({acceptDownloads:true,viewport:{width:1440,height:1100}}),page=await context.newPage(),errors=[],requests=[];
+ page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>requests.push(r.url()));
+ await page.addInitScript(()=>{
+  window.audit={contexts:0,sent:[]};audit.source={id:'automation',name:'Automation input',state:'connected',async open(){},async close(){}};navigator.requestMIDIAccess=async()=>({inputs:new Map([['automation',audit.source]])});
+  localStorage.setItem('waswan-midi-profile-v1',JSON.stringify({version:1,enabled:true,bindings:[{port:'Automation input',channel:0,cc:21,target:'control:cutoff',mode:'absolute',behavior:'fine'}]}));
+  const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;audit.contexts++;}};
+  const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...args){super(...args);if(args[1]!=='obervave-smk37')return;audit.node=this;const send=this.port.postMessage.bind(this.port);this.port.postMessage=(m,...rest)=>{audit.sent.push({t:m.t});send(m,...rest);};this.port.addEventListener('message',({data:m})=>{if(m.t==='frame')audit.frame=m;if(m.t==='studio-sequence-state')audit.sequence=m;});}};
+ });
+ const button=name=>page.getByRole('button',{name,exact:true}),field=name=>page.getByLabel(name,{exact:true});
+ const midi=(st,d1,d2)=>page.evaluate(([st,d1,d2])=>audit.source.onmidimessage({data:[st,d1,d2],timeStamp:performance.now()}),[st,d1,d2]);
+ const download=async(name,path)=>{const wait=page.waitForEvent('download');await button(name).click();await(await wait).saveAs(path);return fs.readFileSync(path);};
+ await page.goto('http://localhost:8737/simulator/');await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await button('Connect MIDI keyboard').click();await page.waitForFunction(()=>!!audit.source.onmidimessage);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
+ const profile=await page.evaluate(()=>localStorage.getItem('waswan-midi-profile-v1'));
+ await page.locator('[data-workspace="studio"]').click();await field('Open Studio project').setInputFiles({name:'fixture.wsproj',mimeType:'application/octet-stream',buffer:fixture});await page.waitForFunction(()=>document.querySelector('.ww-studio-status').textContent.includes('Project opened'));
+ await page.evaluate(()=>{audit.node.port.postMessage({t:'voice-mode',part:0,mode:0});audit.node.port.postMessage({t:'ui-control',source:'ui',id:0,value:40,scope:audit.frame.instrument.scope});});await page.waitForFunction(()=>audit.frame.instrument.controls[0].value===40);
+ await button('Record take').click();await page.waitForFunction(()=>document.querySelector('.ww-studio-status').dataset.state==='recording');
+ await midi(176,21,5);await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>audit.frame.instrument.controls[0].value),40);
+ await midi(176,21,40);await page.waitForTimeout(100);await midi(176,21,41);await page.waitForFunction(()=>audit.frame.instrument.controls[0].value===41);await button('Stop recording').click();await page.waitForFunction(()=>document.querySelector('.ww-studio-status').dataset.state==='ready');
+ const pickupProject=await readProject(new Blob([await download('Save project',`${root}/pickup.wsproj`)]));const changes=pickupProject.project.events.filter(e=>e.kind==='parameter'&&e.target==='part:0:cutoff');assert.equal(changes.length,1);assert.equal(changes[0].value,41);
+ await page.locator('[data-workspace="seq"]').click();await field('Automation target').selectOption('part:0:cutoff');await button('Use take applied controls').click();assert.equal(await field('Automation lane').locator('option').count(),1);assert.equal(await field('Automation value').inputValue(),'40');await button('Delete automation lane').click();
+ await field('Automation target').selectOption('master');await button('Add automation lane').click();await page.waitForFunction(()=>document.querySelector('[aria-label="Automation lane"]').options.length===1);
+ await field('Automation start beat').fill('1');await field('Automation value').fill('500');await button('Set automation point').click();await field('Automation start beat').fill('5');await field('Automation value').fill('900');await button('Set automation point').click();
+ await field('Arrangement tail seconds').fill('.5');await midi(144,67,100);await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===67));
+ await button('Record arrangement').click();await page.waitForFunction(()=>document.querySelector('.ww-studio-status').dataset.state==='recording');
+ await page.waitForFunction(()=>audit.sequence?.playing&&audit.frame.master>500&&audit.frame.master<900);
+ await page.waitForFunction(()=>document.querySelector('.ww-studio-status').dataset.state==='ready');
+ assert.equal(await page.evaluate(()=>audit.frame.master),900);assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===67)));
+ await page.locator('[data-workspace="studio"]').click();const wav=await download('Export WAV',`${root}/arrangement.wav`),saved=await readProject(new Blob([await download('Save project',`${root}/arrangement.wsproj`)]));
+ const transport=await page.evaluate(()=>audit.sequence);assert.equal(saved.project.frames,transport.startFrame+88200+22050-saved.project.firstFrame);assert.equal(saved.project.reason,'arrangement-end');assert(saved.project.events.some(e=>e.kind==='parameter'&&e.target==='master'&&e.value>127));
+ assert(saved.project.sequence.automation.some(l=>l.target==='master'&&l.points.some(p=>p.value===900)));
+ const before=crypto.createHash('sha256').update(wav).digest('hex'),mp3=await download('Export MP3',`${root}/arrangement.mp3`);assert(mp3.length>1000);assert.equal(mp3[0],255);assert.equal(mp3[1]&224,224);
+ const decoded=await page.evaluate(async bytes=>{const b=await audit.context.decodeAudioData(new Uint8Array(bytes).buffer);let peak=0;for(const value of b.getChannelData(0))peak=Math.max(peak,Math.abs(value));return {duration:b.duration,channels:b.numberOfChannels,peak};},Array.from(mp3));
+ assert.equal(decoded.channels,2);assert(Math.abs(decoded.duration-saved.project.frames/44100)<.15);assert(decoded.peak>0);
+ const after=await download('Export WAV',`${root}/after-mp3.wav`);assert.equal(crypto.createHash('sha256').update(after).digest('hex'),before);
+ await page.evaluate(async()=>{const find=n=>[...document.querySelectorAll('button')].find(b=>b.textContent===n);find('Export MP3').click();await Promise.resolve();find('Cancel MP3 export').click();});
+ await page.waitForFunction(()=>document.body.textContent.includes('MP3 export cancelled'));
+ assert.equal(await page.evaluate(()=>audit.contexts),1);assert.equal(await page.evaluate(()=>localStorage.getItem('waswan-midi-profile-v1')),profile);assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===67)));
+ await midi(128,67,0);await page.locator('[data-workspace="seq"]').click();await page.screenshot({path:`${root}/automation-desktop.png`,fullPage:true});await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:`${root}/automation-mobile.png`,fullPage:true});
+ assert(requests.every(url=>url.startsWith('http://localhost:8737/')));assert.deepEqual(errors,[]);
+ const report={result:'PASS',chrome:await browser.version(),pickupObservedChanges:1,automationImport:true,nativeMaster900:true,exactRecordingDeadline:true,renderedFrames:saved.project.frames,mp3:{bytes:mp3.length,kbps:192,decoded,sourceWavUnchanged:true,cancel:true},localRequestsOnly:true,sameContext:true,liveNotePreserved:true,profilePreserved:true,mobileOverflow:false,physicalValidation:false,errors};fs.writeFileSync(`${root}/browser.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+}finally{await browser.close();}

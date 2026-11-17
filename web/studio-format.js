@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Data-only Studio formats. No browser, audio device, or executable project content.
 import {validateSequence} from './studio-sequence.js';
+import {automationTarget} from './studio-automation.js';
 export const RATE=44100,MAX_FRAMES=RATE*20*60,MAX_EVENTS=100000,MAX_JSON=16*1024*1024;
 export const MAGIC='WASWAN-STUDIO-1\n';
 export const COMMANDS=new Set(['midi','key','pad','btn','enc','fader','wheel','velocity','master','panic','drum-hit','drums','analog','ui-control','enc-fine','enc-fine-absolute','voice-mode','voice-unison','voice-sustain','program-select','editor-set','editor-save','studio-note','studio-mixer']);
@@ -15,7 +16,7 @@ export function wavHeader(frames) {
 export function pcm16(samples,target=new Int16Array(samples.length)) {
   for(let i=0;i<samples.length;i++){
     if(!Number.isFinite(samples[i]))throw Error('Non-finite audio sample');
-    const value=Math.max(-1,Math.min(1,samples[i]));target[i]=Math.round(value*(value<0?32768:32767));
+    const value=Math.max(-1,Math.min(1,samples[i]));target[i]=Math.min(32767,Math.round(value*32768));
   }
   return target;
 }
@@ -28,6 +29,8 @@ export function validateContext(c) {
     for(const part of c.mixer)if(!Array.isArray(part)||part.length!==8||!part.every((v,f)=>integer(v,f===1?-64:0,f===1?64:f>=6?1:127)))throw Error('Invalid saved mixer values');
   }
   if(c.selectedPart!==undefined&&!integer(c.selectedPart,0,3))throw Error('Invalid selected part');
+  if(c.expression!==undefined&&(!Array.isArray(c.expression)||![2,3].includes(c.expression.length)||!integer(c.expression[0],-8192,8191)||!integer(c.expression[1],0,127)||c.expression.length===3&&!integer(c.expression[2],-8192,8191)))throw Error('Invalid expression context');
+  if(c.midiSustain!==undefined&&typeof c.midiSustain!=='boolean')throw Error('Invalid sustain context');
   return c;
 }
 export function validateProject(p) {
@@ -36,10 +39,11 @@ export function validateProject(p) {
   validateContext(p.context);
   if(p.sequenceContext)validateContext(p.sequenceContext);
   for(const e of p.events){
-    if(!e||!integer(e.frame,0,p.frames)||!['input','command'].includes(e.kind))throw Error('Invalid event time or kind');
+    if(!e||!integer(e.frame,0,p.frames)||!['input','command','parameter'].includes(e.kind))throw Error('Invalid event time or kind');
     if(e.kind==='input'){
       if(!Array.isArray(e.data)||e.data.length!==3||!e.data.every(v=>integer(v,0,255))||e.data[0]<128||e.data[0]>=240||e.data[1]>127||e.data[2]>127)throw Error('Invalid MIDI input');
-    }else if(!e.command||!COMMANDS.has(e.command.t))throw Error('Unsupported instrument command');
+    }else if(e.kind==='parameter'){const t=automationTarget(e.target);if(!t||!integer(e.value,t.min,t.max))throw Error('Invalid applied control change');}
+    else if(!e.command||!COMMANDS.has(e.command.t))throw Error('Unsupported instrument command');
     // Strict primitive payloads: no paths, executable data, nested graphs or prototype keys.
     const payload=e.kind==='command'?e.command:e;
     for(const [key,value] of Object.entries(payload)){

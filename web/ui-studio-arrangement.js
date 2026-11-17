@@ -54,6 +54,7 @@ export class ArrangementEditor {
     while(r.busy)await new Promise(requestAnimationFrame);
     this.overdub=null;if(r.state!=='ready'||!r.take)throw Error(r.message);
     const start=o.transportStartFrame??session.start,offset=r.take.project.firstFrame-start;
+    r.take.project.sequenceOffset=offset;
     o.replace(addTake(o.sequence,r.take.project,session.part,offset));this.draw();
   }
   update(m){

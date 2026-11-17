@@ -13,7 +13,7 @@ function event(e){
   if(eventCount>=MAX_EVENTS){port.postMessage({t:'stop',reason:'event-limit'});return;}
   const relative=Math.round(e.frame-first);if(relative<0||relative>MAX_FRAMES)return;
   const line=encoder.encode(JSON.stringify({...e,frame:relative})+'\n');
-  if(eventBytes+line.length>MAX_JSON-2*1024*1024){port.postMessage({t:'stop',reason:'event-limit'});return;}
+  if(eventBytes+line.length>MAX_JSON-4*1024*1024){port.postMessage({t:'stop',reason:'event-limit'});return;}
   write(log,line,eventBytes);eventBytes+=line.length;eventCount++;
 }
 function checkpoint(){write(audio,new Uint8Array(wavHeader(frames)),0);audio.flush();log.flush();saveMetadata();}
@@ -35,7 +35,7 @@ async function init(m){
   metadataHandle=await(await dir.getFileHandle('take.json',{create:true})).createSyncAccessHandle();
   write(audio,new Uint8Array(wavHeader(0)),0);saveMetadata();
   port=m.port;eventPort=m.eventPort;
-  eventPort.onmessage=({data:e})=>{try{if(e.t==='command')event({kind:'command',frame:e.frame,command:e.command});}catch(error){fail(error);}};
+  eventPort.onmessage=({data:e})=>{try{if(e.t==='command')event({kind:'command',frame:e.frame,command:e.command});if(e.t==='parameter')event({kind:'parameter',frame:e.frame,target:e.target,value:e.value});}catch(error){fail(error);}};
   port.onmessage=({data:d})=>{try{
     if(finished)return;
     if(d.t==='started'){first=d.frame;metadata.firstFrame=first;saveMetadata();postMessage({t:'started',id,first});}
@@ -53,7 +53,7 @@ async function init(m){
     }
     if(d.t==='ended'){
       if(d.frames!==frames)throw Error('Audio frame count mismatch');
-      metadata.status=['user','duration-limit'].includes(d.reason)?'complete':'incomplete';metadata.reason=d.reason;
+      metadata.status=['user','duration-limit','arrangement-end'].includes(d.reason)?'complete':'incomplete';metadata.reason=d.reason;
       checkpoint();finished=true;for(const handle of [audio,log,metadataHandle])handle.close();eventPort.close();
       postMessage({t:'finished',id,frames,eventCount,status:metadata.status,reason:d.reason});
     }
@@ -68,5 +68,6 @@ onmessage=({data:m})=>{
     pendingStop=m.reason||'user';port?.postMessage({t:'stop',reason:pendingStop});
     setTimeout(()=>{if(!finished)fail(Error('Capture did not acknowledge stop'));},2000);
   }
+  else if(m.t==='stop-at')port?.postMessage({t:'stop-at',frame:m.frame,reason:m.reason});
   else if(m.t==='input')try{event({kind:'input',frame:m.frame,data:m.data,receivedFrame:m.receivedFrame,listening:!!m.listening});}catch(error){fail(error);}
 };

@@ -8,6 +8,7 @@ class StudioCapture extends AudioWorkletProcessor {
       if(m.t==='buffer')this.pool.push(m.buffer);
       if(m.t==='start'&&!this.active){this.active=true;this.first=currentFrame;this.port.postMessage({t:'started',frame:currentFrame});}
       if(m.t==='stop')this.stop(m.reason||'user');
+      if(m.t==='stop-at'&&Number.isSafeInteger(m.frame)&&m.frame>=0){this.endFrame=m.frame;this.endReason=m.reason;}
     };
   }
   flush(){
@@ -20,7 +21,8 @@ class StudioCapture extends AudioWorkletProcessor {
   }
   process(inputs,outputs){
     if(!this.active)return true;
-    const n=Math.min(outputs[0][0].length,MAX_FRAMES-this.frames);
+    const n=Math.max(0,Math.min(outputs[0][0].length,MAX_FRAMES-this.frames,this.endFrame===undefined?Infinity:this.endFrame-currentFrame));
+    if(!n){this.stop(this.endFrame!==undefined?'arrangement-end':'duration-limit');return true;}
     if(!this.buffer){
       this.buffer=this.pool.pop();if(!this.buffer){this.stop('buffer-overrun');return true;}
       this.data=new Float32Array(this.buffer);this.chunkFrame=currentFrame;
@@ -30,6 +32,7 @@ class StudioCapture extends AudioWorkletProcessor {
     for(let i=0;i<n;i++){this.data[(this.used+i)*2]=input[0][i];this.data[(this.used+i)*2+1]=input[1]?.[i]??input[0][i];}
     this.used+=n;this.frames+=n;if(this.used>=4096)this.flush();
     if(this.frames>=MAX_FRAMES)this.stop('duration-limit');
+    else if(this.endFrame!==undefined&&currentFrame+n>=this.endFrame)this.stop(this.endReason||'arrangement-end');
     return true;
   }
 }

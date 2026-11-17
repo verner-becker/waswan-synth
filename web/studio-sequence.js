@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Musical data and SMF serialization, independent of DOM and physical controls.
 import {RATE,MAX_FRAMES} from './studio-format.js';
+import {validateAutomation,laneFromTake} from './studio-automation.js';
 export const PPQ=960,MAX_NOTES=4096;
 const int=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
 export function emptySequence(bpm=120){return {version:1,ppq:PPQ,bpm:Math.max(40,Math.min(240,bpm)),meter:[4,4],length:16*PPQ,loop:false,notes:[]};}
@@ -27,6 +28,8 @@ export function validateSequence(s){
     if(!Array.isArray(s.expression)||s.expression.length>10000)throw Error('MIDI expression limit exceeded');
     for(const e of s.expression)if(!e||!int(e.tick,0,s.length)||!Array.isArray(e.data)||e.data.length!==3||![176,224].includes(e.data[0]&240)||!int(e.data[0],128,239)||!int(e.data[1],0,127)||!int(e.data[2],0,127))throw Error('Invalid MIDI expression');
   }
+  if(s.expressionStart){const e=s.expressionStart;if(!int(e.part,0,3)||!int(e.pitch,-8192,8191)||!int(e.modulation,0,127)||!int(e.pedal,0,127))throw Error('Invalid expression start state');}
+  validateAutomation(s.automation,s.length);
   return s;
 }
 export const tickFrame=(tick,bpm)=>Math.round(tick*RATE*60/(bpm*PPQ));
@@ -37,7 +40,8 @@ export function musicalPosition(frame,sequence){
 }
 export function inputNotes(project,targetPart=project.context.selectedPart??0){
   if(!int(targetPart,0,3))throw Error('Invalid input destination part');
-  const sequence=emptySequence(project.context.tempo),held=new Map();sequence.expression=[];let id=0,maxTick=PPQ*4;
+  const sequence=emptySequence(project.context.tempo),held=new Map();sequence.expression=[];
+  sequence.expressionStart={part:targetPart,pitch:project.context.expression?.[0]??0,modulation:project.context.expression?.[1]??0,pedal:project.context.midiSustain?127:0};let id=0,maxTick=PPQ*4;
   const tick=frame=>Math.max(0,Math.round(frame*sequence.bpm*PPQ/(RATE*60)));
   const events=project.events.filter(e=>e.kind==='input'&&e.listening!==false).sort((a,b)=>a.frame-b.frame);
   for(const e of events){
@@ -58,6 +62,7 @@ export function inputNotes(project,targetPart=project.context.selectedPart??0){
   sequence.length=Math.ceil(maxTick/(4*PPQ))*4*PPQ;
   // At the recording duration boundary, avoid padding beyond the supported audio length.
   if(tickFrame(sequence.length,sequence.bpm)>MAX_FRAMES)sequence.length=maxTick;
+  for(const target of ['midi-pitch-bend','modulation','wheel-pitch-bend','sequence-sustain'])if(project.events.some(e=>e.kind==='parameter'&&e.target===target))(sequence.automation??=[]).push(laneFromTake(project,sequence,target));
   return validateSequence(sequence);
 }
 export function compileNotes(sequence){
@@ -68,7 +73,14 @@ export function compileNotes(sequence){
   }
   events.sort((a,b)=>a.frame-b.frame||a.velocity-b.velocity||a.part-b.part||a.note-b.note);
   let block=-1,count=0;for(const e of events){const b=Math.floor(e.frame/128);if(b!==block){block=b;count=0;}if(++count>512)throw Error('Too many MIDI events in one audio block');}
-  return {events,length:tickFrame(sequence.length,sequence.bpm),duration:sequence.length*RATE*60/(sequence.bpm*PPQ),loop:sequence.loop,bpm:sequence.bpm,meter:sequence.meter};
+  return {events,length:tickFrame(sequence.length,sequence.bpm),duration:sequence.length*RATE*60/(sequence.bpm*PPQ),ticks:sequence.length,
+    expression:expressionEvents(sequence).filter(e=>partEnabled(sequence,Math.min(e.data[0]&15,3))).map(e=>({frame:tickFrame(e.tick,sequence.bpm),data:e.data})).sort((a,b)=>a.frame-b.frame),
+    automation:(sequence.automation||[]).filter(l=>l.enabled&&(l.target.startsWith('part:')?partEnabled(sequence,Number(l.target.split(':')[1])):true)),loop:sequence.loop,bpm:sequence.bpm,meter:sequence.meter};
+}
+function expressionEvents(sequence){
+  const events=[],e=sequence.expressionStart;
+  if(e){const bend=e.pitch+8192;events.push({tick:0,data:[224|e.part,bend&127,bend>>7]},{tick:0,data:[176|e.part,1,e.modulation]},{tick:0,data:[176|e.part,64,e.pedal]});}
+  return events.concat(sequence.expression||[]);
 }
 function variable(value){
   if(!int(value,0,0x0fffffff))throw Error('MIDI delta time exceeds SMF limits');
@@ -90,7 +102,7 @@ export function smf(sequence){
     for(const n of sequence.notes.filter(n=>n.part===part&&partEnabled(sequence,part))){
       events.push({tick:n.start,order:1,data:[144|part,n.note,n.velocity]},{tick:n.start+n.duration,order:0,data:[128|part,n.note,0]});
     }
-    for(const e of sequence.expression||[])if(Math.min(e.data[0]&15,3)===part&&partEnabled(sequence,part))events.push({tick:e.tick,order:0,data:e.data});
+    for(const e of expressionEvents(sequence))if(Math.min(e.data[0]&15,3)===part&&partEnabled(sequence,part))events.push({tick:e.tick,order:0,data:e.data});
     tracks.push(track(events,sequence.length));
   }
   const length=tracks.reduce((sum,t)=>sum+t.length,14),out=new Uint8Array(length);
