@@ -1,0 +1,91 @@
+# WASWAN Studio — controle das ondas
+
+Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83db16d2fc` (main local). Branch de planejamento e investigação: `docs/studio-waves-plan`.
+
+## Acordo de trabalho
+
+- Preferir execução local no navegador; não migrar para nativo sem uma necessidade comprovada.
+- A imagem e o texto de visão são referências, não uma especificação integral aprovada.
+- Entregar experiências musicais completas por onda; não prometer uma mini-DAW inteira na primeira entrega.
+- O usuário acompanha o fechamento do plano e autoriza a implementação por escopo. Autonomia cobre decisões rotineiras dentro do escopo aprovado, sem novas confirmações a cada passo.
+- Discordar de propostas quando houver razões técnicas ou de produto, explicando consequências e alternativas.
+- Diante de bloqueio real ou decisão fora do escopo, parar a parte dependente, preservar trabalho/evidências e pedir ajuda ou decisão. Não repetir tentativas sem uma hipótese nova.
+- Não integrar na main sem aprovação explícita. Preservar uma instância, upstream fixado, formatos existentes, MIDI/pickup, escalas, 256 vozes e Legacy SMK. Mudanças adicionais no DSP ou polifonia exigem aprovação própria.
+- Separar resultados automatizados, testes no navegador e validação física/musical. Nenhum substitui silenciosamente o outro.
+
+## Estado e autorização
+
+| Onda | Resultado utilizável | Estado |
+|---|---|---|
+| 0 — diagnóstico e viabilidade | Caminhos de áudio/MIDI, relógios, limites, riscos e escopo recomendado para a primeira entrega | Concluída como diagnóstico e prova curta; limites e decisões da onda 1 documentados |
+| 1 — gravador de performances | Capturar áudio estéreo + eventos, ouvir o áudio, exportar WAV e recuperar a tomada | Proposta; aguarda fechamento de escopo |
+| 2 — sequenciador MIDI editável | Piano roll, notas/velocity, transporte musical, loop, reprodução MIDI e exportação SMF | Proposta |
+| 3 — composição por camadas | Pistas e clipes, overdub, mover/duplicar, mute/solo, timbres compatíveis com o motor | Proposta |
+| 4 — automação e finalização | Automação editável e exportação da composição; MP3 após avaliar codificador/licença/custo | Proposta |
+| 5 — pistas de áudio | Importação, posicionamento, corte, ganho e reprodução sincronizada | Proposta |
+
+A numeração não aprova arquitetura nem promete datas ou quantidades de pistas. O marco de versão 0.4 será decidido junto com o escopo da onda 1.
+
+## Onda 0 — critérios de conclusão
+
+- [x] Identificar captura da saída estéreo e efeitos do ganho/mute na gravação.
+- [x] Mapear entradas MIDI, teclado/pads, mapeamentos e eventos gerados pelo sequenciador/arpejador.
+- [x] Identificar relógios, granularidade de renderização e caminho de agendamento de eventos.
+- [x] Inventariar partes, pistas, timbres, efeitos compartilhados e limites do sequenciador existente.
+- [x] Avaliar persistência, exportação, recuperação e limites de memória.
+- [x] Executar baseline relevante e sondagem isolada de captura/sincronização/carga; registrar duração real, ambiente e limitações.
+- [x] Separar viabilidade comprovada de hipóteses, testes pendentes e validação física.
+- [x] Recomendar escopo e critérios mensuráveis para a onda 1; submeter as decisões de produto ao usuário no relatório de entrega.
+
+A continuidade por frames da captura foi verificada; alinhamento MIDI/áudio, ensaio de 20 minutos e latência física continuam pendentes, explicitamente fora da comprovação desta prova curta. Não confundir conclusão do diagnóstico com certificação dessas capacidades.
+
+Resultados e comandos: [diagnóstico da onda 0](studio-wave-0.md). Evidências locais em `.local/validation/studio-wave-0/`.
+
+## Critérios propostos para as ondas seguintes
+
+### Onda 1
+
+Selecionar timbre, iniciar captura, tocar, encerrar, ouvir o áudio gravado, exportar WAV e salvar/reabrir a tomada com os eventos e o contexto musical definido. Diferenciar ouvir áudio de ressintetizar MIDI. Capturar em blocos com limite explícito e encerramento íntegro; não manter crescimento ilimitado de RAM. Definir quais eventos são registrados e como ficam sustain, release, caudas de efeitos, mute e alterações de timbre. Preservar responsividade e regressões existentes.
+
+### Onda 2
+
+Reproduzir eventos pelo instrumento com agendamento pelo relógio de áudio; editar notas/duração/velocity, BPM, métrica e loop; exportar SMF. Definir coexistência com sequenciador/arp legados e fidelidade do contexto salvo antes de prometer reprodução equivalente ao áudio original.
+
+### Onda 3
+
+Compor por camadas sem confundir pistas lógicas com partes/timbres disponíveis. Definir overdub, seleção, cópia e repetição de clipes. Quantidade de pistas, independência de timbres e alcance de mute/solo/volume/pan dependem do diagnóstico e de decisões explícitas.
+
+### Onda 4
+
+Usar IDs estáveis e escalas originais para automação; distinguir eventos MIDI recebidos de mudanças semânticas efetivamente aplicadas após mapeamento/pickup. Exportar composição sem modificar o projeto. Avaliar MP3 local e efeitos existentes antes de acrescentar dependências ou capacidades DSP.
+
+### Onda 5
+
+Administrar arquivos de áudio e reprodução por blocos; validar importação, sincronização, memória e recuperação. Gravar a saída do synth não implica que já exista um editor de áudio. Time stretch, plugins nativos e gravação de microfone não estão aprovados.
+
+## Decisões abertas para fechar o plano
+
+1. Escopo da onda 1: captura do áudio final e quais fontes/eventos precisam acompanhar a tomada.
+2. Semântica de ganho, mute, fim de gravação e caudas de efeitos.
+3. Contexto salvo: snapshot de timbres/estado, relação com sessão legada e limites de reprodução fiel.
+4. Plataforma inicial, duração mínima suportada, carga de validação e limites aceitáveis de sincronização/latência.
+5. Reutilização e convivência com sequenciador/arp existentes; papel das quatro partes na composição futura.
+6. O que deve ser validado pelo usuário com controlador e saída de áudio físicos antes de integrar.
+
+Ear e Academy ficam futuros. Preparação inicial: dados musicais claros e versionados, sem arquitetura de plugins antecipada.
+
+## Registro de decisões
+
+| Data | Decisão | Origem |
+|---|---|---|
+| 2026-11-17 | Organizar evolução por ondas, com controle persistido no repositório | Solicitação do usuário |
+| 2026-11-17 | Priorizar navegador e avaliar viabilidade antes de considerar nativo | Preferência do usuário |
+| 2026-11-17 | Questionar propostas e pedir decisão diante de bloqueio, sem loops de tentativas | Solicitação explícita do usuário |
+| 2026-11-17 | Executar a onda 0 | “vamos a onda 0” |
+| 2026-11-17 | Recomendar navegador, gravador por blocos antes do mute e tratamento próprio do contexto vivo | Diagnóstico e sondagens da onda 0; recomendações aguardam aprovação para implementação |
+
+## Continuidade
+
+Ao retomar: ler este arquivo, o diagnóstico, status Git e evidências; continuar de onde parou. Antes de implementar outra onda, registrar escopo aprovado e seus critérios. Ao encerrar uma etapa, registrar resultados, limitações e próximo passo. Trabalho autônomo ocorre durante a execução da sessão; este documento não cria agendamento nem processo em segundo plano.
+
+Próximo passo: fechar com o usuário as quatro decisões ao fim de `studio-wave-0.md` e autorizar o escopo da onda 1. Não iniciar a onda 1 apenas porque o diagnóstico foi concluído.
