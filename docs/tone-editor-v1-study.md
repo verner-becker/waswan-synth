@@ -1,5 +1,8 @@
 # Tone Editor v1 — estudo inicial
 
+Estudo preservado como referência; a implementação posterior está documentada em
+[tone-editor-v1.md](tone-editor-v1.md).
+
 ## Referência e escopo
 
 Base funcional: `eb9f2b26c6de28dcb4b0f1257ac243eb638bf44a`, integrada à

@@ -2,12 +2,12 @@
 
 ## Current Baseline
 
-`main` is the official functional reference: UI Foundation v0.2, 256 voices, DSP Monitor, MIDI diagnostics, knob soft takeover, and the UX audit. Historical branch names are not checkout instructions; use commit SHAs or tags.
+`main` is the official functional reference: UI Foundation v0.3 with the tone selector, 256 voices, DSP Monitor, MIDI diagnostics, knob soft takeover, and the UX audit. Historical branch names are not checkout instructions; use commit SHAs or tags.
 
 ## Project Structure
 
 - `upstream/SMKSYNTH/`: pinned original submodule; preserve its revision, firmware, licenses, and attribution.
-- `web/ui-foundation.js`, `ui-primitives.js`, `ui-controls.js`, `ui-foundation.css`: shell composition, reusable controls, parameter catalog, and design tokens.
+- `web/ui-foundation.js`, `ui-primitives.js`, `ui-controls.js`, `ui-tone-editor.js`, `ui-foundation.css`: shell composition, reusable controls, parameter catalog, and design tokens.
 - `wasm/waswan-sim.c` and `patches/`: isolated host APIs and polyphony patches applied to build copies.
 - `scripts/`, `tests/`, `docs/`: build/server tooling, validation, architecture, and screenshots.
 - `.tools/` and `.local/`: ignored tools, generated artifacts, and local evidence. Never edit generated files as source.
@@ -32,7 +32,7 @@ python3 scripts/serve-simulator.py
 
 Open `http://localhost:8737/simulator/`; use Start audio and Settings. `sh scripts/stage-simulator.sh` updates browser files after building.
 
-Node assertion suites use `tests/*.test.mjs`; Chrome checks use `tests/browser-*.mjs`. Run regressions relevant to the change: MIDI/profile/pickup, 256 voices, DSP Monitor, presets, and audio. Allocation changes also require earlier voice stages. For UI work, run `sh tests/build-ui-reference.sh`, `node tests/ui-foundation.test.mjs`, `node tests/browser-ui-foundation.mjs`, and `node tests/browser-ui-foundation-v2.mjs`. Browser tests need the server and documented Playwright setup. Keep evidence in `.local/validation/`; distinguish software results from physical validation.
+Node assertion suites use `tests/*.test.mjs`; Chrome checks use `tests/browser-*.mjs`. Run regressions relevant to the change: MIDI/profile/pickup, 256 voices, DSP Monitor, presets, and audio. Allocation changes also require earlier voice stages. For UI work, run `sh tests/build-ui-reference.sh`, `node tests/ui-foundation.test.mjs`, `node tests/browser-ui-foundation.mjs`, and `node tests/browser-ui-foundation-v2.mjs`. Browser tests need the server and documented Playwright setup. For tone editing, also run `tests/tone-editor.test.mjs` and `tests/browser-tone-editor.mjs`; preserve original Save/Save as semantics and distinguish RAM, instrument write, and browser persistence. Keep evidence in `.local/validation/`; distinguish software results from physical validation.
 
 ## Style & Git Workflow
 

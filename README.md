@@ -4,9 +4,9 @@ Sintetizador web em desenvolvimento a partir do [SMKSYNTH](https://github.com/4t
 
 O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commit `3f751bc2be066414f204cf44e1aa05d9c7467d7f` (release declarada: 1.2.0). A árvore original permanece intacta.
 
-## UI Foundation v0.1
+## UI Foundation v0.3
 
-A `main` reúne a UI Foundation v0.1, o motor de 256 vozes, o DSP Monitor e as correções de knobs. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
+A `main` reúne a UI Foundation v0.3 com seletor de timbres, MIDI Setup e modos de voz na Performance, o motor de 256 vozes, o DSP Monitor e as correções de knobs. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
 
 ```sh
 git switch main
@@ -43,6 +43,10 @@ Para ouvir os exemplos, use **Play / stop** ou PLAY no **Legacy SMK**. Para toca
 As ferramentas ficam em `.tools/` e os resultados em `.local/`, ambos ignorados pelo Git. O servidor usa apenas o loopback e serve o simulador, a tradução e os avisos de licença. Os instaladores de firmware não são publicados por esse servidor. Os links originais de instalação no rodapé não possuem destino nesta execução local.
 
 O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binaryen 133, e compila separadamente a extensão host em `wasm/waswan-sim.c`. É possível fornecer executáveis próprios pelas variáveis `ZIG` e `WASM_OPT`. Não há npm install para executar o sintetizador; Node é utilizado somente na verificação.
+
+## Tone Editor v1 — branch de desenvolvimento
+
+Em `feat/tone-editor-v1`, **TONES** apresenta os 63 parâmetros ANALOG em sete seções, com **Save** e **Save as…** na biblioteca existente de 99 programas. A gravação exige confirmação e informa a espera por silêncio e o resultado do armazenamento no navegador. Não há mudança no DSP ou nos formatos de presets/sessões. DRUM-X e controles especiais ainda usam Legacy SMK. Veja [arquitetura, limites e validação](docs/tone-editor-v1.md). Esta fase aguarda aprovação para integração à `main`.
 
 ## Controle fino de knobs v1
 
