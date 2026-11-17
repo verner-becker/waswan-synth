@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Musical data and SMF serialization, independent of DOM and physical controls.
 import {RATE,MAX_FRAMES} from './studio-format.js';
+import {validateAudioClips} from './studio-audio.js';
 import {validateAutomation,laneFromTake} from './studio-automation.js';
 export const PPQ=960,MAX_NOTES=4096;
 const int=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
@@ -29,6 +30,7 @@ export function validateSequence(s){
     for(const e of s.expression)if(!e||!int(e.tick,0,s.length)||!Array.isArray(e.data)||e.data.length!==3||![176,224].includes(e.data[0]&240)||!int(e.data[0],128,239)||!int(e.data[1],0,127)||!int(e.data[2],0,127))throw Error('Invalid MIDI expression');
   }
   if(s.expressionStart){const e=s.expressionStart;if(!int(e.part,0,3)||!int(e.pitch,-8192,8191)||!int(e.modulation,0,127)||!int(e.pedal,0,127))throw Error('Invalid expression start state');}
+  validateAudioClips(s.audioClips,s);
   validateAutomation(s.automation,s.length);
   return s;
 }

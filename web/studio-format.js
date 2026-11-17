@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Data-only Studio formats. No browser, audio device, or executable project content.
+import {validateAssets,validateAudioClips,MAX_ASSET_FRAMES} from './studio-audio.js';
 import {validateSequence} from './studio-sequence.js';
 import {automationTarget} from './studio-automation.js';
 export const RATE=44100,MAX_FRAMES=RATE*20*60,MAX_EVENTS=100000,MAX_JSON=16*1024*1024;
-export const MAGIC='WASWAN-STUDIO-1\n';
+export const MAGIC='WASWAN-STUDIO-1\n',MAGIC2='WASWAN-STUDIO-2\n';
 export const COMMANDS=new Set(['midi','key','pad','btn','enc','fader','wheel','velocity','master','panic','drum-hit','drums','analog','ui-control','enc-fine','enc-fine-absolute','voice-mode','voice-unison','voice-sustain','program-select','editor-set','editor-save','studio-note','studio-mixer']);
 const integer=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
 export function wavHeader(frames) {
@@ -34,8 +35,11 @@ export function validateContext(c) {
   return c;
 }
 export function validateProject(p) {
-  if(!p||p.format!=='waswan-studio-project'||p.version!==1||!integer(p.frames,0,MAX_FRAMES)||p.sampleRate!==RATE||p.channels!==2||!['complete','incomplete'].includes(p.status)||typeof p.name!=='string'||p.name.length>120||!Array.isArray(p.events)||p.events.length>MAX_EVENTS)throw Error('Invalid Studio project');
+  if(!p||p.format!=='waswan-studio-project'||![1,2].includes(p.version)||!integer(p.frames,0,MAX_FRAMES)||p.sampleRate!==RATE||p.channels!==2||!['complete','incomplete'].includes(p.status)||typeof p.name!=='string'||p.name.length>120||!Array.isArray(p.events)||p.events.length>MAX_EVENTS)throw Error('Invalid Studio project');
   if(p.sequence)validateSequence(p.sequence);else if(!p.frames)throw Error('Empty project requires a MIDI sequence');
+  validateAssets(p.assets);
+  if(p.version===1&&p.assets?.length)throw Error('Audio assets require project version 2');
+  if(p.sequence)validateAudioClips(p.sequence.audioClips,p.sequence,p.assets||[]);
   validateContext(p.context);
   if(p.sequenceContext)validateContext(p.sequenceContext);
   for(const e of p.events){
@@ -54,24 +58,34 @@ export function validateProject(p) {
   }
   return p;
 }
-export function projectBlob(project,audio) {
+export function projectBlob(project,audio,assets=[]) {
   validateProject(project);
   if(audio.size!==44+project.frames*4)throw Error('Audio size does not match project');
   const json=new TextEncoder().encode(JSON.stringify(project));if(json.length>MAX_JSON)throw Error('Project event limit exceeded');
   const length=new ArrayBuffer(4);new DataView(length).setUint32(0,json.length,true);
-  return new Blob([MAGIC,length,json,audio],{type:'application/octet-stream'});
+  const blobs=(project.assets||[]).map(meta=>{const asset=assets.find(a=>a.meta.id===meta.id);if(!asset||asset.audio.size!==meta.bytes)throw Error('Missing audio source');return asset.audio;});
+  return new Blob([project.version===2?MAGIC2:MAGIC,length,json,audio,...blobs],{type:'application/octet-stream'});
 }
 export async function readProject(file) {
   const prefix=MAGIC.length+4;
-  if(file.size<prefix+44||file.size>MAX_JSON+MAX_FRAMES*4+prefix+44)throw Error('Project file size exceeds limits');
+  if(file.size<prefix+44||file.size>MAX_JSON+(MAX_FRAMES+MAX_ASSET_FRAMES)*4+prefix+44*5)throw Error('Project file size exceeds limits');
   const header=await file.slice(0,prefix).arrayBuffer();
-  if(new TextDecoder().decode(header.slice(0,MAGIC.length))!==MAGIC)throw Error('Unsupported Studio project format');
+  const signature=new TextDecoder().decode(header.slice(0,MAGIC.length));
+  if(![MAGIC,MAGIC2].includes(signature))throw Error('Unsupported Studio project format');
   const length=new DataView(header).getUint32(MAGIC.length,true);
   if(!length||length>MAX_JSON||prefix+length+44>file.size)throw Error('Invalid project metadata length');
   const p=validateProject(JSON.parse(await file.slice(prefix,prefix+length).text()));
-  const audio=file.slice(prefix+length,file.size,'audio/wav');
+  if((p.version===2)!==(signature===MAGIC2))throw Error('Project version mismatch');
+  let at=prefix+length;const audio=file.slice(at,at+44+p.frames*4,'audio/wav');at+=audio.size;
   if(audio.size!==44+p.frames*4)throw Error('Truncated or oversized project audio');
   const expected=new Uint8Array(wavHeader(p.frames)),actual=new Uint8Array(await audio.slice(0,44).arrayBuffer());
   if(!actual.every((v,i)=>v===expected[i]))throw Error('Invalid project WAV header');
-  return {project:p,audio};
+  const assets=[];for(const meta of p.assets||[]){
+    const blob=file.slice(at,at+meta.bytes,'audio/wav');at+=meta.bytes;
+    const expected=new Uint8Array(wavHeader(meta.frames)),actual=new Uint8Array(await blob.slice(0,44).arrayBuffer());
+    if(blob.size!==meta.bytes||actual.length!==44||!actual.every((v,i)=>v===expected[i]))throw Error('Invalid audio source WAV');
+    assets.push({meta,audio:blob});
+  }
+  if(at!==file.size)throw Error('Truncated or oversized project assets');
+  return {project:p,audio,assets};
 }

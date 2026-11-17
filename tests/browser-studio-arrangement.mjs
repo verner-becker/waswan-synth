@@ -30,9 +30,9 @@ try{
  await button('Duplicate clip').click();assert.equal(await field('Arrangement clip').locator('option').count(),2);assert.equal(await field('Sequence notes').locator('option').count(),3);
  await field('Clip start beat').fill('9');await field('Clip part').selectOption('2');await button('Move clip').click();
  assert.equal(await field('Clip start beat').inputValue(),'9');assert.equal(await field('Clip part').inputValue(),'2');
- await button('Mute A').click();await button('Solo C').click();await button('Play MIDI').click();await page.waitForFunction(()=>audit.sequence?.playing);await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.sequenced&&v.part===2));
+ await button('Mute A').click();await button('Solo C').click();await button('Play arrangement').click();await page.waitForFunction(()=>audit.sequence?.playing);await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.sequenced&&v.part===2));
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.filter(v=>v.gate&&v.sequenced).every(v=>v.part===2)));
- await button('Stop MIDI').click();await page.waitForFunction(()=>!audit.sequence.playing);
+ await button('Stop arrangement').click();await page.waitForFunction(()=>!audit.sequence.playing);
  await field('Part A volume').press('End');await field('Part A volume').press('ArrowLeft');await page.waitForFunction(()=>audit.frame.studioMixer[0][0]===126);
  await field('Part A pan').press('End');await page.waitForFunction(()=>audit.frame.studioMixer[0][1]===64);
  // Open leaves live edits alone; explicit Apply has cancel/confirm and a token guard.
@@ -49,7 +49,7 @@ try{
  await midi(144,67,100);await page.waitForTimeout(300);await midi(128,67,0);await page.waitForTimeout(300);
  const mark=await page.evaluate(()=>audit.sent.length);await button('Finish overdub').click();await page.waitForFunction(()=>document.querySelector('.ww-note-list').options.length===3);
  assert(!(await page.evaluate(n=>audit.sent.slice(n),mark)).some(m=>m.t==='panic'||m.t==='reboot'));
- const wait=page.waitForEvent('download');await button('Save MIDI project').click();await(await wait).saveAs(`${root}/arrangement.wsproj`);const saved=await readProject(new Blob([fs.readFileSync(`${root}/arrangement.wsproj`)]));assert.equal(saved.project.sequence.notes.length,3);assert(saved.project.sequenceContext.parts.every(p=>p.patch.length===80));
+ const wait=page.waitForEvent('download');await button('Save composition project').click();await(await wait).saveAs(`${root}/arrangement.wsproj`);const saved=await readProject(new Blob([fs.readFileSync(`${root}/arrangement.wsproj`)]));assert.equal(saved.project.sequence.notes.length,3);assert(saved.project.sequenceContext.parts.every(p=>p.patch.length===80));
  await page.screenshot({path:`${root}/arrangement-desktop.png`,fullPage:true});await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:`${root}/arrangement-mobile.png`,fullPage:true});
  assert.deepEqual(errors,[]);const report={result:'PASS',chrome:await browser.version(),clips:true,duplicate:true,movePart:true,muteSolo:true,partMixer:true,offlineProjectLoad:true,contextCancelConfirm:true,fullToneSnapshot:true,overdub:true,sameContext:true,noPanic:true,mobileOverflow:false,physicalValidation:false,errors};fs.writeFileSync(`${root}/browser.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{await browser.close();}

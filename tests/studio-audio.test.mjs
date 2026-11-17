@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import assert from 'node:assert/strict';
+import {inspectWav,validateAssets,validateAudioClips,mixAudio,MAX_ASSET_FRAMES} from '../web/studio-audio.js';
+import {wavHeader,projectBlob,readProject} from '../web/studio-format.js';
+import {emptySequence} from '../web/studio-sequence.js';
+const frames=4410,samples=new Int16Array(frames*2);samples[20]=16384;samples[21]=-8192;
+const audio=new Blob([wavHeader(frames),samples]),info=await inspectWav(audio);assert.equal(info.frames,frames);assert.equal(info.channels,2);
+for(const corrupt of [audio.slice(0,audio.size-1),new Blob([new Uint8Array(44)]),new Blob([wavHeader(MAX_ASSET_FRAMES),new Uint8Array(4)])])await assert.rejects(inspectWav(corrupt));
+const wrong=new Uint8Array(await audio.arrayBuffer());new DataView(wrong.buffer).setUint32(24,48000,true);await assert.rejects(inspectWav(new Blob([wrong])),/44.1/);
+const mono=new Uint8Array(44+4),mv=new DataView(mono.buffer);mono.set(new Uint8Array(wavHeader(1)));mv.setUint32(4,40,true);mv.setUint16(22,1,true);mv.setUint32(28,88200,true);mv.setUint16(32,2,true);mv.setUint32(40,4,true);mv.setInt16(44,12345,true);mv.setInt16(46,-2222,true);assert.equal((await inspectWav(new Blob([mono]))).frames,2);
+const meta={id:'source',name:'Impulse',frames,bytes:audio.size},sequence=emptySequence(120);sequence.length=3840;sequence.loop=true;sequence.audioClips=[{id:'region',asset:meta.id,start:960,offset:10,frames:100,gain:.5,pan:.5,mute:false}];
+validateAssets([meta]);validateAudioClips(sequence.audioClips,sequence,[meta]);const mixed=mixAudio(sequence,[{meta,pcm:samples.buffer}]);assert.equal(mixed.frames,88200);assert.equal(mixed.left[22050],.125);assert.equal(mixed.right[22050],-.125);assert.equal(mixed.left[22049],0);assert.equal(mixed.left[22150],0);
+const overlap=structuredClone(sequence);overlap.audioClips.push({...overlap.audioClips[0],id:'copy'});assert.equal(mixAudio(overlap,[{meta,pcm:samples.buffer}]).left[22050],.25);
+assert.throws(()=>validateAssets([meta,meta]),/Invalid/);assert.throws(()=>validateAssets([{...meta,frames:MAX_ASSET_FRAMES,bytes:44+MAX_ASSET_FRAMES*4}, {...meta,id:'b'}]),/120/);
+for(const patch of [{start:3839},{offset:frames},{frames:MAX_ASSET_FRAMES},{gain:NaN},{pan:2},{asset:'missing'}])assert.throws(()=>validateAudioClips([{...sequence.audioClips[0],...patch}],sequence,[meta]));
+const context={version:1,tempo:120,master:900,session:'A'.repeat(240300),parts:Array.from({length:4},()=>({program:1,engine:0,parameters:Array(63).fill(0)}))};
+const project={format:'waswan-studio-project',version:2,frames:0,sampleRate:44100,channels:2,status:'complete',name:'Audio project',context,events:[],sequence,assets:[meta]};
+const blob=projectBlob(project,new Blob([wavHeader(0)]),[{meta,audio}]),restored=await readProject(blob);assert.deepEqual(restored.project,project);assert.deepEqual(new Uint8Array(await restored.assets[0].audio.arrayBuffer()),new Uint8Array(await audio.arrayBuffer()));
+await assert.rejects(readProject(blob.slice(0,blob.size-1)));await assert.rejects(readProject(new Blob([blob,new Uint8Array(1)])));assert.throws(()=>projectBlob(project,new Blob([wavHeader(0)]),[]),/Missing/);
+const invalid=structuredClone(project);invalid.sequence.audioClips[0].offset=frames;assert.throws(()=>projectBlob(invalid,new Blob([wavHeader(0)]),[{meta,audio}]));
+console.log(JSON.stringify({result:'PASS',wavValidation:true,monoStereo:true,exactFrameOffsetTrimGainBalance:true,overlap:true,budgets:true,projectV2Roundtrip:true,truncation:true}));

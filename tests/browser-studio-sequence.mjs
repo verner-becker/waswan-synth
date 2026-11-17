@@ -40,20 +40,20 @@ try{
  await field('Loop MIDI').check();await field('Metronome').check();
  // Studio must not release a live note at the same pitch on Stop.
  await send({t:'midi',st:144,d1:60,d2:100});await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced));
- await button('Play MIDI').click();await page.waitForFunction(()=>audit.sequence?.playing);
+ await button('Play arrangement').click();await page.waitForFunction(()=>audit.sequence?.playing);
  await page.waitForFunction(()=>{if(!audit.metroAnalyser)return false;const values=new Float32Array(512);audit.metroAnalyser.getFloatTimeDomainData(values);return values.some(v=>Math.abs(v)>.01);});
  await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.sequenced&&v.note===60));
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===60)));
  const mark=await page.evaluate(()=>audit.sent.length);
  for(const id of ['perf','studio','tones','diag','seq'])await page.locator(`[data-workspace="${id}"]`).click();
  assert.deepEqual(await page.evaluate(n=>audit.sent.slice(n),mark),[],'navigation sends no musical commands');
- await page.waitForFunction(()=>audit.sequence?.cycle>=1);await button('Stop MIDI').click();await page.waitForFunction(()=>!audit.sequence.playing);
+ await page.waitForFunction(()=>audit.sequence?.cycle>=1);await button('Stop arrangement').click();await page.waitForFunction(()=>!audit.sequence.playing);
  await page.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.gate||!v.sequenced));
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===60)));
  await send({t:'midi',st:128,d1:60,d2:0});
  assert.equal(await page.evaluate(()=>audit.contexts),1);
  const midi=await download('Export MIDI',`${root}/sequence.mid`);assert.equal(midi.toString('ascii',0,4),'MThd');
- const projectBytes=await download('Save MIDI project',`${root}/sequence.wsproj`),project=await readProject(new Blob([projectBytes]));
+ const projectBytes=await download('Save composition project',`${root}/sequence.wsproj`),project=await readProject(new Blob([projectBytes]));
  assert.equal(project.project.frames,0);assert.equal(project.project.sequence.notes.length,2);assert.equal(project.project.sequence.bpm,120);
  await button('Delete note').click();assert.equal(await field('Sequence notes').locator('option').count(),1);
  await page.locator('[data-workspace="studio"]').click();await field('Open Studio project').setInputFiles(`${root}/sequence.wsproj`);await page.waitForFunction(()=>document.querySelector('.ww-studio-status').textContent.includes('Project opened'));

@@ -9,7 +9,7 @@ assert.deepEqual(Array.from(pcm16(new Float32Array([-2,-1,-.5,0,.5,1,2]))),[-327
 assert.equal(pcm16(new Float32Array([.75]))[0],24576,'preserve the engine Q15 samples without positive half-scale compression');
 const q15=Float32Array.from({length:65535},(_,i)=>(i-32767)/32768),integers=pcm16(q15);for(let i=0;i<integers.length;i++)assert.equal(integers[i],i-32767);
 assert.throws(()=>pcm16(new Float32Array([NaN])));assert.throws(()=>wavHeader(MAX_FRAMES+1));
-for(const edit of [p=>p.version=2,p=>p.frames=-1,p=>p.frames=MAX_FRAMES+1,p=>p.events=Array(MAX_EVENTS+1).fill(null),p=>p.events[0].data[1]=128,p=>p.events[0].frame=129,p=>p.events[1].command.t='eval',p=>p.context.parts[0].parameters=[],p=>p.events[1].command.value={code:'unsafe'}]){
+for(const edit of [p=>p.version=3,p=>p.frames=-1,p=>p.frames=MAX_FRAMES+1,p=>p.events=Array(MAX_EVENTS+1).fill(null),p=>p.events[0].data[1]=128,p=>p.events[0].frame=129,p=>p.events[1].command.t='eval',p=>p.context.parts[0].parameters=[],p=>p.events[1].command.value={code:'unsafe'}]){
   const p=structuredClone(project);edit(p);assert.throws(()=>validateProject(p));
 }
 await assert.rejects(()=>readProject(new Blob(['bad'])));

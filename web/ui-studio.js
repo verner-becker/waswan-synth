@@ -56,7 +56,7 @@ export class StudioWorkspace {
     const openLabel=el('label','ww-studio-open','Open project ');openLabel.append(this.open);
     this.counter=el('p','ww-studio-counter');this.context=el('p','ww-muted');this.events=el('div','ww-studio-events');
     this.node.append(this.status,controls,this.mp3Status,openLabel,this.counter,
-      el('p','ww-muted','Records the synth after master and effects, before monitoring mute. Stop ends capture without releasing notes; wait for effect tails before stopping.'),
+      el('p','ww-muted','Records the synth after master/effects plus playing audio clips, before monitoring mute. Stop ends capture without releasing notes; wait for effect tails before stopping.'),
       this.context,el('p','ww-muted','Local recovery is not a backup. Save a project file to preserve the take. Opening a project does not replace the live instrument. Maximum: 20 minutes.'),
       el('h3','','Recorded events'),el('p','ww-muted','MIDI input and instrument actions are listed separately. Legacy arp and sequence notes are not transcribed. A MIDI control waiting for pickup may leave the sound unchanged.'),this.events);
     this.draw();

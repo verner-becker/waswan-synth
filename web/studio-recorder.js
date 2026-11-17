@@ -24,6 +24,9 @@ export class StudioRecorder {
       node.port.addEventListener('message',receive);node.port.postMessage({t:'studio-context',request});
     });
   }
+  captureBus(){
+    const {context,node}=this.bridge.getAudio();if(!this.mixBus){this.mixBus=context.createGain();node.connect(this.mixBus);}return this.mixBus;
+  }
   async start(){
     if(this.busy)return;
     const {context,node}=this.bridge.getAudio();
@@ -42,7 +45,7 @@ export class StudioRecorder {
       this.worker.onmessage=({data:m})=>void this.receive(m);
       this.capture=new AudioWorkletNode(context,'waswan-studio-capture',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2],channelCount:2,channelCountMode:'explicit'});
       this.capture.onprocessorerror=()=>this.stop('capture-error');
-      node.connect(this.capture);this.capture.connect(context.destination);
+      this.captureSource=this.captureBus();this.captureSource.connect(this.capture);this.capture.connect(context.destination);
       const events=new MessageChannel();
       node.port.postMessage({t:'studio-events-connect',port:events.port1},[events.port1]);
       this.frames=0;this.eventCount=0;
@@ -54,7 +57,7 @@ export class StudioRecorder {
   async receive(m){
     if(m.t==='started'){
       clearTimeout(this.startTimer);this.id=m.id;this.firstFrame=m.first;this.take=null;if(this.state==='finalizing')return;
-      this.state='recording';this.message='Recording · synth output before monitoring mute';
+      this.state='recording';this.message='Recording · synth and arrangement audio before monitoring mute';
       listenStudioInput(raw=>{
         if(this.state!=='recording'||!raw.running||raw.data[0]<128||raw.data[0]>=240)return;
         const now=performance.now(),receivedFrame=Math.round(this.audioContext.currentTime*RATE);
@@ -80,7 +83,7 @@ export class StudioRecorder {
   stopAtFrame(frame){if(this.state==='recording'&&Number.isSafeInteger(frame))this.worker.postMessage({t:'stop-at',frame,reason:'arrangement-end'});}
   cleanup(){
     clearTimeout(this.startTimer);clearTimeout(this.stopTimer);listenStudioInput(null);
-    if(this.capture){try{this.instrument.disconnect(this.capture);}catch{}try{this.capture.disconnect();}catch{}this.capture=null;}
+    if(this.capture){try{this.captureSource.disconnect(this.capture);}catch{}try{this.capture.disconnect();}catch{}this.capture=null;}
     this.instrument?.port.postMessage({t:'studio-events-disconnect'});
     this.audioContext?.removeEventListener('statechange',this.suspension);
     this.worker?.terminate();this.worker=null;
@@ -153,7 +156,7 @@ export class StudioRecorder {
   }
   download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   exportWav(){if(this.take?.project.frames&&!this.busy)this.download(this.take.audio,'waswan-take.wav');}
-  exportProject(){if(this.take&&!this.busy)this.download(projectBlob(this.take.project,this.take.audio),'waswan-project.wsproj');}
+  exportProject(){if(this.take&&!this.busy)this.download(projectBlob(this.take.project,this.take.audio,this.take.assets),'waswan-project.wsproj');}
   exportMp3(){
     if(this.busy||this.encoding||!this.take?.project.frames)return;
     const take=this.take;this.encoding=true;this.mp3Source=take.project.name;this.mp3Message='Encoding MP3 · '+this.mp3Source;

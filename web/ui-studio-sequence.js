@@ -3,22 +3,23 @@ import {el,action,Panel} from './ui-primitives.js';
 import {PPQ,emptySequence,validateSequence,inputNotes,compileNotes,smf,musicalPosition} from './studio-sequence.js';
 import {RATE,MAX_FRAMES} from './studio-format.js';
 import {ArrangementEditor} from './ui-studio-arrangement.js';
+import {AudioEditor} from './ui-studio-audio.js';
 import {AutomationEditor} from './ui-studio-automation.js';
 const pitch=n=>['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'][n%12]+(Math.floor(n/12)-1);
 export class SequenceWorkspace {
   constructor(bridge,recorder){
     this.bridge=bridge;this.recorder=recorder;this.sequence=emptySequence();this.history=[];this.selected=null;this.playing=false;this.grid=PPQ/4;
-    recorder.beforeReplace=()=>{this.replacing=true;if(this.playing)this.stopMidi();};
-    recorder.canApplyContext=()=>!this.playing&&!this.legacyPlaying;
-    recorder.prepareProject=async()=>{if(!this.sequence.notes.length&&!this.sequence.clips?.length)return;if(this.bridge.getAudio().node)await this.storeProject();else if(recorder.take)recorder.take.project.sequence=structuredClone(this.sequence);};
+    recorder.beforeReplace=()=>{this.replacing=true;if(this.playing||this.starting)this.stopMidi();};
+    recorder.canApplyContext=()=>!this.playing&&!this.starting&&!this.legacyPlaying;
+    recorder.prepareProject=async()=>{if(!this.sequence.notes.length&&!this.sequence.clips?.length&&!this.sequence.audioClips?.length)return;if(this.bridge.getAudio().node)await this.storeProject();else if(recorder.take){recorder.take.project.sequence=structuredClone(this.sequence);this.audio.attach(recorder.take);}};
     const previous=recorder.onChange;recorder.onChange=r=>{previous(r);this.update({t:'studio-project'});};
-    this.node=Panel('MIDI sequence','Piano roll · four instrument parts · current live timbres');this.node.classList.add('ww-sequence');
+    this.node=Panel('Studio arrangement','MIDI and audio clips · four instrument parts · current live timbres');this.node.classList.add('ww-sequence');
     this.status=el('p','ww-sequence-status','Create notes or use the MIDI input from a recorded take.');this.status.setAttribute('role','status');
     const run=task=>void Promise.resolve().then(task).catch(error=>{this.status.textContent=error.message;});this.run=run;
     const tools=el('div','ww-studio-actions');
-    this.play=action('Play MIDI',()=>run(()=>this.start()),'ww-primary');this.stop=action('Stop MIDI',()=>this.stopMidi());
+    this.play=action('Play arrangement',()=>run(()=>this.start()),'ww-primary');this.stop=action('Stop arrangement',()=>this.stopMidi());
     this.load=action('Use take input notes',()=>run(()=>{if(!recorder.take)throw Error('Record or open a take first');const notes=inputNotes(recorder.take.project);if(!notes.notes.length)throw Error('No external MIDI note input in this take. Virtual controls remain in the recorded event list.');this.replace(notes);}));
-    this.save=action('Save MIDI project',()=>run(async()=>{await this.storeProject();recorder.exportProject();}));
+    this.save=action('Save composition project',()=>run(async()=>{await this.storeProject();recorder.exportProject();}));
     this.export=action('Export MIDI',()=>run(()=>recorder.download(new Blob([smf(this.sequence)],{type:'audio/midi'}),'waswan-sequence.mid')));
     this.undo=action('Undo MIDI edit',()=>{if(this.history.length){const mix=this.sequence.tracks;this.sequence=this.history.pop();if(mix){this.sequence.tracks??=mix.map(t=>({...t,mute:false,solo:false}));for(let p=0;p<4;p++){this.sequence.tracks[p].level=mix[p].level;this.sequence.tracks[p].pan=mix[p].pan;}}if(!this.sequence.notes.some(n=>n.id===this.selected))this.selected=null;this.changed();}});
     this.render=action('Record arrangement',()=>run(()=>this.recordArrangement()));
@@ -58,10 +59,11 @@ export class SequenceWorkspace {
     this.list=el('select','ww-note-list');this.list.size=5;this.list.setAttribute('aria-label','Sequence notes');this.list.onchange=()=>{this.selected=this.list.value;this.draw();};this.node.append(this.list);
     this.arrangement=new ArrangementEditor(this);this.node.insertBefore(this.arrangement.node,this.scroll);
     this.automation=new AutomationEditor(this);this.node.append(this.automation.node);
+    this.audio=new AudioEditor(this);this.node.append(this.audio.node);
     this.draw();this.scroll.scrollTop=(127-72)*12;
   }
   edit(change,allowPlaying=false){
-    if((this.playing||this.rendering)&&!allowPlaying)return;
+    if((this.playing||this.rendering||this.starting)&&!allowPlaying)return;
     try{const next=structuredClone(this.sequence);change(next);this.replace(validateSequence(next),allowPlaying);}catch(error){this.status.textContent=error.message;this.draw();}
   }
   replace(next,allowPlaying=false){
@@ -75,24 +77,31 @@ export class SequenceWorkspace {
   }
   remove(){this.edit(s=>s.notes=s.notes.filter(n=>n.id!==this.selected));this.selected=null;this.draw();}
   async storeProject(){
-    if(!this.bridge.getAudio().node&&this.recorder.take){this.recorder.take.project.sequence=structuredClone(this.sequence);this.take=this.recorder.take;return;}
+    if(!this.bridge.getAudio().node&&this.recorder.take){this.recorder.take.project.sequence=structuredClone(this.sequence);this.audio.attach(this.recorder.take);this.take=this.recorder.take;return;}
     this.saving=true;
-    try{await this.recorder.ensureProject(this.sequence);this.recorder.take.project.sequence=structuredClone(this.sequence);this.take=this.recorder.take;}
+    try{await this.recorder.ensureProject(this.sequence);this.recorder.take.project.sequence=structuredClone(this.sequence);this.audio.attach(this.recorder.take);this.take=this.recorder.take;}
     finally{this.saving=false;}
   }
   async start(allowEmpty=false,onePass=false){
     if(this.legacyPlaying)throw Error('Stop the Legacy sequencer before playing Studio MIDI');
     if(this.frame?.midiMode)throw Error('Return to synth mode in Legacy SMK before playing MIDI');
     const {context,node,gain}=this.bridge.getAudio();if(!context||!node)throw Error('Start audio before playing MIDI');
-    const data=compileNotes(this.sequence);if(!data.events.length&&!data.automation.length&&!data.expression.length&&!allowEmpty)throw Error('Add notes or automation first');if(onePass)data.loop=false;
+    if(this.starting||this.playing)throw Error('Studio transport is already preparing or playing');
+    const data=compileNotes(this.sequence);if(!data.events.length&&!data.automation.length&&!data.expression.length&&!this.sequence.audioClips?.length&&!allowEmpty)throw Error('Add notes or automation first');if(onePass)data.loop=false;
+    const token=(this.startToken||0)+1;this.startToken=token;this.expectedStartFrame=null;this.starting=true;this.draw();
+    try{
     await context.resume();
+    const audioBuffer=await this.audio.prepare(context);if(audioBuffer)data.duration=data.length;
     if(this.click.checked){
       if(!this.metronome){await context.audioWorklet.addModule(new URL('./studio-metronome.js',import.meta.url));this.metronome=new AudioWorkletNode(context,'waswan-studio-metronome',{numberOfInputs:0,outputChannelCount:[2]});this.metronome.connect(gain);}
     }
+    if(this.startToken!==token)throw Error('Studio start cancelled');
     const startFrame=Math.ceil((context.currentTime*RATE+2048)/128)*128;
+    this.expectedStartFrame=startFrame;this.audio.play(context,gain,audioBuffer,startFrame,data.loop);
     node.port.postMessage({t:'studio-sequence-start',data,startFrame});
     if(this.click.checked)this.metronome.port.postMessage({t:'start',bpm:this.sequence.bpm,meter:this.sequence.meter,startFrame});
     return startFrame;
+    }finally{if(this.startToken===token)this.starting=false;this.draw();}
   }
   async recordArrangement(){
     const r=this.recorder;if(this.playing||r.busy||this.rendering)throw Error('Stop the current transport before recording the arrangement');
@@ -102,33 +111,35 @@ export class SequenceWorkspace {
     try{await r.start();while(r.state==='starting')await new Promise(requestAnimationFrame);if(r.state!=='recording')throw Error(r.message);const start=await this.start(true,true);if(start-r.firstFrame+this.rendering.length+this.rendering.tail>MAX_FRAMES)throw Error('Recording lead-in exceeds the available duration');r.stopAtFrame(start+this.rendering.length+this.rendering.tail);}
     catch(error){this.rendering=null;this.stopMidi();if(r.state==='recording')r.stop('arrangement-start-error');this.draw();throw error;}
   }
-  stopMidi(){this.bridge.getAudio().node?.port.postMessage({t:'studio-sequence-stop'});this.metronome?.port.postMessage({t:'stop'});}
+  stopMidi(){this.startToken=(this.startToken||0)+1;this.starting=false;this.audio?.stop();this.bridge.getAudio().node?.port.postMessage({t:'studio-sequence-stop'});this.metronome?.port.postMessage({t:'stop'});}
   update(m){
     this.arrangement?.update(m);
     if(m.t==='frame'){this.frame=m;this.legacyPlaying=!!m.instrument?.playing;if(this.playing&&this.legacyPlaying)this.stopMidi();}
     if(m.t==='studio-sequence-state'){
+      if((this.starting&&this.expectedStartFrame===null)||(m.startFrame!==undefined&&this.expectedStartFrame!=null&&m.startFrame!==this.expectedStartFrame))return;
       this.playing=m.playing;this.position=m.frame;this.status.textContent=m.error||`${m.playing?'Playing MIDI':'MIDI stopped'} · ${musicalPosition(m.frame,this.sequence)} · bars : beats : ticks${m.cycle?' · loop '+(m.cycle+1):''}`;
       if(m.reason==='started'){this.transportStartFrame=m.startFrame;if(this.rendering)this.recorder.stopAtFrame(m.startFrame+this.rendering.length+this.rendering.tail);}
       if(['instrument-unavailable','automation-unavailable','expression-unavailable'].includes(m.reason)){this.status.textContent='Studio stopped · check the part engine and finish any pending tone operation';if(this.rendering)this.recorder.stop('arrangement-playback-error');}
       if(m.playing&&m.reason==='started'&&this.click.checked)this.metronome?.port.postMessage({t:'start',bpm:this.sequence.bpm,meter:this.sequence.meter,startFrame:m.startFrame});
-      if(!m.playing)this.metronome?.port.postMessage({t:'stop'});this.draw();
+      if(!m.playing){this.audio?.stop();this.metronome?.port.postMessage({t:'stop'});}this.draw();
     }
-    if(m.t==='error'){this.playing=false;this.metronome?.port.postMessage({t:'stop'});this.draw();}
+    if(m.t==='error'){this.audio?.stop();this.playing=false;this.metronome?.port.postMessage({t:'stop'});this.draw();}
     const take=this.recorder.take;
-    if(take!==this.take){this.take=take;if(this.replacing&&!this.saving){try{this.sequence=structuredClone(validateSequence(take?.project.sequence||emptySequence(take?.project.context.tempo)));this.selected=null;this.history=[];this.replacing=false;this.draw();}catch(error){this.status.textContent=error.message;}}}
-    if(m.t==='ready'||m.t==='frame')this.play.disabled=this.playing||this.bridge.getAudio().context?.state!=='running';
+    if(take!==this.take){this.take=take;if(this.replacing&&!this.saving){try{this.sequence=structuredClone(validateSequence(take?.project.sequence||emptySequence(take?.project.context.tempo)));this.selected=null;this.history=[];this.audio.adopt(take);this.replacing=false;this.draw();}catch(error){this.status.textContent=error.message;}}}
+    if(m.t==='ready'||m.t==='frame')this.play.disabled=this.playing||this.starting||this.bridge.getAudio().context?.state!=='running';
     if(m.t==='studio-project'){if(this.rendering&&['ready','error'].includes(this.recorder.state))this.rendering=null;this.draw();}
   }
   draw(){
+    this.audio?.draw();
     this.arrangement?.draw();
     this.automation?.draw();
     const s=this.sequence,n=s.notes.find(n=>n.id===this.selected);this.bpm.value=s.bpm;this.length.value=s.length/PPQ;this.meter.value=s.meter.join('/');this.loop.checked=s.loop;
-    this.stop.disabled=!this.playing;this.play.disabled=this.playing||!this.bridge.getAudio().node;this.undo.disabled=this.playing||!this.history.length;
+    this.stop.disabled=!this.playing&&!this.starting;this.play.disabled=this.playing||this.starting||!this.bridge.getAudio().node;this.undo.disabled=this.playing||this.starting||!this.history.length;
     this.save.disabled=this.recorder.busy;
-    this.render.disabled=this.playing||this.recorder.busy||!!this.rendering||!this.bridge.getAudio().node;this.tail.disabled=!!this.rendering;
-    for(const input of [this.bpm,this.length,this.meter,this.loop,this.click,this.load,this.apply,this.delete,this.quantize,this.part,this.note,this.velocity,this.startBeat,this.duration])input.disabled=this.playing||!!this.rendering;
+    this.render.disabled=this.playing||this.starting||this.recorder.busy||!!this.rendering||!this.bridge.getAudio().node;this.tail.disabled=!!this.rendering;
+    for(const input of [this.bpm,this.length,this.meter,this.loop,this.click,this.load,this.apply,this.delete,this.quantize,this.part,this.note,this.velocity,this.startBeat,this.duration])input.disabled=this.playing||this.starting||!!this.rendering;
     if(n){this.part.value=n.part;this.note.value=n.note;this.velocity.value=n.velocity;this.startBeat.value=1+n.start/PPQ;this.duration.value=n.duration/PPQ;}
-    this.apply.disabled=this.playing||!n;this.delete.disabled=this.playing||!n;
+    this.apply.disabled=this.playing||this.starting||!!this.rendering||!n;this.delete.disabled=this.apply.disabled;
     if(this.listSequence!==s){this.listSequence=s;this.list.replaceChildren();for(const note of s.notes)this.list.add(new Option(`Part ${'ABCD'[note.part]} · ${pitch(note.note)} · beat ${(1+note.start/PPQ).toFixed(2)} · velocity ${note.velocity}`,note.id));}
     this.list.value=this.selected||'';
     if(this.node.hidden)return;

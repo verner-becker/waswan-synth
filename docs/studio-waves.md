@@ -22,7 +22,7 @@ Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83
 | 2 — sequenciador MIDI editável | Piano roll, notas/velocity, transporte musical, loop, reprodução MIDI e exportação SMF | Concluída em software; [fechamento](studio-wave-2.md), 14 suites Node e sete Chrome |
 | 3 — composição por camadas | Pistas e clipes, overdub, mover/duplicar, mute/solo, timbres compatíveis com o motor | Concluída em software; [fechamento](studio-wave-3.md), 16 suites Node e oito Chrome |
 | 4 — automação e finalização | Automação editável e exportação da composição; MP3 após avaliar codificador/licença/custo | Concluída em software; [fechamento](studio-wave-4.md), 17 suites Node, nove Chrome e MP3 de 20 minutos |
-| 5 — pistas de áudio | Importação, posicionamento, corte, ganho e reprodução sincronizada | Continuidade autorizada após critérios anteriores |
+| 5 — pistas de áudio | Importação, posicionamento, corte, ganho e reprodução sincronizada | Concluída em software; [fechamento](studio-wave-5.md), 18 suites Node, onze Chrome e carga no limite |
 
 A numeração não aprova arquitetura nem promete datas ou quantidades de pistas. O marco de versão 0.4 será decidido junto com o escopo da onda 1.
 
@@ -37,7 +37,7 @@ A numeração não aprova arquitetura nem promete datas ou quantidades de pistas
 - [x] Separar viabilidade comprovada de hipóteses, testes pendentes e validação física.
 - [x] Recomendar escopo e critérios mensuráveis para a onda 1; submeter as decisões de produto ao usuário no relatório de entrega.
 
-A continuidade por frames da captura foi verificada; alinhamento MIDI/áudio, ensaio de 20 minutos e latência física continuam pendentes, explicitamente fora da comprovação desta prova curta. Não confundir conclusão do diagnóstico com certificação dessas capacidades.
+Na prova curta da onda 0, somente a continuidade por frames foi verificada. Alinhamento MIDI/áudio e ensaio de 20 minutos foram tratados nas ondas seguintes; latência física continua pendente. Não confundir conclusão do diagnóstico com certificação dessas capacidades.
 
 Resultados e comandos: [diagnóstico da onda 0](studio-wave-0.md). Evidências locais em `.local/validation/studio-wave-0/`.
 
@@ -63,14 +63,14 @@ Usar IDs estáveis e escalas originais para automação; distinguir eventos MIDI
 
 Administrar arquivos de áudio e reprodução por blocos; validar importação, sincronização, memória e recuperação. Gravar a saída do synth não implica que já exista um editor de áudio. Time stretch, plugins nativos e gravação de microfone não estão aprovados.
 
-## Decisões abertas para fechar o plano
+## Decisões inicialmente abertas e resolução
 
-1. Escopo da onda 1: captura do áudio final e quais fontes/eventos precisam acompanhar a tomada.
-2. Semântica de ganho, mute, fim de gravação e caudas de efeitos.
-3. Contexto salvo: snapshot de timbres/estado, relação com sessão legada e limites de reprodução fiel.
-4. Plataforma inicial, duração mínima suportada, carga de validação e limites aceitáveis de sincronização/latência.
-5. Reutilização e convivência com sequenciador/arp existentes; papel das quatro partes na composição futura.
-6. O que deve ser validado pelo usuário com controlador e saída de áudio físicos antes de integrar.
+1. Resolvido na [onda 1](studio-wave-1.md). Escopo: captura do áudio final e quais fontes/eventos precisam acompanhar a tomada.
+2. Resolvido nas ondas 1 e 4. Semântica de ganho, mute, fim de gravação e caudas de efeitos.
+3. Resolvido nas ondas 1 e 3. Contexto salvo: snapshot de timbres/estado, relação com sessão legada e limites de reprodução fiel.
+4. Chrome desktop, limites documentados e ensaios nas ondas 1, 4 e 5. Plataforma inicial, duração mínima suportada, carga de validação e limites aceitáveis de sincronização/latência.
+5. Resolvido nas ondas 2 e 3. Reutilização e convivência com sequenciador/arp existentes; papel das quatro partes na composição futura.
+6. Pendente da avaliação física pelo usuário: o que deve ser validado pelo usuário com controlador e saída de áudio físicos antes de integrar.
 
 Ear e Academy ficam futuros. Preparação inicial: dados musicais claros e versionados, sem arquitetura de plugins antecipada.
 
@@ -90,7 +90,7 @@ Ear e Academy ficam futuros. Preparação inicial: dados musicais claros e versi
 
 Ao retomar: ler este arquivo, o diagnóstico, status Git e evidências; continuar de onde parou. Antes de implementar outra onda, registrar escopo aprovado e seus critérios. Ao encerrar uma etapa, registrar resultados, limitações e próximo passo. Trabalho autônomo ocorre durante a execução da sessão; este documento não cria agendamento nem processo em segundo plano.
 
-Próximo passo: implementar e validar a onda 5. Branch de implementação `feat/studio-waves`, baseada na main conferida e nos registros da onda 0. Sem merge automático.
+Próximo passo: avaliação musical física com o [roteiro de uso](studio-guide.md); ondas 0–5 concluídas em software. Integração na main continua sujeita à aprovação explícita. Branch de implementação `feat/studio-waves`, baseada na main conferida e nos registros da onda 0. Sem merge automático.
 
 ## Decisões adotadas para a onda 1
 
@@ -100,3 +100,7 @@ Próximo passo: implementar e validar a onda 5. Branch de implementação `feat/
 - Salvar áudio como referência e snapshot musical vivo junto da sessão legada; abrir projeto não substitui o estado do synth. Reprodução MIDI/restauração musical explícita será tratada nas ondas seguintes.
 - Persistência local de recuperação separada do arquivo de projeto exportado. Importação é somente dados validados.
 - Registro de fechamento por onda: implementado, efetivamente testado, limitações, decisões e próximo passo. Atualizar o estado e vincular evidências antes de avançar.
+
+## Escopo adotado para a onda 5
+
+Importar PCM16 WAV 44,1 kHz, quatro fontes/120 segundos, até 32 regiões, corte não destrutivo, posição/ganho/balanço/mute, loop e captura com MIDI. Mistura preparatória em Worker com buffers limitados; projeto v2 inclui fontes, conserva leitura v1 e cópia local recuperável. Sem microfone/time stretch. [Detalhes e limites](studio-wave-5.md); [roteiro de uso e validação física](studio-guide.md).
