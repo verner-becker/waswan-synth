@@ -18,11 +18,11 @@ Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83
 | Onda | Resultado utilizável | Estado |
 |---|---|---|
 | 0 — diagnóstico e viabilidade | Caminhos de áudio/MIDI, relógios, limites, riscos e escopo recomendado para a primeira entrega | Concluída como diagnóstico e prova curta; limites e decisões da onda 1 documentados |
-| 1 — gravador de performances | Capturar áudio estéreo + eventos, ouvir o áudio, exportar WAV e recuperar a tomada | Proposta; aguarda fechamento de escopo |
-| 2 — sequenciador MIDI editável | Piano roll, notas/velocity, transporte musical, loop, reprodução MIDI e exportação SMF | Proposta |
-| 3 — composição por camadas | Pistas e clipes, overdub, mover/duplicar, mute/solo, timbres compatíveis com o motor | Proposta |
-| 4 — automação e finalização | Automação editável e exportação da composição; MP3 após avaliar codificador/licença/custo | Proposta |
-| 5 — pistas de áudio | Importação, posicionamento, corte, ganho e reprodução sincronizada | Proposta |
+| 1 — gravador de performances | Capturar áudio estéreo + eventos, ouvir o áudio, exportar WAV e recuperar a tomada | Concluída em software; [fechamento](studio-wave-1.md), ensaio real de 20 minutos e limitações documentadas |
+| 2 — sequenciador MIDI editável | Piano roll, notas/velocity, transporte musical, loop, reprodução MIDI e exportação SMF | Continuidade autorizada após critérios da onda 1 |
+| 3 — composição por camadas | Pistas e clipes, overdub, mover/duplicar, mute/solo, timbres compatíveis com o motor | Continuidade autorizada; respeitar limites do motor |
+| 4 — automação e finalização | Automação editável e exportação da composição; MP3 após avaliar codificador/licença/custo | Continuidade autorizada; avaliar MP3 antes de acrescentar dependência |
+| 5 — pistas de áudio | Importação, posicionamento, corte, ganho e reprodução sincronizada | Continuidade autorizada após critérios anteriores |
 
 A numeração não aprova arquitetura nem promete datas ou quantidades de pistas. O marco de versão 0.4 será decidido junto com o escopo da onda 1.
 
@@ -83,9 +83,20 @@ Ear e Academy ficam futuros. Preparação inicial: dados musicais claros e versi
 | 2026-11-17 | Questionar propostas e pedir decisão diante de bloqueio, sem loops de tentativas | Solicitação explícita do usuário |
 | 2026-11-17 | Executar a onda 0 | “vamos a onda 0” |
 | 2026-11-17 | Recomendar navegador, gravador por blocos antes do mute e tratamento próprio do contexto vivo | Diagnóstico e sondagens da onda 0; recomendações aguardam aprovação para implementação |
+| 2026-11-17 | Seguir pelas ondas planejadas, adotando recomendações da onda 0 e decisões rotineiras dentro do escopo | “Pode prosseguir” do usuário |
+| 2026-11-17 | Fechar cada onda com implementado, efetivamente testado, limitações, decisões e próximo passo | Recomendação adicional do usuário |
 
 ## Continuidade
 
 Ao retomar: ler este arquivo, o diagnóstico, status Git e evidências; continuar de onde parou. Antes de implementar outra onda, registrar escopo aprovado e seus critérios. Ao encerrar uma etapa, registrar resultados, limitações e próximo passo. Trabalho autônomo ocorre durante a execução da sessão; este documento não cria agendamento nem processo em segundo plano.
 
-Próximo passo: fechar com o usuário as quatro decisões ao fim de `studio-wave-0.md` e autorizar o escopo da onda 1. Não iniciar a onda 1 apenas porque o diagnóstico foi concluído.
+Próximo passo: implementar e validar a onda 2, depois avançar incrementalmente pelas demais. Branch de implementação `feat/studio-waves`, baseada na main conferida e nos registros da onda 0. Sem merge automático.
+
+## Decisões adotadas para a onda 1
+
+- Chrome/Chromium desktop inicialmente; uma tomada por vez, duração máxima de 20 minutos e limites explícitos de eventos e arquivos.
+- Captura estéreo depois de master/FX e antes do mute de escuta. Stop termina a captura, sem panic, release ou cauda automática; o músico pode esperar a cauda antes de parar.
+- Registrar entrada MIDI suportada e comandos encaminhados ao instrumento, com origem e tempos distintos. Não prometer transcrição das notas geradas internamente nem confundir comando observado com parâmetro efetivamente alterado.
+- Salvar áudio como referência e snapshot musical vivo junto da sessão legada; abrir projeto não substitui o estado do synth. Reprodução MIDI/restauração musical explícita será tratada nas ondas seguintes.
+- Persistência local de recuperação separada do arquivo de projeto exportado. Importação é somente dados validados.
+- Registro de fechamento por onda: implementado, efetivamente testado, limitações, decisões e próximo passo. Atualizar o estado e vincular evidências antes de avançar.

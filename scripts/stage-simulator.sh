@@ -14,6 +14,7 @@ cp ".local/build/waswan-$voices.wasm" .local/www/simulator/obervave-voice.wasm
 cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
 cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
 cp web/ui-*.js web/ui-foundation.css .local/www/simulator/
+cp web/studio-*.js .local/www/simulator/
 cp web/midi.js web/midi-diagnostic.js web/midi-profile.js web/midi-profile-panel.js web/midi-profile.css web/engine.js web/polyphony-panel.js web/polyphony.css web/dsp-stats.js web/dsp-worklet.js web/dsp-monitor.js web/dsp-monitor.css .local/www/simulator/
 # One explicit hook in the derived app; never edit the submodule.
 python3 - <<'PY'
@@ -26,6 +27,10 @@ assert w.count('class OberVave extends') == 1
 assert w.count("registerProcessor('obervave-smk37',OberVave);") == 1
 (root / 'worklet-original.js').write_text(w.replace('class OberVave extends', 'export class OberVave extends').replace("registerProcessor('obervave-smk37',OberVave);", ''))
 (root / 'worklet.js').write_text("// SPDX-License-Identifier: GPL-3.0-only\nimport './dsp-worklet.js';\n")
+midi = root / 'midi-original.js'
+text = midi.read_text()
+assert text.count('this.message(event.data)') == 1
+midi.write_text(text.replace('this.message(event.data)', 'this.message(event.data,event.timeStamp)'))
 version = {'referenceCommit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(), 'dirty':bool(subprocess.check_output(['git','status','--porcelain'],text=True).strip()), 'baseCommit':'5edc7449942703b8e893bb112657f7a024354648'}
 (root / 'dsp-version.js').write_text('export const build='+json.dumps(version)+';\n')
 p = root / 'app.js'

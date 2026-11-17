@@ -6,6 +6,7 @@ import {MidiProfile} from './midi-profile.js';
 import {mountProfilePanel} from './midi-profile-panel.js';
 import {mountDspMonitor} from './dsp-monitor.js';
 import {mountPolyphonyPanel} from './polyphony-panel.js';
+import {observeStudioInput} from './studio-events.js';
 
 export class MidiInputController extends OriginalMidiInputController {
   constructor(options) {
@@ -21,8 +22,9 @@ export class MidiInputController extends OriginalMidiInputController {
       mountDspMonitor(this);
     }
   }
-  message(data) {
+  message(data,timeStamp) {
     const running=this.isRunning(),listening=this.isListening();
+    observeStudioInput(data,timeStamp,{running,listening});
     const binding=this.diagnostic.active?this.profile.bindings.find(b=>b.port===this.input?.name&&b.channel===(data?.[0]&15)&&b.cc===data?.[1]):null;
     const entry=this.diagnostic.active?this.diagnostic.input(data,{running,listening,profileEnabled:this.profile.enabled,
       learning:!!this.profile.learning,target:binding?.target??null,mode:binding?.mode??null,behavior:binding?.behavior??null,

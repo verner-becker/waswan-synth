@@ -6,7 +6,7 @@
 
 ## Studio Evolution
 
-Track scope, approvals, wave status, decisions, and handoffs in `docs/studio-waves.md`; keep technical evidence for wave 0 in `docs/studio-wave-0.md`. The user has authorized wave 0 (investigation and isolated feasibility checks), not the implementation of all subsequent waves. Prefer the browser, subject to measured feasibility. Challenge proposals when evidence warrants it. If a real blocker persists or a decision exceeds approved scope, preserve the work and ask the user for a decision rather than retrying indefinitely. Integration into `main`, additional DSP capabilities, and polyphony changes still require explicit approval.
+Track scope, approvals, wave status, decisions, and handoffs in `docs/studio-waves.md`; keep technical evidence for wave 0 in `docs/studio-wave-0.md`. The user has authorized continuing through the planned waves, starting with wave 1 and the wave 0 recommendations. Close each wave with a short record of implementation, actual validation, limitations, decisions, and next step. Prefer the browser, subject to measured feasibility. Challenge proposals when evidence warrants it. If a real blocker persists or a decision exceeds approved scope, preserve the work and ask the user for a decision rather than retrying indefinitely. Integration into `main`, additional DSP capabilities, and polyphony changes still require explicit approval.
 
 ## Project Structure
 

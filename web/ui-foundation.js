@@ -4,11 +4,12 @@ import {TARGETS,fineTarget} from './midi-profile.js';
 import {ToneSelector} from './ui-tone-selector.js';
 import {ToneEditor} from './ui-tone-editor.js';
 import {MidiSetup} from './ui-midi-setup.js';
+import {StudioWorkspace} from './ui-studio.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,CompactMeter,RotaryKnob,VerticalFader,PlaceholderWorkspace,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
 
-const WORKSPACES=[['perf','PERF','Performance'],['osc','OSC','Sound Design · Oscillators'],['mix','MIX','Mixer'],['filter','FILTER','Sound Design · Filter'],['env','ENV','Sound Design · Envelopes'],['mod','MOD','Sound Design · Modulation'],['fx','FX','Sound Design · Effects'],['routing','ROUTING','Sound Design · Routing'],['seq','SEQ','Sequencer'],['tones','TONES','Tone Editor'],['diag','DIAG','Diagnostics']];
+const WORKSPACES=[['perf','PERF','Performance'],['osc','OSC','Sound Design · Oscillators'],['mix','MIX','Mixer'],['filter','FILTER','Sound Design · Filter'],['env','ENV','Sound Design · Envelopes'],['mod','MOD','Sound Design · Modulation'],['fx','FX','Sound Design · Effects'],['routing','ROUTING','Sound Design · Routing'],['seq','SEQ','Sequencer'],['studio','STUDIO','Studio recorder'],['tones','TONES','Tone Editor'],['diag','DIAG','Diagnostics']];
 let app;
 export function updateFoundation(message) { app?.receive(message); }
 export function mountFoundation(bridge) {
@@ -28,7 +29,7 @@ class Foundation {
     this.buildHeader();
     this.navigation=WorkspaceNavigation(WORKSPACES,id=>this.selectWorkspace(id));this.shell.append(this.navigation);
     this.main=el('main','ww-main');this.shell.append(this.main);
-    this.views=new Map();this.buildPerformance();this.buildFutureViews();this.toneEditor=new ToneEditor(m=>this.bridge.send(m));this.addView('tones',this.toneEditor.node);this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
+    this.views=new Map();this.buildPerformance();this.buildFutureViews();this.studio=new StudioWorkspace(bridge);this.addView('studio',this.studio.node);this.toneEditor=new ToneEditor(m=>this.bridge.send(m));this.addView('tones',this.toneEditor.node);this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
     const footer=el('div','ww-footer');
     footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.3'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);
@@ -201,6 +202,7 @@ class Foundation {
   }
   showSettings() {this.settingsPanel.hidden=false;this.settingsPanel.scrollIntoView({block:'nearest'});}
   receive(m) {
+    this.studio.update(m);
     if(m.t==='tone-store'){this.toneEditor.stored(m.data,m.ok);return;}
     if(m.t==='ready'){
       this.failed=false;this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();

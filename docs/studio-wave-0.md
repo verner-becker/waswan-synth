@@ -162,3 +162,11 @@ Decisões que precisam ser fechadas com o usuário:
 4. **Critérios mensuráveis:** propor desktop Chrome/Chromium inicialmente, ensaio de 20 minutos na carga musical acordada, nenhuma perda de blocos entregue ao gravador, memória limitada e falhas explícitas. Medir alinhamento antes de fixar tolerância; latência física depende de ensaio com o usuário.
 
 A autorização desta onda não inicia a onda 1. O próximo passo é discutir essas decisões, aprovar seu escopo e registrar os critérios antes da implementação.
+
+## Registro de fechamento da onda 0
+
+- **Implementado:** controle das ondas, diagnóstico da arquitetura e duas sondagens isoladas; nenhum recurso novo no instrumento de produção.
+- **Efetivamente testado:** baseline Node/upstream (10 verificações), cinco suites Chrome, captura de 60 segundos e repetição final de 30 segundos com bloqueio da UI, suspensão e recuperação após reload.
+- **Limitado:** sem ensaio prolongado, alinhamento MIDI/PCM de ponta a ponta, validação física ou certificação de quantidade de pistas.
+- **Decisões:** recomendar navegador, captura por blocos antes do mute, distinção entre entradas/comandos/notas geradas e contexto vivo separado do Save do timbre.
+- **Próximo passo:** onda 1. Posteriormente, o usuário autorizou seguir pelas ondas propostas; consultar `studio-waves.md` para o estado atual.

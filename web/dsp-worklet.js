@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {OberVave} from './worklet-original.js';
 import {accumulator,block} from './dsp-stats.js';
+import {COMMANDS} from './studio-format.js';
 class MonitoredOberVave extends OberVave {
  constructor(options){
   super(options);this.enabled=false;this.session=null;this.stats=accumulator();this.elapsed=0;this.voiceElapsed=0;
@@ -10,11 +11,25 @@ class MonitoredOberVave extends OberVave {
   const original=this.port.onmessage;
   this.port.onmessage=e=>{
    const m=e.data;
+   if(m.t==='studio-context'){
+    try{
+     const x=this.engine.ex,hash=this.engine.storeHash,store=this.engine.store(true);this.engine.storeHash=hash;
+     this.port.postMessage({t:'studio-context',request:m.request,context:{version:1,tempo:x.sim_tempo(),master:x.sim_master_current(),
+      parts:Array.from({length:4},(_,part)=>({program:x.sim_program(part)+1,engine:x.sim_engine(part),parameters:Array.from({length:x.waswan_parameter_count()},(_,p)=>x.sim_param(part,p))}))},store},[store]);
+    }catch(error){this.port.postMessage({t:'studio-context',request:m.request,error:error.message});}
+    return;
+   }
+   if(m.t==='studio-events-connect'){this.studioEvents?.close();this.studioEvents=m.port;return;}
+   if(m.t==='studio-events-disconnect'){this.studioEvents?.close();this.studioEvents=null;return;}
    if(m.t==='dsp-control'){
     if(m.action==='stop')this.publish(true,'user');
     else if(m.action==='start'){if(this.session)this.publish(true,'replaced');this.session=m.session;this.enabled=true;this.reset();}
     else if(m.action==='enable'){if(this.session)this.publish(true,'disabled');this.enabled=!!m.enabled;this.reset();}
-   }else {if(m.t==='reboot'&&this.session)this.publish(true,'reboot');original(e);}
+   }else {
+    if(m.t==='reboot'&&this.session)this.publish(true,'reboot');
+    if(this.studioEvents&&COMMANDS.has(m.t))this.studioEvents.postMessage({t:'command',frame:currentFrame,command:m});
+    original(e);
+   }
   };
  }
  reset(){this.stats=accumulator();this.elapsed=0;this.voiceElapsed=1;}
