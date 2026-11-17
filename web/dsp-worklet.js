@@ -2,6 +2,7 @@
 import {OberVave} from './worklet-original.js';
 import {accumulator,block} from './dsp-stats.js';
 import {COMMANDS} from './studio-format.js';
+import {StudioClock} from './studio-clock.js';
 class MonitoredOberVave extends OberVave {
  constructor(options){
   super(options);this.enabled=false;this.session=null;this.stats=accumulator();this.elapsed=0;this.voiceElapsed=0;
@@ -11,10 +12,24 @@ class MonitoredOberVave extends OberVave {
   const original=this.port.onmessage;
   this.port.onmessage=e=>{
    const m=e.data;
+   if(m.t==='studio-sequence-start'){
+    try{
+     if(!this.engine?.ex.waswan_studio_note)throw Error('Rebuild the simulator to enable Studio MIDI playback');
+     this.sequence??=new StudioClock((part,note,velocity)=>{
+      const applied=!!this.engine?.ex.waswan_studio_note(part,note,velocity);
+      if(applied&&this.studioEvents)this.studioEvents.postMessage({t:'command',frame:currentFrame,command:{t:'studio-note',part,note,velocity}});
+      return applied;
+     },state=>this.port.postMessage({t:'studio-sequence-state',...state,startFrame:this.sequence?.startFrame}));
+     const start=Number.isSafeInteger(m.startFrame)&&m.startFrame>currentFrame&&m.startFrame<currentFrame+sampleRate*2?m.startFrame:currentFrame+2048;
+     this.sequence.start(m.data,start);
+    }catch(error){this.sequence?.stop('invalid-schedule');this.port.postMessage({t:'studio-sequence-state',playing:false,frame:0,error:error.message});}
+    return;
+   }
+   if(m.t==='studio-sequence-stop'){this.sequence?.stop();return;}
    if(m.t==='studio-context'){
     try{
      const x=this.engine.ex,hash=this.engine.storeHash,store=this.engine.store(true);this.engine.storeHash=hash;
-     this.port.postMessage({t:'studio-context',request:m.request,context:{version:1,tempo:x.sim_tempo(),master:x.sim_master_current(),
+     this.port.postMessage({t:'studio-context',request:m.request,context:{version:1,tempo:x.sim_tempo(),master:x.sim_master_current(),selectedPart:x.sim_track(),
       parts:Array.from({length:4},(_,part)=>({program:x.sim_program(part)+1,engine:x.sim_engine(part),parameters:Array.from({length:x.waswan_parameter_count()},(_,p)=>x.sim_param(part,p))}))},store},[store]);
     }catch(error){this.port.postMessage({t:'studio-context',request:m.request,error:error.message});}
     return;
@@ -26,7 +41,7 @@ class MonitoredOberVave extends OberVave {
     else if(m.action==='start'){if(this.session)this.publish(true,'replaced');this.session=m.session;this.enabled=true;this.reset();}
     else if(m.action==='enable'){if(this.session)this.publish(true,'disabled');this.enabled=!!m.enabled;this.reset();}
    }else {
-    if(m.t==='reboot'&&this.session)this.publish(true,'reboot');
+    if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');if(this.session)this.publish(true,'reboot');}
     if(this.studioEvents&&COMMANDS.has(m.t))this.studioEvents.postMessage({t:'command',frame:currentFrame,command:m});
     original(e);
    }
@@ -40,13 +55,14 @@ class MonitoredOberVave extends OberVave {
  publish(final=false,reason=null){
   if(!this.enabled)return;
   this.sampleVoices();this.port.postMessage({t:'dsp-window',session:this.session,final,reason,stats:this.stats,voices:this.voices,sampleRate,
-   measurement:{state:this.clock?'available':'unavailable',clock:this.clockName??'none',quality:this.clockName==='Date.now'?'coarse-wall-clock':this.clock?'histogram-approximate':'no-worklet-duration-clock',nominalResolutionMs:this.clockName==='Date.now'?1:null,binMs:0.025,voiceSamplingHz:25,scope:'original-process-including-copy-frame-store'}});
+   measurement:{state:this.clock?'available':'unavailable',clock:this.clockName??'none',quality:this.clockName==='Date.now'?'coarse-wall-clock':this.clock?'histogram-approximate':'no-worklet-duration-clock',nominalResolutionMs:this.clockName==='Date.now'?1:null,binMs:0.025,voiceSamplingHz:25,scope:'host-process-including-studio-scheduling-copy-frame-store'}});
   this.stats=accumulator();this.elapsed=0;
   if(final)this.session=null;
  }
  process(inputs,outputs){
-  if(!this.enabled)return super.process(inputs,outputs);
+  if(!this.enabled){if(this.sequence?.active)this.sequence.tick(currentFrame);return super.process(inputs,outputs);}
   const frames=outputs[0]?.[0]?.length||0,start=this.clock?this.clock():null;
+  if(this.sequence?.active)this.sequence.tick(currentFrame);
   const result=super.process(inputs,outputs),ms=this.clock?this.clock()-start:null;
   block(this.stats,ms,frames,sampleRate);this.elapsed+=frames/sampleRate;this.voiceElapsed+=frames/sampleRate;
   if(this.voiceElapsed>=.04){this.sampleVoices();this.voiceElapsed=0;}

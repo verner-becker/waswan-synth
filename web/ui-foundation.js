@@ -5,6 +5,7 @@ import {ToneSelector} from './ui-tone-selector.js';
 import {ToneEditor} from './ui-tone-editor.js';
 import {MidiSetup} from './ui-midi-setup.js';
 import {StudioWorkspace} from './ui-studio.js';
+import {SequenceWorkspace} from './ui-studio-sequence.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,CompactMeter,RotaryKnob,VerticalFader,PlaceholderWorkspace,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
@@ -29,7 +30,7 @@ class Foundation {
     this.buildHeader();
     this.navigation=WorkspaceNavigation(WORKSPACES,id=>this.selectWorkspace(id));this.shell.append(this.navigation);
     this.main=el('main','ww-main');this.shell.append(this.main);
-    this.views=new Map();this.buildPerformance();this.buildFutureViews();this.studio=new StudioWorkspace(bridge);this.addView('studio',this.studio.node);this.toneEditor=new ToneEditor(m=>this.bridge.send(m));this.addView('tones',this.toneEditor.node);this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
+    this.views=new Map();this.buildPerformance();this.buildFutureViews();this.studio=new StudioWorkspace(bridge);this.addView('studio',this.studio.node);this.sequence=new SequenceWorkspace(bridge,this.studio.recorder);this.addView('seq',this.sequence.node);this.toneEditor=new ToneEditor(m=>this.bridge.send(m));this.addView('tones',this.toneEditor.node);this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
     const footer=el('div','ww-footer');
     footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.3'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);
@@ -78,7 +79,6 @@ class Foundation {
       fx:['Sound Design · Effects','Chorus, delay, reverb and drive already exist. Effects are shared; sends are per part.',[['Effect editors','Use Legacy SMK for shared effect settings. Performance exposes three part sends.']]],
       routing:['Sound Design · Routing','A future visual view of signal flow and assignments.',[['Routing matrix','Planned; no new routes or modulation engine in this phase.']]],
       mix:['Mixer','Four real part-level faders are available in Performance. Other mixer functions remain in Legacy SMK.',[['Four-part console','Pan, mute, solo and sends will be composed here in a later increment.']]],
-      seq:['Sequencer','The existing sequencer keeps its patterns and transport. This workspace does not introduce a new editor.',[['Piano roll','Planned. No simulated notes or automation.'],['Step editor','Use SEQ in Legacy SMK to edit existing steps.']]],
     };
     for(const [id,[title,description,items]] of Object.entries(specs)){
       const view=PlaceholderWorkspace(title,description,items);view.append(action('Open Legacy SMK',()=>this.toggleLegacy(true)));this.addView(id,view);
@@ -178,6 +178,7 @@ class Foundation {
   setControl(id,value) {const f=this.frame;if(!this.running||!f?.instrument)return;this.bridge.send({t:'ui-control',source:'ui',id,value,scope:f.instrument.scope});}
   hardware(b) {if(!this.running)return;this.bridge.send({t:'btn',b,down:true});setTimeout(()=>this.bridge.send({t:'btn',b,down:false}),90);}
   selectWorkspace(id) {
+    if(id==='seq')queueMicrotask(()=>this.sequence?.draw());
     if(!this.views.has(id))return;
     this.workspace=id;this.legacy=false;this.legacyHost.hidden=true;this.main.hidden=false;
     for(const [key,node] of this.views)node.hidden=key!==id;
@@ -203,6 +204,7 @@ class Foundation {
   showSettings() {this.settingsPanel.hidden=false;this.settingsPanel.scrollIntoView({block:'nearest'});}
   receive(m) {
     this.studio.update(m);
+    this.sequence.update(m);
     if(m.t==='tone-store'){this.toneEditor.stored(m.data,m.ok);return;}
     if(m.t==='ready'){
       this.failed=false;this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();

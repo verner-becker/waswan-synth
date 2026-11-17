@@ -1,5 +1,7 @@
 # WASWAN DSP Monitor v1
 
+Evolução Studio (2026-11-17): quando o transporte MIDI Studio está ativo, a janela medida também inclui seu agendador de notas antes do render original. O campo de escopo passa a `host-process-including-studio-scheduling-copy-frame-store`. As limitações do relógio, dos percentis e da inferência de underruns permanecem; sem transporte Studio, o caminho de áudio foi comparado com a referência e continua idêntico.
+
 ## Decisões anteriores à implementação
 
 Base verificada: `experiment/polyphony-256`, commit `5edc7449942703b8e893bb112657f7a024354648`, limpa e igual ao remoto. Branch isolada: `feat/dsp-monitor`. Upstream, firmware, presets e DSP permanecem intactos.

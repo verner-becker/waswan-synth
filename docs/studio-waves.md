@@ -19,7 +19,7 @@ Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83
 |---|---|---|
 | 0 — diagnóstico e viabilidade | Caminhos de áudio/MIDI, relógios, limites, riscos e escopo recomendado para a primeira entrega | Concluída como diagnóstico e prova curta; limites e decisões da onda 1 documentados |
 | 1 — gravador de performances | Capturar áudio estéreo + eventos, ouvir o áudio, exportar WAV e recuperar a tomada | Concluída em software; [fechamento](studio-wave-1.md), ensaio real de 20 minutos e limitações documentadas |
-| 2 — sequenciador MIDI editável | Piano roll, notas/velocity, transporte musical, loop, reprodução MIDI e exportação SMF | Continuidade autorizada após critérios da onda 1 |
+| 2 — sequenciador MIDI editável | Piano roll, notas/velocity, transporte musical, loop, reprodução MIDI e exportação SMF | Concluída em software; [fechamento](studio-wave-2.md), 14 suites Node e sete Chrome |
 | 3 — composição por camadas | Pistas e clipes, overdub, mover/duplicar, mute/solo, timbres compatíveis com o motor | Continuidade autorizada; respeitar limites do motor |
 | 4 — automação e finalização | Automação editável e exportação da composição; MP3 após avaliar codificador/licença/custo | Continuidade autorizada; avaliar MP3 antes de acrescentar dependência |
 | 5 — pistas de áudio | Importação, posicionamento, corte, ganho e reprodução sincronizada | Continuidade autorizada após critérios anteriores |
@@ -90,7 +90,7 @@ Ear e Academy ficam futuros. Preparação inicial: dados musicais claros e versi
 
 Ao retomar: ler este arquivo, o diagnóstico, status Git e evidências; continuar de onde parou. Antes de implementar outra onda, registrar escopo aprovado e seus critérios. Ao encerrar uma etapa, registrar resultados, limitações e próximo passo. Trabalho autônomo ocorre durante a execução da sessão; este documento não cria agendamento nem processo em segundo plano.
 
-Próximo passo: implementar e validar a onda 2, depois avançar incrementalmente pelas demais. Branch de implementação `feat/studio-waves`, baseada na main conferida e nos registros da onda 0. Sem merge automático.
+Próximo passo: implementar e validar a onda 3, depois avançar incrementalmente pelas demais. Branch de implementação `feat/studio-waves`, baseada na main conferida e nos registros da onda 0. Sem merge automático.
 
 ## Decisões adotadas para a onda 1
 

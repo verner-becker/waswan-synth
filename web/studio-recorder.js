@@ -110,7 +110,7 @@ export class StudioRecorder {
     const root=await(await navigator.storage.getDirectory()).getDirectoryHandle('waswan-studio-v1');
     const ids=[];for await(const [name,handle] of root.entries())if(handle.kind==='directory'&&/^take-\d+-[a-f0-9-]+$/.test(name))ids.push(name);
     for(const id of ids.sort().reverse()){
-      try{this.take=await this.readLocal(id);this.frames=this.take.project.frames;this.eventCount=this.take.project.events.length;this.state='ready';this.message=`Recovered local take · ${this.take.project.status}`;this.changed();return;}catch{}
+      try{const take=await this.readLocal(id);this.beforeReplace?.();this.take=take;this.frames=this.take.project.frames;this.eventCount=this.take.project.events.length;this.state='ready';this.message=`Recovered local take · ${this.take.project.status}`;this.changed();return;}catch{}
     }
     throw Error('No recoverable local take');
     }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
@@ -119,14 +119,25 @@ export class StudioRecorder {
     if(this.busy)throw Error('Stop recording before opening a project');
     const previous=this.state;this.state='loading';this.message='Opening project';this.changed();
     try{
-      const take=await readProject(file);this.stopPlayback();this.take=take;this.frames=take.project.frames;this.eventCount=take.project.events.length;this.state='ready';this.message='Project opened · current synth unchanged';this.changed();
+      const take=await readProject(file);this.beforeReplace?.();this.stopPlayback();this.take=take;this.frames=take.project.frames;this.eventCount=take.project.events.length;this.state='ready';this.message='Project opened · current synth unchanged';this.changed();
+    }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
+  }
+  async ensureProject(sequence){
+    if(this.busy)throw Error('Finish recording or loading before saving MIDI');
+    if(this.take)return;
+    const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before saving instrument context');
+    const previous=this.state;this.state='loading';this.message='Saving MIDI context';this.changed();
+    try{
+      const context=await this.snapshot(node);
+      this.take={project:{format:'waswan-studio-project',version:1,name:'MIDI composition',status:'complete',frames:0,sampleRate:RATE,channels:2,context,events:[],sequence:structuredClone(sequence)},audio:new Blob([wavHeader(0)],{type:'audio/wav'})};
+      this.frames=0;this.eventCount=0;this.state='ready';this.message='MIDI project ready';this.changed();
     }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
   }
   download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-  exportWav(){if(this.take&&!this.busy)this.download(this.take.audio,'waswan-take.wav');}
+  exportWav(){if(this.take?.project.frames&&!this.busy)this.download(this.take.audio,'waswan-take.wav');}
   exportProject(){if(this.take&&!this.busy)this.download(projectBlob(this.take.project,this.take.audio),'waswan-project.wsproj');}
   async play(){
-    if(!this.take||this.busy)return;this.stopPlayback();
+    if(!this.take?.project.frames||this.busy)return;this.stopPlayback();
     const {context,gain}=this.bridge.getAudio();if(!context||!gain)throw Error('Start audio before listening to a take');
     await context.resume();this.playURL=URL.createObjectURL(this.take.audio);this.player=new Audio(this.playURL);
     this.playerSource=context.createMediaElementSource(this.player);this.playerSource.connect(gain);

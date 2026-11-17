@@ -8,6 +8,17 @@
 #endif
 #include WASWAN_SIM_SOURCE
 
+/* Studio uses the existing sequenced-note path with a distinct ownership tag.
+ * No DSP algorithm, voice allocation limit, MIDI routing or legacy transport changes. */
+EXPORT uint32_t waswan_studio_note(uint32_t part,uint32_t note,uint32_t velocity) {
+    if(part>=NPART||note>127u||velocity>127u||(velocity&&mm_on))return 0;
+    uint8_t source=seq_note_source;seq_note_source=2;
+    if(velocity)voice_trigger(part,note,velocity);else voice_release(part,note,0);
+    seq_note_source=source;
+    return 1;
+}
+EXPORT uint32_t waswan_studio_owned(uint32_t slot) {return slot<NV&&vc[slot].seq_owned==2u;}
+
 _Static_assert(WASWAN_VOICES == 8 || WASWAN_VOICES == 16 || WASWAN_VOICES == 32 || WASWAN_VOICES == 64 || WASWAN_VOICES == 128 || WASWAN_VOICES == 256, "Only approved stages and the 256-voice experiment are supported");
 _Static_assert(NV == WASWAN_VOICES, "Source must match the selected stage");
 #if WASWAN_VOICES >= 64

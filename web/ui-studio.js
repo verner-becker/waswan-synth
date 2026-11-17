@@ -22,6 +22,7 @@ function eventLabel(e){
   if(m.t==='program-select')return `Tone program ${m.program}`;
   if(m.t==='voice-mode')return `Voice mode · ${['POLY','DUAL','UNISON','MONO'][m.mode]}`;
   if(m.t==='voice-sustain')return `Sustain · ${m.enabled?'on':'off'}`;
+  if(m.t==='studio-note')return `Sequence · ${pitch(m.note)} · ${m.velocity?'velocity '+m.velocity:'note off'} · part ${'ABCD'[m.part]}`;
   if(m.t==='panic')return 'Release all';
   if(m.t==='enc'||m.t.startsWith('enc-fine'))return `Knob ${m.e+1} · ${m.steps===undefined?'position '+m.value:(m.steps>0?'+':'')+m.steps}`;
   if(m.t==='fader')return `Fader ${m.f+1} · ${m.v}`;
@@ -51,7 +52,7 @@ export class StudioWorkspace {
     this.node.append(this.status,controls,openLabel,this.counter,
       el('p','ww-muted','Records the synth after master and effects, before monitoring mute. Stop ends capture without releasing notes; wait for effect tails before stopping.'),
       this.context,el('p','ww-muted','Local recovery is not a backup. Save a project file to preserve the take. Opening a project does not replace the live instrument. Maximum: 20 minutes.'),
-      el('h3','','Recorded events'),el('p','ww-muted','MIDI input and instrument actions are listed separately. Arp and sequence notes are not transcribed. A MIDI control waiting for pickup may leave the sound unchanged.'),this.events);
+      el('h3','','Recorded events'),el('p','ww-muted','MIDI input and instrument actions are listed separately. Legacy arp and sequence notes are not transcribed. A MIDI control waiting for pickup may leave the sound unchanged.'),this.events);
     this.draw();
   }
   update(m){
@@ -63,6 +64,7 @@ export class StudioWorkspace {
     this.status.textContent=r.message;this.status.dataset.state=r.state;
     this.record.disabled=r.busy||audio.context?.state!=='running';this.stop.disabled=!['starting','recording'].includes(r.state);
     for(const b of [this.play,this.wav,this.save])b.disabled=r.busy||!r.take;
+    if(!r.take?.project.frames){this.play.disabled=true;this.wav.disabled=true;}
     this.stopPlay.disabled=!r.player;this.open.disabled=r.busy;this.recover.disabled=r.busy;
     this.counter.textContent=`${(r.frames/RATE).toFixed(1)} s · ${r.eventCount} events · ${r.state}`;
     const p=r.take?.project;
