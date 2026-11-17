@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {Engine as OriginalEngine} from './engine-original.js';
+import {validateContext} from './studio-format.js';
 
 export class Engine extends OriginalEngine {
   constructor(...args){super(...args);this.fineAbsolute=Array(4).fill(null);this.controlOwners=Array(12).fill(null);}
@@ -50,6 +51,10 @@ export class Engine extends OriginalEngine {
     x.waswan_ui_set(id,value,m.scope);
   }
   input(message) {
+    if(message.t==='studio-mixer'){
+      if(Number.isInteger(message.part)&&message.part>=0&&message.part<4&&Number.isInteger(message.field)&&message.field>=0&&message.field<8&&Number.isInteger(message.value))this.ex.waswan_studio_mix_set?.(message.part,message.field,message.value);
+      return;
+    }
     if(message.t==='editor-set'){
       if(Number.isInteger(message.id)&&message.id>=0&&message.id<this.ex.waswan_parameter_count()&&
          Number.isInteger(message.value)&&Number.isInteger(message.scope)&&message.scope>=0&&message.scope<=0xffffffff)
@@ -157,6 +162,16 @@ export class Engine extends OriginalEngine {
         unison:x.waswan_unison(part),arp:x.waswan_arp(part),sustain:!!x.waswan_sustain(part),
         held:x.waswan_held(part),limit:x.waswan_part_limit(part)})),
     };
+    if(x.waswan_studio_mix_value)frame.studioMixer=Array.from({length:4},(_,part)=>Array.from({length:8},(_,field)=>x.waswan_studio_mix_value(part,field)));
     return frame;
+  }
+  restoreStudioContext(context,token){
+    validateContext(context);const x=this.ex;
+    if(!x.waswan_studio_context_buffer||!context.parts.every(p=>p.patch))throw Error('This project predates full tone snapshots');
+    const bytes=new Uint8Array(x.memory.buffer,x.waswan_studio_context_buffer(),320);
+    context.parts.forEach((p,i)=>bytes.set(p.patch,i*80));
+    if(!x.waswan_studio_apply_patches(token,...context.parts.map(p=>p.program-1)))throw Error('Instrument changed or is busy; saved context was not applied');
+    if(context.mixer)for(let part=0;part<4;part++)for(let field=0;field<8;field++)x.waswan_studio_mix_set(part,field,context.mixer[part][field]);
+    x.sim_master(context.master);x.waswan_studio_tempo(context.tempo);return true;
   }
 }

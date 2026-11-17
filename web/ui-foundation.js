@@ -31,6 +31,7 @@ class Foundation {
     this.navigation=WorkspaceNavigation(WORKSPACES,id=>this.selectWorkspace(id));this.shell.append(this.navigation);
     this.main=el('main','ww-main');this.shell.append(this.main);
     this.views=new Map();this.buildPerformance();this.buildFutureViews();this.studio=new StudioWorkspace(bridge);this.addView('studio',this.studio.node);this.sequence=new SequenceWorkspace(bridge,this.studio.recorder);this.addView('seq',this.sequence.node);this.toneEditor=new ToneEditor(m=>this.bridge.send(m));this.addView('tones',this.toneEditor.node);this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
+    this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
     const footer=el('div','ww-footer');
     footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.3'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);

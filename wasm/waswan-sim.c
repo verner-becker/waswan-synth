@@ -280,3 +280,60 @@ EXPORT uint32_t waswan_editor_save(uint32_t n,uint32_t scope,uint32_t token,uint
     preset_commit();dirty_hdr=dirty_page=dirty_tags=1;
     return preset_ui==2;
 }
+
+/* Existing part mixer, explicitly addressed without changing editor context. */
+EXPORT int32_t waswan_studio_mix_value(uint32_t part,uint32_t field) {
+    if(part>=NPART||field>7u)return -32768;
+    if(field==0u)return set.mix_lvl[part];if(field==1u)return set.mix_pan[part];
+    if(field==2u)return set.mix_cho[part];if(field==3u)return set.mix_dly[part];
+    if(field==4u)return set.mix_rev[part];if(field==5u)return set.mix_drv[part];
+    return field==6u?!!(set.mix_mute>>part&1u):!!(set.mix_solo>>part&1u);
+}
+EXPORT uint32_t waswan_studio_mix_set(uint32_t part,uint32_t field,int32_t value) {
+    if(part>=NPART||field>7u||mm_on)return 0;
+    if(field==1u){if(value< -64||value>64)return 0;set.mix_pan[part]=(int8_t)value;}
+    else if(field>=6u){if(value<0||value>1)return 0;uint8_t *mask=field==6u?&set.mix_mute:&set.mix_solo;*mask=(uint8_t)((*mask&~(1u<<part))|((uint32_t)value<<part));}
+    else {if(value<0||value>127)return 0;
+        if(field==0u)set.mix_lvl[part]=(uint8_t)value;else if(field==2u)set.mix_cho[part]=(uint8_t)value;
+        else if(field==3u)set.mix_dly[part]=(uint8_t)value;else if(field==4u)set.mix_rev[part]=(uint8_t)value;else set.mix_drv[part]=(uint8_t)value;
+    }
+    mix_apply();set_dirty=1;set_t=fm1_ms;dirty_hdr=dirty_page=dirty_steps=1;return 1;
+}
+EXPORT uint32_t waswan_studio_patch(uint32_t part,uint32_t byte) {return part<NPART&&byte<PATCH_BYTES?live_p[part].v[byte]:0;}
+EXPORT uint32_t waswan_studio_tempo(uint32_t bpm) {
+    if(bpm<40u||bpm>240u||mm_on)return 0;set.tempo=(uint16_t)bpm;ctl_tempo=bpm;set_dirty=1;set_t=fm1_ms;dirty_hdr=dirty_page=1;return 1;
+}
+static patch_t studio_context_patches[NPART];
+EXPORT uint32_t waswan_studio_context_buffer(void) {return (uint32_t)(uintptr_t)studio_context_patches;}
+EXPORT uint32_t waswan_studio_context_token(void) {
+    uint32_t hash=2166136261u;
+    for(uint32_t part=0;part<NPART;part++){
+        for(uint32_t i=0;i<PATCH_BYTES;i++)hash=(hash^live_p[part].v[i])*16777619u;
+        hash=(hash^trk_prog[part])*16777619u;
+        for(uint32_t field=0;field<8u;field++)hash=(hash^(uint32_t)waswan_studio_mix_value(part,field))*16777619u;
+    }
+    return ((hash^set.tempo)*16777619u^(uint32_t)smk_master)*16777619u;
+}
+EXPORT uint32_t waswan_studio_apply_patches(uint32_t token,uint32_t a,uint32_t b,uint32_t c,uint32_t d) {
+    const uint32_t programs[NPART]={a,b,c,d};
+    if(token!=waswan_studio_context_token()||mm_on||preset_ui||pb_confirm||save_armed||ctl_seq_run)return 0;
+    for(uint32_t i=0;i<HOST_NENC;i++)if(host_enc[i])return 0;
+    for(uint32_t q=mq_r;q!=mq_w;q++)if((mq[q%(sizeof mq/sizeof mq[0])][0]&0xF0u)==0xC0u)return 0;
+    /* Validate every part before touching any live data. */
+    for(uint32_t part=0;part<NPART;part++){
+        patch_t *patch=&studio_context_patches[part];uint32_t engine=obv_patch_engine(patch);
+        if(programs[part]>=NPROG||(engine!=OBV_ANALOG&&engine!=OBV_DRUMS))return 0;
+        for(uint32_t p=0;p<NPARAM;p++){
+            if(engine==OBV_DRUMS){if(patch->v[p]>127u)return 0;}
+            else if(patch->v[p]>obv_param_max(patch,p)||((p==P_UNI_N||p==P_ARP_OCT)&&!patch->v[p]))return 0;
+        }
+        for(uint32_t p=NPARAM;p<NPARAM+PATCH_NAME;p++)if(patch->v[p]&&(patch->v[p]<32u||patch->v[p]>126u))return 0;
+    }
+    for(uint32_t part=0;part<NPART;part++){
+        patch_t stored;prog_get(programs[part],&stored);
+        live_p[part]=studio_context_patches[part];trk_prog[part]=programs[part];set.tprog[part]=(uint8_t)programs[part];
+        trk_edited[part]=!!memcmp(&stored,&live_p[part],sizeof stored);
+    }
+    set.prog=(uint8_t)a;fx_sync();smk_controls_epoch++;set_dirty=1;set_t=fm1_ms;
+    dirty_hdr=dirty_page=dirty_tags=dirty_steps=1;return 1;
+}

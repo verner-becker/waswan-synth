@@ -3,7 +3,7 @@
 import {validateSequence} from './studio-sequence.js';
 export const RATE=44100,MAX_FRAMES=RATE*20*60,MAX_EVENTS=100000,MAX_JSON=16*1024*1024;
 export const MAGIC='WASWAN-STUDIO-1\n';
-export const COMMANDS=new Set(['midi','key','pad','btn','enc','fader','wheel','velocity','master','panic','drum-hit','drums','analog','ui-control','enc-fine','enc-fine-absolute','voice-mode','voice-unison','voice-sustain','program-select','editor-set','editor-save','studio-note']);
+export const COMMANDS=new Set(['midi','key','pad','btn','enc','fader','wheel','velocity','master','panic','drum-hit','drums','analog','ui-control','enc-fine','enc-fine-absolute','voice-mode','voice-unison','voice-sustain','program-select','editor-set','editor-save','studio-note','studio-mixer']);
 const integer=(v,min,max)=>Number.isSafeInteger(v)&&v>=min&&v<=max;
 export function wavHeader(frames) {
   if(!integer(frames,0,MAX_FRAMES))throw Error('Invalid audio length');
@@ -22,6 +22,11 @@ export function pcm16(samples,target=new Int16Array(samples.length)) {
 export function validateContext(c) {
   if(!c||c.version!==1||!Array.isArray(c.parts)||c.parts.length!==4||typeof c.session!=='string'||![240300,415064,458752].includes(c.session.length)||!/^[A-Za-z0-9+/]*={0,2}$/.test(c.session)||!integer(c.master,0,1023)||!integer(c.tempo,40,240))throw Error('Invalid instrument context');
   for(const p of c.parts)if(!p||!integer(p.program,1,99)||![0,2].includes(p.engine)||!Array.isArray(p.parameters)||p.parameters.length!==63||!p.parameters.every(v=>integer(v,0,255)))throw Error('Invalid part context');
+  for(const p of c.parts)if(p.patch!==undefined&&(!Array.isArray(p.patch)||p.patch.length!==80||!p.patch.every(v=>integer(v,0,255))||!p.parameters.every((v,i)=>v===p.patch[i])))throw Error('Invalid full tone snapshot');
+  if(c.mixer!==undefined){
+    if(!Array.isArray(c.mixer)||c.mixer.length!==4)throw Error('Invalid saved mixer');
+    for(const part of c.mixer)if(!Array.isArray(part)||part.length!==8||!part.every((v,f)=>integer(v,f===1?-64:0,f===1?64:f>=6?1:127)))throw Error('Invalid saved mixer values');
+  }
   if(c.selectedPart!==undefined&&!integer(c.selectedPart,0,3))throw Error('Invalid selected part');
   return c;
 }
@@ -29,6 +34,7 @@ export function validateProject(p) {
   if(!p||p.format!=='waswan-studio-project'||p.version!==1||!integer(p.frames,0,MAX_FRAMES)||p.sampleRate!==RATE||p.channels!==2||!['complete','incomplete'].includes(p.status)||typeof p.name!=='string'||p.name.length>120||!Array.isArray(p.events)||p.events.length>MAX_EVENTS)throw Error('Invalid Studio project');
   if(p.sequence)validateSequence(p.sequence);else if(!p.frames)throw Error('Empty project requires a MIDI sequence');
   validateContext(p.context);
+  if(p.sequenceContext)validateContext(p.sequenceContext);
   for(const e of p.events){
     if(!e||!integer(e.frame,0,p.frames)||!['input','command'].includes(e.kind))throw Error('Invalid event time or kind');
     if(e.kind==='input'){

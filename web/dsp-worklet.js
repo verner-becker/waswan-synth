@@ -26,11 +26,16 @@ class MonitoredOberVave extends OberVave {
     return;
    }
    if(m.t==='studio-sequence-stop'){this.sequence?.stop();return;}
+   if(m.t==='studio-context-apply'){
+    try{if(this.sequence?.active)throw Error('Stop Studio MIDI before applying tones');this.engine.restoreStudioContext(m.context,m.token);this.port.postMessage({t:'studio-context-applied',request:m.request,ok:true});}
+    catch(error){this.port.postMessage({t:'studio-context-applied',request:m.request,ok:false,error:error.message});}return;
+   }
    if(m.t==='studio-context'){
     try{
      const x=this.engine.ex,hash=this.engine.storeHash,store=this.engine.store(true);this.engine.storeHash=hash;
-     this.port.postMessage({t:'studio-context',request:m.request,context:{version:1,tempo:x.sim_tempo(),master:x.sim_master_current(),selectedPart:x.sim_track(),
-      parts:Array.from({length:4},(_,part)=>({program:x.sim_program(part)+1,engine:x.sim_engine(part),parameters:Array.from({length:x.waswan_parameter_count()},(_,p)=>x.sim_param(part,p))}))},store},[store]);
+     this.port.postMessage({t:'studio-context',request:m.request,context:{version:1,tempo:x.sim_tempo(),master:x.sim_master_current(),selectedPart:x.sim_track(),token:x.waswan_studio_context_token?.()>>>0,
+      mixer:x.waswan_studio_mix_value?Array.from({length:4},(_,p)=>Array.from({length:8},(_,f)=>x.waswan_studio_mix_value(p,f))):undefined,
+      parts:Array.from({length:4},(_,part)=>({program:x.sim_program(part)+1,engine:x.sim_engine_patch(part),parameters:Array.from({length:x.waswan_parameter_count()},(_,p)=>x.sim_param(part,p)),patch:x.waswan_studio_patch?Array.from({length:80},(_,i)=>x.waswan_studio_patch(part,i)):undefined}))},store},[store]);
     }catch(error){this.port.postMessage({t:'studio-context',request:m.request,error:error.message});}
     return;
    }

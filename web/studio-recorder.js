@@ -53,7 +53,7 @@ export class StudioRecorder {
   }
   async receive(m){
     if(m.t==='started'){
-      clearTimeout(this.startTimer);this.id=m.id;this.take=null;if(this.state==='finalizing')return;
+      clearTimeout(this.startTimer);this.id=m.id;this.firstFrame=m.first;this.take=null;if(this.state==='finalizing')return;
       this.state='recording';this.message='Recording · synth output before monitoring mute';
       listenStudioInput(raw=>{
         if(this.state!=='recording'||!raw.running||raw.data[0]<128||raw.data[0]>=240)return;
@@ -124,13 +124,30 @@ export class StudioRecorder {
   }
   async ensureProject(sequence){
     if(this.busy)throw Error('Finish recording or loading before saving MIDI');
-    if(this.take)return;
     const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before saving instrument context');
     const previous=this.state;this.state='loading';this.message='Saving MIDI context';this.changed();
     try{
       const context=await this.snapshot(node);
-      this.take={project:{format:'waswan-studio-project',version:1,name:'MIDI composition',status:'complete',frames:0,sampleRate:RATE,channels:2,context,events:[],sequence:structuredClone(sequence)},audio:new Blob([wavHeader(0)],{type:'audio/wav'})};
-      this.frames=0;this.eventCount=0;this.state='ready';this.message='MIDI project ready';this.changed();
+      if(!this.take){this.take={project:{format:'waswan-studio-project',version:1,name:'MIDI composition',status:'complete',frames:0,sampleRate:RATE,channels:2,context,events:[],sequence:structuredClone(sequence)},audio:new Blob([wavHeader(0)],{type:'audio/wav'})};this.frames=0;this.eventCount=0;}
+      this.take.project.sequenceContext=context;this.state='ready';this.message='MIDI project ready';this.changed();
+    }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
+  }
+  async applyContext(){
+    if(this.busy||!this.take)throw Error('Load a project and finish the current operation first');
+    if(this.canApplyContext&&!this.canApplyContext())throw Error('Stop Studio and Legacy playback before applying tones');
+    const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before applying saved tones');
+    const context=this.take.project.sequenceContext||this.take.project.context;
+    if(!context.parts.every(p=>p.patch))throw Error('This older project has no full tone snapshot; audio and MIDI remain available');
+    if(!confirm('Apply saved tones and mixer to all four parts? Current unsaved live edits will be replaced. Preset slots are not written.'))return;
+    const previous=this.state;this.state='loading';this.message='Applying saved instrument context';this.changed();
+    try{
+      const current=await this.snapshot(node),request=crypto.randomUUID();
+      await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>{node.port.removeEventListener('message',receive);reject(Error('Instrument did not acknowledge context'));},5000);
+        const receive=({data:m})=>{if(m.t!=='studio-context-applied'||m.request!==request)return;clearTimeout(timer);node.port.removeEventListener('message',receive);if(m.ok)resolve();else reject(Error(m.error));};
+        node.port.addEventListener('message',receive);node.port.postMessage({t:'studio-context-apply',request,context,token:current.token});
+      });
+      this.state=previous;this.message='Saved tones and mixer applied to live RAM · use TONES Save to write a preset';this.changed();
     }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
   }
   download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}

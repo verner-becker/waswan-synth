@@ -13,7 +13,7 @@ function event(e){
   if(eventCount>=MAX_EVENTS){port.postMessage({t:'stop',reason:'event-limit'});return;}
   const relative=Math.round(e.frame-first);if(relative<0||relative>MAX_FRAMES)return;
   const line=encoder.encode(JSON.stringify({...e,frame:relative})+'\n');
-  if(eventBytes+line.length>MAX_JSON-1024*1024){port.postMessage({t:'stop',reason:'event-limit'});return;}
+  if(eventBytes+line.length>MAX_JSON-2*1024*1024){port.postMessage({t:'stop',reason:'event-limit'});return;}
   write(log,line,eventBytes);eventBytes+=line.length;eventCount++;
 }
 function checkpoint(){write(audio,new Uint8Array(wavHeader(frames)),0);audio.flush();log.flush();saveMetadata();}

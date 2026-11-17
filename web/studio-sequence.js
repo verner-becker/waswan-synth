@@ -12,6 +12,17 @@ export function validateSequence(s){
     if(!n||typeof n.id!=='string'||n.id.length>80||ids.has(n.id)||!int(n.part,0,3)||!int(n.note,0,127)||!int(n.velocity,1,127)||!int(n.start,0,s.length-1)||!int(n.duration,1,s.length-n.start))throw Error('Invalid MIDI note');
     ids.add(n.id);
   }
+  if(s.tracks!==undefined){
+    if(!Array.isArray(s.tracks)||s.tracks.length!==4)throw Error('Four MIDI tracks are required');
+    for(let i=0;i<4;i++){const t=s.tracks[i];if(!t||t.part!==i||!int(t.level,0,127)||!int(t.pan,-64,64)||typeof t.mute!=='boolean'||typeof t.solo!=='boolean')throw Error('Invalid MIDI track');}
+  }
+  if(s.clips!==undefined){
+    if(!Array.isArray(s.clips)||s.clips.length>128)throw Error('Clip limit exceeded');
+    const clips=new Map();for(const c of s.clips){
+      if(!c||typeof c.id!=='string'||c.id.length>80||clips.has(c.id)||typeof c.name!=='string'||c.name.length>48||!int(c.part,0,3)||!int(c.start,0,s.length-1)||!int(c.length,1,s.length-c.start))throw Error('Invalid MIDI clip');clips.set(c.id,c);
+    }
+    for(const n of s.notes)if(n.clip!==undefined){const c=clips.get(n.clip);if(!c||c.part!==n.part||n.start<c.start||n.start+n.duration>c.start+c.length)throw Error('Note outside its clip');}
+  }else if(s.notes.some(n=>n.clip!==undefined))throw Error('Missing clip definitions');
   if(s.expression!==undefined){
     if(!Array.isArray(s.expression)||s.expression.length>10000)throw Error('MIDI expression limit exceeded');
     for(const e of s.expression)if(!e||!int(e.tick,0,s.length)||!Array.isArray(e.data)||e.data.length!==3||![176,224].includes(e.data[0]&240)||!int(e.data[0],128,239)||!int(e.data[1],0,127)||!int(e.data[2],0,127))throw Error('Invalid MIDI expression');
@@ -19,6 +30,7 @@ export function validateSequence(s){
   return s;
 }
 export const tickFrame=(tick,bpm)=>Math.round(tick*RATE*60/(bpm*PPQ));
+export function partEnabled(sequence,part){const tracks=sequence.tracks;if(!tracks)return true;return !tracks[part].mute&&(!tracks.some(t=>t.solo)||tracks[part].solo);}
 export function musicalPosition(frame,sequence){
   const tick=Math.max(0,Math.floor(frame*sequence.bpm*PPQ/(RATE*60))),beatTicks=PPQ*4/sequence.meter[1],barTicks=beatTicks*sequence.meter[0];
   return [Math.floor(tick/barTicks)+1,Math.floor(tick%barTicks/beatTicks)+1,tick%beatTicks].map((n,i)=>String(n).padStart(i===1?2:3,'0')).join(':');
@@ -50,7 +62,7 @@ export function inputNotes(project,targetPart=project.context.selectedPart??0){
 }
 export function compileNotes(sequence){
   validateSequence(sequence);const events=[];
-  for(const n of sequence.notes){
+  for(const n of sequence.notes.filter(n=>partEnabled(sequence,n.part))){
     events.push({frame:tickFrame(n.start,sequence.bpm),part:n.part,note:n.note,velocity:n.velocity});
     events.push({frame:tickFrame(n.start+n.duration,sequence.bpm),part:n.part,note:n.note,velocity:0});
   }
@@ -75,10 +87,10 @@ export function smf(sequence){
     {tick:0,order:1,data:[255,88,4,sequence.meter[0],sequence.meter[1]===8?3:2,24,8]}],sequence.length)];
   for(let part=0;part<4;part++){
     const events=[{tick:0,order:-1,data:[255,3,6,...ascii('Part '+ 'ABCD'[part])]}];
-    for(const n of sequence.notes.filter(n=>n.part===part)){
+    for(const n of sequence.notes.filter(n=>n.part===part&&partEnabled(sequence,part))){
       events.push({tick:n.start,order:1,data:[144|part,n.note,n.velocity]},{tick:n.start+n.duration,order:0,data:[128|part,n.note,0]});
     }
-    for(const e of sequence.expression||[])if(Math.min(e.data[0]&15,3)===part)events.push({tick:e.tick,order:0,data:e.data});
+    for(const e of sequence.expression||[])if(Math.min(e.data[0]&15,3)===part&&partEnabled(sequence,part))events.push({tick:e.tick,order:0,data:e.data});
     tracks.push(track(events,sequence.length));
   }
   const length=tracks.reduce((sum,t)=>sum+t.length,14),out=new Uint8Array(length);

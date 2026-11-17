@@ -23,6 +23,7 @@ function eventLabel(e){
   if(m.t==='voice-mode')return `Voice mode · ${['POLY','DUAL','UNISON','MONO'][m.mode]}`;
   if(m.t==='voice-sustain')return `Sustain · ${m.enabled?'on':'off'}`;
   if(m.t==='studio-note')return `Sequence · ${pitch(m.note)} · ${m.velocity?'velocity '+m.velocity:'note off'} · part ${'ABCD'[m.part]}`;
+  if(m.t==='studio-mixer')return `Part ${'ABCD'[m.part]} · ${['volume','pan','chorus send','delay send','reverb send','drive send','Legacy mute','Legacy solo'][m.field]} · ${m.value}`;
   if(m.t==='panic')return 'Release all';
   if(m.t==='enc'||m.t.startsWith('enc-fine'))return `Knob ${m.e+1} · ${m.steps===undefined?'position '+m.value:(m.steps>0?'+':'')+m.steps}`;
   if(m.t==='fader')return `Fader ${m.f+1} · ${m.v}`;
@@ -42,11 +43,12 @@ export class StudioWorkspace {
     this.play=action('Listen to take',()=>run(()=>this.recorder.play()));
     this.stopPlay=action('Stop take playback',()=>{this.recorder.stopPlayback();this.draw();});
     this.wav=action('Export WAV',()=>run(()=>this.recorder.exportWav()));
-    this.save=action('Save project',()=>run(()=>this.recorder.exportProject()));
+    this.save=action('Save project',()=>run(async()=>{await this.recorder.prepareProject?.();this.recorder.exportProject();}));
+    this.applyContext=action('Apply saved tones and mixer',()=>run(()=>this.recorder.applyContext()));
     this.recover=action('Recover local take',()=>run(()=>this.recorder.recover()));
     this.open=el('input');this.open.type='file';this.open.accept='.wsproj';this.open.setAttribute('aria-label','Open Studio project');
     this.open.onchange=()=>{const file=this.open.files[0];if(file)run(()=>this.recorder.open(file));this.open.value='';};
-    controls.append(this.record,this.stop,this.play,this.stopPlay,this.wav,this.save,this.recover);
+    controls.append(this.record,this.stop,this.play,this.stopPlay,this.wav,this.save,this.recover,this.applyContext);
     const openLabel=el('label','ww-studio-open','Open project ');openLabel.append(this.open);
     this.counter=el('p','ww-studio-counter');this.context=el('p','ww-muted');this.events=el('div','ww-studio-events');
     this.node.append(this.status,controls,openLabel,this.counter,
@@ -64,6 +66,7 @@ export class StudioWorkspace {
     this.status.textContent=r.message;this.status.dataset.state=r.state;
     this.record.disabled=r.busy||audio.context?.state!=='running';this.stop.disabled=!['starting','recording'].includes(r.state);
     for(const b of [this.play,this.wav,this.save])b.disabled=r.busy||!r.take;
+    this.applyContext.disabled=r.busy||!r.take||!audio.node;
     if(!r.take?.project.frames){this.play.disabled=true;this.wav.disabled=true;}
     this.stopPlay.disabled=!r.player;this.open.disabled=r.busy;this.recover.disabled=r.busy;
     this.counter.textContent=`${(r.frames/RATE).toFixed(1)} s · ${r.eventCount} events · ${r.state}`;
