@@ -4,8 +4,12 @@
 
 Branch `feat/tone-editor-v1`, derivada da `main` funcional em
 `eb9f2b26c6de28dcb4b0f1257ac243eb638bf44a`. O estudo inicial está em
-[tone-editor-v1-study.md](tone-editor-v1-study.md). Não houve merge desta fase,
-criação de tags, atualização do submódulo ou alteração de firmware/DSP.
+[tone-editor-v1-study.md](tone-editor-v1-study.md). Após validação manual e aprovação explícita do usuário, a implementação foi
+integrada à `main` por fast-forward em `91fb421c43d5d2103eb3ccb37e5274c765abc942`
+em 17/11/2026. A publicação e a preservação dos commits foram confirmadas antes
+da remoção local/remota da branch temporária. A suíte nativa do editor foi
+reexecutada com PASS antes da integração. Não houve criação de tags, atualização
+do submódulo ou alteração de firmware/DSP.
 
 TONES agora contém um editor para o motor ANALOG, com **63 parâmetros reais** em
 sete seções: Oscillators, Filter, Envelopes, Modulation, Voice, Arpeggiator e

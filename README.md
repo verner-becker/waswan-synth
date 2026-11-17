@@ -44,9 +44,9 @@ As ferramentas ficam em `.tools/` e os resultados em `.local/`, ambos ignorados 
 
 O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binaryen 133, e compila separadamente a extensão host em `wasm/waswan-sim.c`. É possível fornecer executáveis próprios pelas variáveis `ZIG` e `WASM_OPT`. Não há npm install para executar o sintetizador; Node é utilizado somente na verificação.
 
-## Tone Editor v1 — branch de desenvolvimento
+## Tone Editor v1
 
-Em `feat/tone-editor-v1`, **TONES** apresenta os 63 parâmetros ANALOG em sete seções, com **Save** e **Save as…** na biblioteca existente de 99 programas. A gravação exige confirmação e informa a espera por silêncio e o resultado do armazenamento no navegador. Não há mudança no DSP ou nos formatos de presets/sessões. DRUM-X e controles especiais ainda usam Legacy SMK. Veja [arquitetura, limites e validação](docs/tone-editor-v1.md). Esta fase aguarda aprovação para integração à `main`.
+Integrado à `main`, **TONES** apresenta os 63 parâmetros ANALOG em sete seções, com **Save** e **Save as…** na biblioteca existente de 99 programas. A gravação exige confirmação e informa a espera por silêncio e o resultado do armazenamento no navegador. Não há mudança no DSP ou nos formatos de presets/sessões. DRUM-X e controles especiais ainda usam Legacy SMK. Veja [arquitetura, limites e validação](docs/tone-editor-v1.md). A implementação foi aprovada pelo usuário e integrada preservando o histórico.
 
 ## Controle fino de knobs v1
 
