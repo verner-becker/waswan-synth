@@ -199,3 +199,73 @@ EXPORT uint32_t waswan_program_select(uint32_t n, uint32_t scope, uint32_t token
     dirty_hdr = dirty_page = dirty_tags = dirty_steps = 1;
     return 1;
 }
+
+/* Tone Editor: metadata and commands on the host thread, never new DSP/state formats. */
+static char editor_text[32];
+static uint8_t editor_name[PATCH_NAME];
+static uint32_t editor_hash(const patch_t *p) {
+    uint32_t h=2166136261u;
+    for(uint32_t i=0;i<PATCH_BYTES;i++)h=(h^p->v[i])*16777619u;
+    return h;
+}
+static uint32_t editor_idle(void) {
+    if(!waswan_program_available() || host_edges || host_rel || host_rel_next ||
+       host_qw[0]!=host_qr[0] || host_enc[ENC_ALGORITHM] || host_enc[ENC_PRESETS] ||
+       req_page || pf_page_request) return 0;
+    for(uint32_t q=mq_r;q!=mq_w;q++)if((mq[q%(sizeof mq/sizeof mq[0])][0]&0xF0u)==0xC0u)return 0;
+    return 1;
+}
+EXPORT uint32_t waswan_editor_available(void) {
+    return editor_idle() && obv_patch_engine(&live_p[seq_trk%NTRK])==OBV_ANALOG;
+}
+EXPORT uint32_t waswan_editor_meta(uint32_t p,uint32_t field) {
+    if(p>=NPARAM)return 0;
+    switch(field){
+    case 0:return (uint32_t)(uintptr_t)PDEF[p].name;
+    case 1:return p==P_O2_WAVE?W_BOTH:PDEF[p].max; /* ANALOG catalog even when booting a DRUM-X part */
+    case 2:return p==P_UNI_N||p==P_ARP_OCT?1:0;
+    case 3:return PDEF[p].kind;
+    case 4:return is_a_only(p);
+    default:return 0;
+    }
+}
+EXPORT uint32_t waswan_editor_value(uint32_t p) {return p<NPARAM?ed_patch(p)->v[p]:0;}
+EXPORT uint32_t waswan_editor_format(uint32_t p,uint32_t value) {
+    editor_text[0]=0;
+    if(p==P_LFO_RATE&&value<=127u){
+        char t[8];uint32_t hz=LFO_HZ_X100[value];
+        fmt_u(editor_text,hz/100u);scat(editor_text,".");if(hz%100u<10u)scat(editor_text,"0");
+        fmt_u(t,hz%100u);scat(editor_text,t);scat(editor_text,"Hz");
+    }else if(p<NPARAM&&value<=PDEF[p].max)param_value(editor_text,p,value);
+    return (uint32_t)(uintptr_t)editor_text;
+}
+EXPORT uint32_t waswan_editor_set(uint32_t p,int32_t value,uint32_t scope) {
+    if(p>=NPARAM||!waswan_editor_available()||scope!=waswan_ui_scope()||value<0||
+       value>(int32_t)obv_param_max(ed_patch(p),p)||
+       ((p==P_UNI_N||p==P_ARP_OCT)&&value<1))return 0;
+    if(live_p[seq_trk%NTRK].v[P_O1_WAVE]==W_SUPER&&(p==P_SYNC||p==P_XMOD))return 0;
+    set_param(p,value);auto_rec(p);fx_sync();
+    dirty_hdr=dirty_page=dirty_tags=1;
+    return 1;
+}
+EXPORT uint32_t waswan_editor_slot_token(uint32_t n) {
+    if(n>=NPROG)return 0;
+    patch_t p;prog_get(n,&p);return editor_hash(&p);
+}
+EXPORT uint32_t waswan_editor_name_buffer(void) {return (uint32_t)(uintptr_t)editor_name;}
+EXPORT uint32_t waswan_editor_save(uint32_t n,uint32_t scope,uint32_t token,uint32_t target_token) {
+    if(n>=NPROG||!waswan_editor_available()||scope!=waswan_ui_scope()||token!=waswan_program_token()||
+       target_token!=waswan_editor_slot_token(n)||pb_busy()||copy_to||pend_slot||manual_store_request)return 0;
+    uint32_t nonspace=0;
+    for(uint32_t i=0;i<PATCH_NAME;i++){
+        uint8_t c=editor_name[i];uint32_t valid=0;
+        for(uint32_t j=0;j<sizeof PRESET_CHARS-1;j++)if(c==(uint8_t)PRESET_CHARS[j])valid=1;
+        if(!valid)return 0;if(c!=' ')nonspace=1;
+    }
+    if(!nonspace)return 0;
+    /* Prepare the original save transaction without panel audition/navigation side effects. */
+    preset_part=seq_trk%NTRK;preset_pattern=set.pat;preset_snapshot=live_p[preset_part];
+    memcpy(preset_snapshot.v+NPARAM,editor_name,PATCH_NAME);preset_named=1;save_to=n;
+    preset_commit();dirty_hdr=dirty_page=dirty_tags=1;
+    return preset_ui==2;
+}

@@ -43,6 +43,13 @@ assert s.count(receive) == 1
 s = "import {updateDspMonitor} from './dsp-monitor.js';\n" + s.replace(receive, receive+'updateFoundation(m);updateDspMonitor(m);')
 assert s.count("node.onprocessorerror=()=>log(") == 1
 s = s.replace("node.onprocessorerror=()=>log(", "node.onprocessorerror=()=>{updateFoundation({t:'error',message:'Audio processor stopped'});updateDspMonitor({t:'error'});log(").replace("Reinicie o simulador.');gain=", "Reinicie o simulador.');};gain=")
+# Report the existing browser write, without a second persistence mechanism.
+store_anchor = "localStorage.setItem(key,b64(store));$('#savedState')"
+assert s.count(store_anchor) == 1
+s = s.replace(store_anchor, "localStorage.setItem(key,b64(store));updateFoundation({t:'tone-store',ok:true,data:store});$('#savedState')")
+error_anchor = "catch{log('A memória funciona nesta sessão;"
+assert s.count(error_anchor) == 1
+s = s.replace(error_anchor, "catch{updateFoundation({t:'tone-store',ok:false,data:store});log('A memória funciona nesta sessão;")
 p.write_text(s)
 PY
 python3 - <<'PYHTML'

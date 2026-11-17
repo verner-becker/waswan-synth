@@ -50,6 +50,23 @@ export class Engine extends OriginalEngine {
     x.waswan_ui_set(id,value,m.scope);
   }
   input(message) {
+    if(message.t==='editor-set'){
+      if(Number.isInteger(message.id)&&message.id>=0&&message.id<this.ex.waswan_parameter_count()&&
+         Number.isInteger(message.value)&&Number.isInteger(message.scope)&&message.scope>=0&&message.scope<=0xffffffff)
+        this.editorEdit={id:message.id,applied:!!this.ex.waswan_editor_set?.(message.id,message.value,message.scope)};
+      return;
+    }
+    if(message.t==='editor-save'){
+      const m=message,x=this.ex,u32=v=>Number.isInteger(v)&&v>=0&&v<=0xffffffff;
+      if(!x.waswan_editor_save||!Number.isSafeInteger(m.request)||m.request<1||!Number.isInteger(m.program)||m.program<1||m.program>99||
+         !u32(m.scope)||!u32(m.token)||!u32(m.targetToken)||typeof m.name!=='string'||!/^[ A-Z0-9-]{1,10}$/.test(m.name)||!m.name.trim())return;
+      // AudioWorkletGlobalScope does not guarantee TextEncoder; the validated name is ASCII.
+      const name=m.name.padEnd(10,' '),buffer=new Uint8Array(x.memory.buffer,x.waswan_editor_name_buffer(),10);
+      for(let i=0;i<10;i++)buffer[i]=name.charCodeAt(i);
+      const applied=!!x.waswan_editor_save(m.program-1,m.scope,m.token,m.targetToken);
+      this.editorSave={request:m.request,applied,program:m.program,part:m.scope&3,state:applied?'waiting':'rejected'};
+      return;
+    }
     if(message.t==='program-select'){
       if(Number.isSafeInteger(message.request)&&message.request>0&&Number.isInteger(message.program)&&message.program>=1&&
          message.program<=this.ex.waswan_program_count()&&Number.isInteger(message.scope)&&message.scope>=0&&message.scope<=0xffffffff&&
@@ -84,6 +101,25 @@ export class Engine extends OriginalEngine {
   }
   frame() {
     const frame = super.frame(), x = this.ex;
+    if(x.waswan_editor_meta){
+      const string=ptr=>{const bytes=new Uint8Array(x.memory.buffer);let s='';for(let i=ptr;i<ptr+64&&bytes[i];i++)s+=String.fromCharCode(bytes[i]);return s;};
+      if(!this.editorCatalog){
+        this.editorCatalog=Array.from({length:x.waswan_parameter_count()},(_,id)=>({id,name:string(x.waswan_editor_meta(id,0)),
+          max:x.waswan_editor_meta(id,1),min:x.waswan_editor_meta(id,2),kind:x.waswan_editor_meta(id,3),shared:!!x.waswan_editor_meta(id,4)}));
+        for(const p of this.editorCatalog)if([2,3,4,5,6,7,8,9,10,18].includes(p.kind))
+          p.options=Array.from({length:p.max+1},(_,v)=>string(x.waswan_editor_format(p.id,v)));
+        frame.editorCatalog=this.editorCatalog;
+      }
+      if(this.editorSave?.applied&&this.editorSave.state==='waiting'){
+        if(frame.presetSave===3||(frame.presetSave===0&&!frame.manualPending)){this.editorSave.state='written';this.editorSave.hash=x.sim_store_hash()>>>0;}
+        else if(frame.presetSave===4)this.editorSave.state='failed';
+      }
+      const values=this.editorCatalog.map(p=>x.waswan_editor_value(p.id));
+      const cacheKey=`${frame.track}/${frame.engines[frame.track]}/${values.join(',')}`;
+      if(cacheKey!==this.editorKey){this.editorKey=cacheKey;this.editorValues=values.map((value,id)=>({value,display:string(x.waswan_editor_format(id,value))}));}
+      frame.editor={available:!!x.waswan_editor_available(),values:this.editorValues,edit:this.editorEdit,save:this.editorSave,
+        targets:Array.from({length:99},(_,n)=>x.waswan_editor_slot_token(n)>>>0)};
+    }
     if(x.waswan_program_count){
       const catalog=x.waswan_program_catalog();
       if(catalog!==this.programCatalog){

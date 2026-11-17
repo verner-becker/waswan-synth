@@ -25,7 +25,7 @@ export class ToneSelector {
     const intent={program,scope:f.instrument.scope,token:f.instrument.programToken};
     if(f.instrument.edited){
       this.intent=intent;const next=this.library.find(p=>p.number===program);
-      this.question.textContent=`Part ${'ABCD'[f.track]} · Program ${current} (${f.instrument.name}) has unsaved edits. Loading Program ${program} (${next.name}) replaces them. Save in Legacy SMK first if you want to keep them.`;
+      this.question.textContent=`Part ${'ABCD'[f.track]} · Program ${current} (${f.instrument.name}) has unsaved edits. Loading Program ${program} (${next.name}) replaces them. Save in TONES or Legacy SMK first if you want to keep them.`;
       this.dialog.showModal();
     }else this.commit(intent,false);
   }
@@ -48,6 +48,6 @@ export class ToneSelector {
     if(this.node.value!==String(current))this.node.value=String(current);this.node.disabled=!running||!f?.programAvailable||!this.library;
     this.node.title=`Program ${current} · ${f?.name??''}`;
     if(this.pending&&frame.programSelection?.request===this.pending){this.failure=!frame.programSelection.applied;this.pending=null;}
-    this.detail.textContent=`Program ${current}${f?.edited?' · Edited · save in Legacy SMK':''}${this.failure?' · Selection not applied; retry':''}`;
+    this.detail.textContent=`Program ${current}${f?.edited?' · Edited · save in TONES':''}${this.failure?' · Selection not applied; retry':''}`;
   }
 }

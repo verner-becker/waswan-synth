@@ -2,12 +2,13 @@
 import {CONTROLS,controlTarget,displayValue} from './ui-controls.js';
 import {TARGETS,fineTarget} from './midi-profile.js';
 import {ToneSelector} from './ui-tone-selector.js';
+import {ToneEditor} from './ui-tone-editor.js';
 import {MidiSetup} from './ui-midi-setup.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,CompactMeter,RotaryKnob,VerticalFader,PlaceholderWorkspace,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
 
-const WORKSPACES=[['perf','PERF','Performance'],['osc','OSC','Sound Design · Oscillators'],['mix','MIX','Mixer'],['filter','FILTER','Sound Design · Filter'],['env','ENV','Sound Design · Envelopes'],['mod','MOD','Sound Design · Modulation'],['fx','FX','Sound Design · Effects'],['routing','ROUTING','Sound Design · Routing'],['seq','SEQ','Sequencer'],['tones','TONES','Tone Library'],['diag','DIAG','Diagnostics']];
+const WORKSPACES=[['perf','PERF','Performance'],['osc','OSC','Sound Design · Oscillators'],['mix','MIX','Mixer'],['filter','FILTER','Sound Design · Filter'],['env','ENV','Sound Design · Envelopes'],['mod','MOD','Sound Design · Modulation'],['fx','FX','Sound Design · Effects'],['routing','ROUTING','Sound Design · Routing'],['seq','SEQ','Sequencer'],['tones','TONES','Tone Editor'],['diag','DIAG','Diagnostics']];
 let app;
 export function updateFoundation(message) { app?.receive(message); }
 export function mountFoundation(bridge) {
@@ -27,7 +28,7 @@ class Foundation {
     this.buildHeader();
     this.navigation=WorkspaceNavigation(WORKSPACES,id=>this.selectWorkspace(id));this.shell.append(this.navigation);
     this.main=el('main','ww-main');this.shell.append(this.main);
-    this.views=new Map();this.buildPerformance();this.buildFutureViews();this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
+    this.views=new Map();this.buildPerformance();this.buildFutureViews();this.toneEditor=new ToneEditor(m=>this.bridge.send(m));this.addView('tones',this.toneEditor.node);this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
     const footer=el('div','ww-footer');
     footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.3'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);
@@ -77,7 +78,6 @@ class Foundation {
       routing:['Sound Design · Routing','A future visual view of signal flow and assignments.',[['Routing matrix','Planned; no new routes or modulation engine in this phase.']]],
       mix:['Mixer','Four real part-level faders are available in Performance. Other mixer functions remain in Legacy SMK.',[['Four-part console','Pan, mute, solo and sends will be composed here in a later increment.']]],
       seq:['Sequencer','The existing sequencer keeps its patterns and transport. This workspace does not introduce a new editor.',[['Piano roll','Planned. No simulated notes or automation.'],['Step editor','Use SEQ in Legacy SMK to edit existing steps.']]],
-      tones:['Tone Library','Existing presets and favourites remain available through Legacy SMK.',[['Browse & compare','Search, categories and A/B comparison are planned.'],['Save your sound','Use BT / SAVE in Legacy SMK, then export your session in Settings.']]],
     };
     for(const [id,[title,description,items]] of Object.entries(specs)){
       const view=PlaceholderWorkspace(title,description,items);view.append(action('Open Legacy SMK',()=>this.toggleLegacy(true)));this.addView(id,view);
@@ -201,15 +201,16 @@ class Foundation {
   }
   showSettings() {this.settingsPanel.hidden=false;this.settingsPanel.scrollIntoView({block:'nearest'});}
   receive(m) {
+    if(m.t==='tone-store'){this.toneEditor.stored(m.data,m.ok);return;}
     if(m.t==='ready'){
       this.failed=false;this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();
       if(this.midiSetupPending){this.midiSetupPending=false;this.midiSetup.open();}
     }
-    if(m.t==='error'){this.toneSelector.node.disabled=true;this.midiSetupPending=false;this.midiSetup.close();this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
+    if(m.t==='error'){if(this.frame)this.toneEditor.update(this.frame,false);this.toneSelector.node.disabled=true;this.midiSetupPending=false;this.midiSetup.close();this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
     if(m.t!=='frame')return;
     const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
-    this.toneSelector.update(m,this.running);
+    this.toneSelector.update(m,this.running);this.toneEditor.update(m,this.running);
     this.part.textContent=`Part ${'ABCD'[part]}`;const connected=!!this.bridge.midi.input;
     this.midiStatus.textContent=connected?'MIDI · Connected':'MIDI · Not connected';this.midiStatus.dataset.state=connected?'on':'off';
     this.mode.textContent=m.engines[part]===2?'DRUM-X':['POLY','DUAL','UNISON','MONO'][poly.parts[part].mode];
