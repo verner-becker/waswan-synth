@@ -62,7 +62,9 @@ export class StudioRecorder {
         if(this.state!=='recording'||!raw.running||raw.data[0]<128||raw.data[0]>=240)return;
         const now=performance.now(),receivedFrame=Math.round(this.audioContext.currentTime*RATE);
         const age=Number.isFinite(raw.timeStamp)&&Math.abs(raw.timeStamp-now)<5000?raw.timeStamp-now:0;
-        this.worker.postMessage({t:'input',frame:receivedFrame+Math.round(age*RATE/1000),receivedFrame,data:raw.data,listening:raw.listening});
+        const input={frame:receivedFrame+Math.round(age*RATE/1000),receivedFrame,data:raw.data,listening:raw.listening};
+        this.worker.postMessage({t:'input',...input});
+        this.onInput?.(input);
       });
     }
     if(m.t==='progress'){this.frames=m.frames;this.eventCount=m.eventCount;}
@@ -107,23 +109,22 @@ export class StudioRecorder {
     return {project,audio:new Blob([wavHeader(frames),file.slice(44,44+frames*4)],{type:'audio/wav'})};
   }
   async recover(){
-    if(this.busy)return;
+    if(this.busy||this.canReplace&&!this.canReplace())throw Error('Finish recording or audio preparation before recovering a project');
     const previous=this.state;this.state='loading';this.message='Loading local take';this.changed();
     try{
-    this.stopPlayback();
     const root=await(await navigator.storage.getDirectory()).getDirectoryHandle('waswan-studio-v1');
     const ids=[];for await(const [name,handle] of root.entries())if(handle.kind==='directory'&&/^take-\d+-[a-f0-9-]+$/.test(name))ids.push(name);
     for(const id of ids.sort().reverse()){
-      try{const take=await this.readLocal(id);this.beforeReplace?.();this.take=take;this.frames=this.take.project.frames;this.eventCount=this.take.project.events.length;this.state='ready';this.message=`Recovered local take · ${this.take.project.status}`;this.changed();return;}catch{}
+      try{const take=await this.readLocal(id);if(this.confirmReplace&&!this.confirmReplace()){this.state=previous;this.message='Recovery cancelled';this.changed();return;}this.beforeReplace?.();this.stopPlayback();this.take=take;this.frames=this.take.project.frames;this.eventCount=this.take.project.events.length;this.state='ready';this.message=`Recovered local take · ${this.take.project.status}`;this.changed();return;}catch{}
     }
     throw Error('No recoverable local take');
     }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
   }
   async open(file){
-    if(this.busy)throw Error('Stop recording before opening a project');
+    if(this.busy||this.canReplace&& !this.canReplace())throw Error('Finish recording or audio preparation before opening a project');
     const previous=this.state;this.state='loading';this.message='Opening project';this.changed();
     try{
-      const take=await readProject(file);this.beforeReplace?.();this.stopPlayback();this.take=take;this.frames=take.project.frames;this.eventCount=take.project.events.length;this.state='ready';this.message='Project opened · current synth unchanged';this.changed();
+      const take=await readProject(file);if(this.confirmReplace&&!this.confirmReplace()){this.state=previous;this.message='Open cancelled';this.changed();return;}this.beforeReplace?.();this.stopPlayback();this.take=take;this.frames=take.project.frames;this.eventCount=take.project.events.length;this.state='ready';this.message='Project opened · current synth unchanged';this.changed();
     }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
   }
   async ensureProject(sequence){
@@ -135,6 +136,12 @@ export class StudioRecorder {
       if(!this.take){this.take={project:{format:'waswan-studio-project',version:1,name:'MIDI composition',status:'complete',frames:0,sampleRate:RATE,channels:2,context,events:[],sequence:structuredClone(sequence)},audio:new Blob([wavHeader(0)],{type:'audio/wav'})};this.frames=0;this.eventCount=0;}
       this.take.project.sequenceContext=context;this.state='ready';this.message='MIDI project ready';this.changed();
     }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
+  }
+  clearProject(){
+    if(this.busy)throw Error('Finish recording or loading before starting a new project');
+    this.generation=(this.generation||0)+1;this.stopPlayback();this.cancelMp3();
+    this.take=null;this.frames=0;this.eventCount=0;this.id=null;this.firstFrame=null;
+    this.state='idle';this.message='New project · current instrument preserved';this.mp3Message='';this.changed();
   }
   async applyContext(){
     if(this.busy||!this.take)throw Error('Load a project and finish the current operation first');

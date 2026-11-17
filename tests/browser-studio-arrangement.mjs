@@ -14,7 +14,7 @@ const file=Buffer.from(await fixture.arrayBuffer());
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
 try{
  const browserContext=await browser.newContext({acceptDownloads:true,viewport:{width:1440,height:1100}}),page=await browserContext.newPage(),errors=[];
- page.on('pageerror',e=>errors.push(e.message));
+ page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{if(d.message().startsWith('Discard the current Studio project'))void d.accept();});
  await page.addInitScript(()=>{
   window.audit={contexts:0,sent:[]};audit.source={id:'arrangement',name:'Synthetic arrangement input',state:'connected',async open(){},async close(){}};
   navigator.requestMIDIAccess=async()=>({inputs:new Map([['arrangement',audit.source]])});
@@ -24,15 +24,15 @@ try{
  const button=name=>page.getByRole('button',{name,exact:true}),field=name=>page.getByLabel(name,{exact:true});
  const open=async()=>{await page.locator('[data-workspace="studio"]').click();await field('Open Studio project').setInputFiles({name:'fixture.wsproj',mimeType:'application/octet-stream',buffer:file});await page.waitForFunction(()=>document.querySelector('.ww-studio-status').textContent.includes('Project opened'));};
  const midi=(st,d1,d2)=>page.evaluate(([st,d1,d2])=>audit.source.onmidimessage({data:[st,d1,d2],timeStamp:performance.now()}),[st,d1,d2]);
- await page.goto('http://localhost:8737/simulator/');await open();await page.locator('[data-workspace="seq"]').click();assert.equal(await field('Sequence notes').locator('option').count(),2);assert.equal(await page.evaluate(()=>audit.contexts),0,'project notes load without starting audio');
+ await page.goto('http://localhost:8737/simulator/');await page.locator('.ww-sequence').waitFor({state:'attached'});await page.locator('.ww-sequence > details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));await open();await page.locator('[data-workspace="seq"]').click();assert.equal(await field('Sequence notes').locator('option').count(),2);assert.equal(await page.evaluate(()=>audit.contexts),0,'project notes load without starting audio');
  await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await button('Connect MIDI keyboard').click();await page.waitForFunction(()=>!!audit.source.onmidimessage);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
  await button('Make clip A').click();assert.equal(await field('Arrangement clip').locator('option').count(),1);
  await button('Duplicate clip').click();assert.equal(await field('Arrangement clip').locator('option').count(),2);assert.equal(await field('Sequence notes').locator('option').count(),3);
  await field('Clip start beat').fill('9');await field('Clip part').selectOption('2');await button('Move clip').click();
  assert.equal(await field('Clip start beat').inputValue(),'9');assert.equal(await field('Clip part').inputValue(),'2');
- await button('Mute A').click();await button('Solo C').click();await button('Play arrangement').click();await page.waitForFunction(()=>audit.sequence?.playing);await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.sequenced&&v.part===2));
+ await button('Mute A').click();await button('Solo C').click();await button('Play').click();await page.waitForFunction(()=>audit.sequence?.playing);await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.sequenced&&v.part===2));
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.filter(v=>v.gate&&v.sequenced).every(v=>v.part===2)));
- await button('Stop arrangement').click();await page.waitForFunction(()=>!audit.sequence.playing);
+ await button('Stop').click();await page.waitForFunction(()=>!audit.sequence.playing);
  await field('Part A volume').press('End');await field('Part A volume').press('ArrowLeft');await page.waitForFunction(()=>audit.frame.studioMixer[0][0]===126);
  await field('Part A pan').press('End');await page.waitForFunction(()=>audit.frame.studioMixer[0][1]===64);
  // Open leaves live edits alone; explicit Apply has cancel/confirm and a token guard.
@@ -49,7 +49,7 @@ try{
  await midi(144,67,100);await page.waitForTimeout(300);await midi(128,67,0);await page.waitForTimeout(300);
  const mark=await page.evaluate(()=>audit.sent.length);await button('Finish overdub').click();await page.waitForFunction(()=>document.querySelector('.ww-note-list').options.length===3);
  assert(!(await page.evaluate(n=>audit.sent.slice(n),mark)).some(m=>m.t==='panic'||m.t==='reboot'));
- const wait=page.waitForEvent('download');await button('Save composition project').click();await(await wait).saveAs(`${root}/arrangement.wsproj`);const saved=await readProject(new Blob([fs.readFileSync(`${root}/arrangement.wsproj`)]));assert.equal(saved.project.sequence.notes.length,3);assert(saved.project.sequenceContext.parts.every(p=>p.patch.length===80));
+ const wait=page.waitForEvent('download');await button('Save project').click();await(await wait).saveAs(`${root}/arrangement.wsproj`);const saved=await readProject(new Blob([fs.readFileSync(`${root}/arrangement.wsproj`)]));assert.equal(saved.project.sequence.notes.length,3);assert(saved.project.sequenceContext.parts.every(p=>p.patch.length===80));
  await page.screenshot({path:`${root}/arrangement-desktop.png`,fullPage:true});await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:`${root}/arrangement-mobile.png`,fullPage:true});
  assert.deepEqual(errors,[]);const report={result:'PASS',chrome:await browser.version(),clips:true,duplicate:true,movePart:true,muteSolo:true,partMixer:true,offlineProjectLoad:true,contextCancelConfirm:true,fullToneSnapshot:true,overdub:true,sameContext:true,noPanic:true,mobileOverflow:false,physicalValidation:false,errors};fs.writeFileSync(`${root}/browser.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{await browser.close();}

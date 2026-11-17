@@ -14,7 +14,7 @@ const fixture=Buffer.from(await projectBlob({format:'waswan-studio-project',vers
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
 try{
  const context=await browser.newContext({acceptDownloads:true,viewport:{width:1440,height:1100}}),page=await context.newPage(),errors=[],requests=[];
- page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>requests.push(r.url()));
+ page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{if(d.message().startsWith('Discard the current Studio project'))void d.accept();});page.on('request',r=>requests.push(r.url()));
  await page.addInitScript(()=>{
   window.audit={contexts:0,sent:[]};audit.source={id:'automation',name:'Automation input',state:'connected',async open(){},async close(){}};navigator.requestMIDIAccess=async()=>({inputs:new Map([['automation',audit.source]])});
   localStorage.setItem('waswan-midi-profile-v1',JSON.stringify({version:1,enabled:true,bindings:[{port:'Automation input',channel:0,cc:21,target:'control:cutoff',mode:'absolute',behavior:'fine'}]}));
@@ -24,7 +24,7 @@ try{
  const button=name=>page.getByRole('button',{name,exact:true}),field=name=>page.getByLabel(name,{exact:true});
  const midi=(st,d1,d2)=>page.evaluate(([st,d1,d2])=>audit.source.onmidimessage({data:[st,d1,d2],timeStamp:performance.now()}),[st,d1,d2]);
  const download=async(name,path)=>{const wait=page.waitForEvent('download');await button(name).click();await(await wait).saveAs(path);return fs.readFileSync(path);};
- await page.goto('http://localhost:8737/simulator/');await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await button('Connect MIDI keyboard').click();await page.waitForFunction(()=>!!audit.source.onmidimessage);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
+ await page.goto('http://localhost:8737/simulator/');await page.locator('.ww-sequence').waitFor({state:'attached'});await page.locator('.ww-sequence > details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await button('Connect MIDI keyboard').click();await page.waitForFunction(()=>!!audit.source.onmidimessage);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
  const profile=await page.evaluate(()=>localStorage.getItem('waswan-midi-profile-v1'));
  await page.locator('[data-workspace="studio"]').click();await field('Open Studio project').setInputFiles({name:'fixture.wsproj',mimeType:'application/octet-stream',buffer:fixture});await page.waitForFunction(()=>document.querySelector('.ww-studio-status').textContent.includes('Project opened'));
  await page.evaluate(()=>{audit.node.port.postMessage({t:'voice-mode',part:0,mode:0});audit.node.port.postMessage({t:'ui-control',source:'ui',id:0,value:40,scope:audit.frame.instrument.scope});});await page.waitForFunction(()=>audit.frame.instrument.controls[0].value===40);

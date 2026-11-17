@@ -20,13 +20,13 @@ export class ArrangementEditor {
       const tone=action('Edit tone '+'ABCD'[part],()=>owner.openTonePart?.(part));
       const clip=action('Make clip '+'ABCD'[part],()=>owner.run(()=>this.selectNew(makeClip(owner.sequence,part))));
       const layer=action('Add take to '+'ABCD'[part],()=>owner.run(()=>{if(!owner.recorder.take)throw Error('Record or open a take first');owner.replace(addTake(owner.sequence,owner.recorder.take.project,part));}));
-      const overdub=action('Overdub '+'ABCD'[part],()=>owner.run(()=>this.startOverdub(part)));
+      const overdub=action('Overdub '+'ABCD'[part],()=>owner.run(()=>owner.recordMidi(part)));
       const live=el('small','ww-muted');row.append(tone,clip,layer,overdub,live);this.node.append(row);
       this.rows.push({mute,solo,level,pan,tone,clip,layer,overdub,live});
     }
     const controls=el('div','ww-studio-actions');
     this.applyMix=action('Apply saved part mixer',()=>{const tracks=owner.sequence.tracks||defaultTracks();for(const t of tracks){owner.bridge.send({t:'studio-mixer',part:t.part,field:0,value:t.level});owner.bridge.send({t:'studio-mixer',part:t.part,field:1,value:t.pan});}});
-    this.finish=action('Finish overdub',()=>owner.run(()=>this.finishOverdub()));controls.append(this.applyMix,this.finish);this.node.append(controls);
+    this.finish=action('Finish overdub',()=>owner.run(()=>owner.stopTransport()));controls.append(this.applyMix,this.finish);this.node.append(controls);
     this.node.append(el('p','ww-muted','For overdub, choose the live part/MIDI routing before recording. New input notes are added to the chosen track. Existing parts play as accompaniment; held notes at a loop boundary are trimmed to that boundary.'));
     this.clips=el('select');this.clips.setAttribute('aria-label','Arrangement clip');this.clips.onchange=()=>this.draw();
     this.clipStart=el('input');this.clipStart.type='number';this.clipStart.min=1;this.clipStart.step=.25;this.clipStart.setAttribute('aria-label','Clip start beat');
@@ -55,7 +55,7 @@ export class ArrangementEditor {
     this.overdub=null;if(r.state!=='ready'||!r.take)throw Error(r.message);
     const start=o.transportStartFrame??session.start,offset=r.take.project.firstFrame-start;
     r.take.project.sequenceOffset=offset;
-    o.replace(addTake(o.sequence,r.take.project,session.part,offset));this.draw();
+    o.replace(addTake(o.sequence,r.take.project,session.part,offset),true);this.draw();
   }
   update(m){
     if(m.t==='frame')for(let p=0;p<4;p++){
@@ -65,14 +65,14 @@ export class ArrangementEditor {
     }
   }
   draw(){
-    const o=this.owner,s=o.sequence,tracks=s.tracks||defaultTracks().map((t,p)=>({...t,level:o.frame?.studioMixer?.[p][0]??100,pan:o.frame?.studioMixer?.[p][1]??0})),blocked=o.playing||o.recorder.busy||!!this.overdub;
+    const o=this.owner,s=o.sequence,tracks=s.tracks||defaultTracks().map((t,p)=>({...t,level:o.frame?.studioMixer?.[p][0]??100,pan:o.frame?.studioMixer?.[p][1]??0})),blocked=o.playing||o.starting||o.recorder.busy||!!o.capture||!!this.overdub;
     for(let p=0;p<4;p++){
       const row=this.rows[p],track=tracks[p];row.mute.setAttribute('aria-pressed',String(track.mute));row.solo.setAttribute('aria-pressed',String(track.solo));
       row.mute.disabled=row.solo.disabled=blocked;row.clip.disabled=row.layer.disabled=row.overdub.disabled=blocked;
       row.level.disabled=row.pan.disabled=!o.bridge.getAudio().node;
       if(document.activeElement!==row.level)row.level.value=track.level;if(document.activeElement!==row.pan)row.pan.value=track.pan;
     }
-    this.finish.disabled=!this.overdub;this.applyMix.disabled=!s.tracks||!o.bridge.getAudio().node||o.recorder.busy;
+    this.finish.disabled=!this.overdub||!!o.capture&&o.capture.phase!=='Recording';this.applyMix.disabled=!s.tracks||!o.bridge.getAudio().node||o.recorder.busy;
     const selected=this.clips.value,key=(s.clips||[]).map(c=>[c.id,c.part,c.start,c.length,c.name].join('/')).join('|');
     if(key!==this.clipKey){this.clipKey=key;this.clips.replaceChildren();for(const c of s.clips||[])this.clips.add(new Option(`Part ${'ABCD'[c.part]} · ${c.name}`,c.id));if((s.clips||[]).some(c=>c.id===selected))this.clips.value=selected;}
     const clip=s.clips?.find(c=>c.id===this.clips.value);

@@ -40,8 +40,9 @@ export class StudioWorkspace {
     this.status=el('p','ww-studio-status');this.status.setAttribute('role','status');
     const controls=el('div','ww-studio-actions');
     const run=task=>void Promise.resolve().then(task).catch(error=>{this.recorder.message=error.message;this.draw();});
+    this.newProject=action('New project',()=>run(()=>this.recorder.newProject?.()));
     this.record=action('Record take',()=>run(()=>this.recorder.start()),'ww-primary');
-    this.stop=action('Stop recording',()=>this.recorder.stop());
+    this.stop=action('Stop recording',()=>run(()=>this.recorder.stopFromUI?this.recorder.stopFromUI():this.recorder.stop()));
     this.play=action('Listen to take',()=>run(()=>this.recorder.play()));
     this.stopPlay=action('Stop take playback',()=>{this.recorder.stopPlayback();this.draw();});
     this.wav=action('Export WAV',()=>run(()=>this.recorder.exportWav()));
@@ -52,7 +53,7 @@ export class StudioWorkspace {
     this.recover=action('Recover local take',()=>run(()=>this.recorder.recover()));
     this.open=el('input');this.open.type='file';this.open.accept='.wsproj';this.open.setAttribute('aria-label','Open Studio project');
     this.open.onchange=()=>{const file=this.open.files[0];if(file)run(()=>this.recorder.open(file));this.open.value='';};
-    controls.append(this.record,this.stop,this.play,this.stopPlay,this.wav,this.mp3,this.cancelMp3,this.save,this.recover,this.applyContext);
+    controls.append(this.newProject,this.record,this.stop,this.play,this.stopPlay,this.wav,this.mp3,this.cancelMp3,this.save,this.recover,this.applyContext);
     const openLabel=el('label','ww-studio-open','Open project ');openLabel.append(this.open);
     this.counter=el('p','ww-studio-counter');this.context=el('p','ww-muted');this.events=el('div','ww-studio-events');
     this.node.append(this.status,controls,this.mp3Status,openLabel,this.counter,
@@ -68,6 +69,7 @@ export class StudioWorkspace {
   draw(){
     const r=this.recorder,audio=this.bridge.getAudio();
     this.status.textContent=r.message;this.status.dataset.state=r.state;
+    this.newProject.disabled=r.busy||r.canReplace&&!r.canReplace();
     this.record.disabled=r.busy||audio.context?.state!=='running';this.stop.disabled=!['starting','recording'].includes(r.state);
     for(const b of [this.play,this.wav,this.save])b.disabled=r.busy||!r.take;
     this.applyContext.disabled=r.busy||!r.take||!audio.node;

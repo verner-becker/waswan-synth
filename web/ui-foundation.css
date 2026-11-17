@@ -136,3 +136,41 @@
 /* Audio arrangement stays inside the Studio workspace. */
 .ww-sequence canvas.ww-audio-regions { width: 100%; height: 180px; }
 .ww-sequence input[type="file"] { max-width: 100%; }
+
+/* Studio task order: project, transport, piano roll, then secondary editors. */
+.ww-project-bar,.ww-seq-transport,.ww-roll-tools {display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0;}
+.ww-project-bar {padding-bottom:12px;border-bottom:1px solid var(--ww-border);}
+.ww-project-bar input[type="file"] {width:190px;font:inherit;font-size:12px;}
+.ww-project-open,.ww-seq-transport label {display:flex;align-items:center;gap:8px;}
+.ww-project-bar .ww-muted {margin-left:auto;font-size:12px;}
+.ww-seq-transport {padding:10px;background:var(--ww-bg);border:1px solid var(--ww-border);border-radius:8px;}
+.ww-shell button.ww-record {border-color:#e59688;background:#3c2626;}
+.ww-shell button.ww-record:not(:disabled):hover {background:#633332;}
+.ww-seq-transport select {font:inherit;padding:7px;background:var(--ww-bg);color:var(--ww-text);border:1px solid var(--ww-border);border-radius:6px;}
+.ww-sequence-status {font-variant-numeric:tabular-nums;min-height:20px;margin:8px 0;}
+.ww-seq-hint {font-size:12px;color:var(--ww-muted);margin:6px 0;max-width:100ch;}
+.ww-roll-tools .ww-muted {font-size:12px;}
+.ww-piano-ruler {height:24px;position:relative;overflow:hidden;border:1px solid var(--ww-border);border-bottom:0;background:var(--ww-bg);font-size:11px;color:var(--ww-muted);}
+.ww-piano-ruler span {position:absolute;top:4px;padding-left:5px;}
+.ww-seq-section {margin-top:10px;border:1px solid var(--ww-border);border-radius:8px;padding:0 12px;min-width:0;}
+.ww-seq-section > summary {padding:13px 0;cursor:pointer;font-weight:600;min-height:44px;}
+.ww-seq-section > .ww-panel {margin:0 0 12px;border:0;padding:0;}
+.ww-seq-section > .ww-panel > .ww-panel-heading {display:none;}
+.ww-seq-section .ww-note-list {width:100%;margin:0 0 12px;}
+.ww-sequence .ww-piano-roll {height:1536px;}
+@media (max-width:600px) {
+  .ww-project-bar .ww-muted {margin-left:0;width:100%;}
+  .ww-project-open {width:100%;flex-wrap:wrap;}
+  .ww-seq-transport {gap:8px;}
+  .ww-seq-transport label {width:100%;}
+  .ww-sequence .ww-sequence-settings {gap:8px;font-size:12px;}
+  .ww-sequence .ww-sequence-settings input[type="number"] {width:75px;}
+  .ww-piano-scroll {height:300px;}
+}
+.ww-sequence .ww-piano-roll {width:100%;min-width:1152px;}
+.ww-ruler-window {overflow:hidden;width:100%;}
+.ww-piano-ruler {width:100%;min-width:1152px;}
+.ww-ruler-window {padding:0 1px;}
+@media (max-width:600px) {
+  .ww-project-open {width:auto;}
+}

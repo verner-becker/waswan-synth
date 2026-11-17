@@ -104,3 +104,7 @@ Próximo passo: avaliação musical física com o [roteiro de uso](studio-guide.
 ## Escopo adotado para a onda 5
 
 Importar PCM16 WAV 44,1 kHz, quatro fontes/120 segundos, até 32 regiões, corte não destrutivo, posição/ganho/balanço/mute, loop e captura com MIDI. Mistura preparatória em Worker com buffers limitados; projeto v2 inclui fontes, conserva leitura v1 e cópia local recuperável. Sem microfone/time stretch. [Detalhes e limites](studio-wave-5.md); [roteiro de uso e validação física](studio-guide.md).
+
+## Continuidade — revisão de UX do SEQ
+
+Após as ondas, o usuário solicitou pesquisa de DAWs e reforma do SEQ, New project completo e C3 na captura, com advisor Sol 6.1 high. Implementação na branch `feat/studio-seq-ux`, preservando a dependência `c6e3c67` sem integrar na main. [Pesquisa, capturas, decisões e fechamento](studio-seq-ux.md). O roteiro de uso foi atualizado para New project → Record MIDI → Stop → Save project.

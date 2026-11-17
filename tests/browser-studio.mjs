@@ -8,7 +8,7 @@ const seconds=Number(process.env.STUDIO_RECORD_SECONDS||5);assert(Number.isFinit
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
 try{
   const context=await browser.newContext({acceptDownloads:true,viewport:{width:1440,height:1100}}),page=await context.newPage(),errors=[];
-  page.on('pageerror',e=>errors.push(e.message));
+  page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{if(d.message().startsWith('Discard the current Studio project'))void d.accept();});
   await page.addInitScript(()=>{
     window.audit={contexts:0,sent:[]};
     audit.source={id:'studio',name:'Studio synthetic input',state:'connected',async open(){},async close(){}};
