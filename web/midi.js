@@ -7,6 +7,7 @@ import {mountProfilePanel} from './midi-profile-panel.js';
 import {mountDspMonitor} from './dsp-monitor.js';
 import {mountPolyphonyPanel} from './polyphony-panel.js';
 import {observeStudioInput} from './studio-events.js';
+import {observeDawInput} from './daw-input-events.js';
 
 export class MidiInputController extends OriginalMidiInputController {
   constructor(options) {
@@ -40,12 +41,14 @@ export class MidiInputController extends OriginalMidiInputController {
       }
     });
     if(entry)entry.disposition=consumed?(learning?'learned-no-output':entry.commands.length?'mapped-command-sent':'mapped-no-command'):'original-path';
-    if(consumed)return;
+    const routed=!consumed&&!!this.dawRouter?.route(data,timeStamp);observeDawInput(data,timeStamp,{running,listening,consumed,routed,deviceId:this.input?.id,deviceName:this.input?.name});
+    if(consumed||routed)return;
     super.message(data);
   }
   release() {
     this.diagnostic?.reset();
     this.profile?.reset();
+    if(this.dawRouter?.protect()){this.dawRouter.release();return;}
     super.release();
   }
 }

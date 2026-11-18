@@ -8,18 +8,18 @@ function apply(p,type,data){
   if(type==='batch'){if(!Array.isArray(data.commands)||data.commands.length>512)fail('INVALID_COMMAND','Invalid transaction');for(const c of data.commands){if(c.type==='batch')fail('INVALID_COMMAND','Nested transactions are not supported');apply(p,c.type,c.payload);}return;}
   if(type==='project.update')return fields(p,data,['name','bpm','meter','length','transport']);
   if(type==='track.create'){const t={...makeTrack(data.type,data.name),...clone(data)};p.tracks.push(t);return;}
-  if(type==='track.update')return fields(find(p.tracks,data.id,'Track'),data.changes,['name','icon','color','volume','pan','mute','solo','monitor','instrument','fx']);
+  if(type==='track.update')return fields(find(p.tracks,data.id,'Track'),data.changes,['name','icon','color','volume','pan','mute','solo','monitor','arm','instrument','fx']);
   if(type==='track.remove'){find(p.tracks,data.id,'Track');p.tracks=p.tracks.filter(t=>t.id!==data.id);p.clips=p.clips.filter(c=>c.trackId!==data.id);p.automation=p.automation.filter(l=>l.trackId!==data.id);return;}
   if(type==='track.move'){const t=find(p.tracks,data.id,'Track');if(!Number.isInteger(data.index)||data.index<0||data.index>=p.tracks.length)fail('INVALID_COMMAND','Invalid track order');p.tracks.splice(p.tracks.indexOf(t),1);p.tracks.splice(data.index,0,t);return;}
   if(type==='track.duplicate'){
-    const old=find(p.tracks,data.id,'Track'),t={...clone(old),id:uuid(),name:(old.name+' copy').slice(0,80)};p.tracks.push(t);
+    const old=find(p.tracks,data.id,'Track'),t={...clone(old),id:uuid(),arm:false,name:(old.name+' copy').slice(0,80)};p.tracks.push(t);
     if(data.clips)for(const c of [...p.clips])if(c.trackId===old.id)p.clips.push({...clone(c),id:uuid(),trackId:t.id});
     for(const lane of [...p.automation])if(lane.trackId===old.id)p.automation.push({...clone(lane),id:uuid(),trackId:t.id});return;
   }
   if(type==='asset.add'){p.assets.push(clone(data));return;}
   if(type==='asset.remove'){find(p.assets,data.id,'Source');if(p.clips.some(c=>c.assetId===data.id))fail('SOURCE_IN_USE','Audio source is still used by a clip');p.assets=p.assets.filter(a=>a.id!==data.id);return;}
   if(type==='clip.add'){p.clips.push(clone(data));return;}
-  if(type==='clip.update')return fields(find(p.clips,data.id,'Clip'),data.changes,['name','trackId','position','offset','frames','gain','pan','fadeIn','fadeOut','length','loopLength','loop','notes']);
+  if(type==='clip.update')return fields(find(p.clips,data.id,'Clip'),data.changes,['name','trackId','position','offset','frames','gain','pan','fadeIn','fadeOut','length','loopLength','loop','notes','midiEvents']);
   if(type==='clip.remove'){find(p.clips,data.id,'Clip');p.clips=p.clips.filter(c=>c.id!==data.id);return;}
   if(type==='clip.duplicate'){const c=find(p.clips,data.id,'Clip');p.clips.push({...clone(c),id:uuid(),position:clone(data.position||c.position)});return;}
   if(type==='note.add'){const c=find(p.clips,data.clipId,'Clip');if(c.type!=='midi')fail('INVALID_COMMAND','Select a MIDI clip');c.notes.push(clone(data.note));return;}
@@ -81,6 +81,10 @@ export class ProjectController {
   addAsset(meta,blob){
     if(this.#assets.has(meta.id))fail('DUPLICATE_ID','Audio source already exists');this.#assets.set(meta.id,blob);
     try{return this.command('asset.add',meta);}catch(error){this.#assets.delete(meta.id);throw error;}
+  }
+  transaction(commands,assets=new Map()){
+    const added=[];try{for(const [id,blob] of assets){if(this.#assets.has(id))fail('DUPLICATE_ID','Immutable source already exists');if(!(blob instanceof Blob))fail('MISSING_SOURCE','Invalid immutable source');this.#assets.set(id,blob);added.push(id);}return this.command('batch',{commands});}
+    catch(error){for(const id of added)this.#assets.delete(id);throw error;}
   }
   collectAssets(){const retained=new Set([this.#project,...this.#past,...this.#future].flatMap(p=>p.assets.map(a=>a.id)));for(const id of this.#assets.keys())if(!retained.has(id))this.#assets.delete(id);}
   clearHistory(){this.#past=[];this.#future=[];this.#commands.clear();this.#merge=null;this.collectAssets();}

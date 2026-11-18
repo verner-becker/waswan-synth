@@ -140,7 +140,7 @@ export class SequenceWorkspace {
     finally{this.saving=false;}
   }
   async start(allowEmpty=false,onePass=false){
-    if(this.bridge.isDawBusy?.())throw Error('Stop DAW before starting Studio');
+    if(this.bridge.isDawBusy?.())throw Error('Stop DAW and disable its inputs before starting Studio');
     if(this.legacyPlaying)throw Error('Stop the Legacy sequencer before playing Studio MIDI');
     if(this.frame?.midiMode)throw Error('Return to synth mode in Legacy SMK before playing MIDI');
     const {context,node,gain}=this.bridge.getAudio();if(!context||!node)throw Error('Start audio before playing MIDI');

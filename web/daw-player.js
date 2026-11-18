@@ -29,23 +29,42 @@ export class DawPlayer {
     if(this.context===context&&this.node===node&&this.bus)return;
     await context.audioWorklet.addModule(new URL('./daw-bus.js',import.meta.url));
     await context.audioWorklet.addModule(new URL('./daw-media-worklet.js',import.meta.url));
+    await context.audioWorklet.addModule(new URL('./daw-click.js',import.meta.url));
     this.context=context;this.node=node;this.bus=new AudioWorkletNode(context,'waswan-daw-bus',{numberOfInputs:1,outputChannelCount:[2]});this.bus.connect(gain);
     // Ensure the host clock runs before the project bus, including audio-only projects.
     this.clockLink=context.createGain();this.clockLink.gain.value=0;node.connect(this.clockLink,0);this.clockLink.connect(this.bus);
+    this.click=new AudioWorkletNode(context,'waswan-daw-click',{numberOfInputs:1,outputChannelCount:[2]});this.clockLink.connect(this.click);this.click.connect(gain);
     this.media=new AudioWorkletNode(context,'waswan-daw-media',{numberOfInputs:1,numberOfOutputs:32,outputChannelCount:Array(32).fill(2)});this.mediaRpc=new InstrumentRequests(this.media,null);this.clockLink.connect(this.media);
   }
   async disconnectTracks(){
-    for(const track of this.tracks.values()){await track.rpc.request('dispose');if(track.part!==undefined)this.node.disconnect(track.input,track.part+1,0);this.media.disconnect(track.input,track.output,0);track.input.disconnect();track.mix.disconnect();track.meter.disconnect();track.mix.port.close();}
+    for(const track of this.tracks.values())await this.disconnectTrack(track);
     this.tracks.clear();
   }
+  async disconnectTrack(track){
+    await track.rpc.request('dispose');await track.gateRpc.request('dispose');if(track.part!==undefined){this.node.disconnect(track.input,track.part+1,0);this.node.disconnect(track.gate,track.part+9,1);}this.media.disconnect(track.input,track.output,0);track.input.disconnect();track.gate.disconnect();track.mix.disconnect();track.meter.disconnect();track.mix.port.close();track.gate.port.close();
+  }
   async configureTracks(project,slots,planId){
-    await this.disconnectTracks();
+    for(const [id,track] of this.tracks)if(!project.tracks.some(t=>t.id===id)){await this.disconnectTrack(track);this.tracks.delete(id);}
     for(const [output,t] of project.tracks.entries()){
-      const input=this.context.createGain(),mix=new AudioWorkletNode(this.context,'waswan-daw-track',{numberOfInputs:1,outputChannelCount:[2]}),meter=this.context.createAnalyser(),part=slots.get(t.id);meter.fftSize=256;input.connect(mix).connect(meter).connect(this.bus);if(part!==undefined)this.node.connect(input,part+1);this.media.connect(input,output);
-      const rpc=new InstrumentRequests(mix,null);this.tracks.set(t.id,{input,mix,meter,part,output,rpc});await rpc.request('prepare',{planId,bpm:project.bpm,volume:project.automation.find(l=>l.enabled&&l.trackId===t.id&&l.target==='volume'),pan:project.automation.find(l=>l.enabled&&l.trackId===t.id&&l.target==='pan')});
+      let track=this.tracks.get(t.id);const part=slots.get(t.id);
+      if(!track){const input=this.context.createGain(),gate=new AudioWorkletNode(this.context,'waswan-daw-source-gate',{numberOfInputs:2,outputChannelCount:[2],channelCount:2,channelCountMode:'explicit'}),mix=new AudioWorkletNode(this.context,'waswan-daw-track',{numberOfInputs:1,outputChannelCount:[2]}),meter=this.context.createAnalyser();meter.fftSize=256;input.connect(gate,0,0);gate.connect(mix).connect(meter).connect(this.bus);track={input,gate,mix,meter,rpc:new InstrumentRequests(mix,null),gateRpc:new InstrumentRequests(gate,null),output:null,part:undefined};this.tracks.set(t.id,track);}
+      if(track.output!==output){if(track.output!==null)this.media.disconnect(track.input,track.output,0);this.media.connect(track.input,output);track.output=output;}
+      if(track.part!==part){if(track.part!==undefined){this.node.disconnect(track.input,track.part+1,0);this.node.disconnect(track.gate,track.part+9,1);}if(part!==undefined){this.node.connect(track.input,part+1);this.node.connect(track.gate,part+9,1);}track.part=part;}
+      await track.gateRpc.request('prepare',{planId});await track.rpc.request('prepare',{planId,bpm:project.bpm,volume:project.automation.find(l=>l.enabled&&l.trackId===t.id&&l.target==='volume'),pan:project.automation.find(l=>l.enabled&&l.trackId===t.id&&l.target==='pan')});
+      if(this.liveSessionToken)await track.gateRpc.request('live-session',{token:this.liveSessionToken});
     }
     this.updateMix(project);
   }
+  async prepareLive(controller){
+    const project=controller.snapshot(),slots=assignSlots(project);await this.graph();await this.context.resume();
+    if(this.playing||this.starting){if(this.projectId!==project.id)throw Error('Stop playback before changing the input project');return;}
+    await this.requests().request('daw-stop',{hard:true});const state=await this.requests().request('daw-state-request');this.synchronize(controller,state.patches.map((patch,part)=>({part,patch})));
+    const current=controller.snapshot();await this.requests().request('daw-apply',{projectId:project.id,revision:controller.revision,token:state.token,slots:[...slots].map(([id,part])=>({part,...current.tracks.find(t=>t.id===id).instrument}))});
+    this.projectId=project.id;this.slots=slots;this.boundPatches=new Map([...slots].map(([id])=>[id,[...current.tracks.find(t=>t.id===id).instrument.patch]]));this.planId||=crypto.randomUUID();await this.configureTracks(current,slots,this.planId);
+  }
+  async openLive(controller,token){await this.prepareLive(controller);await this.requests().request('daw-live-open',{projectId:controller.snapshot().id,token});this.liveSessionToken=token;for(const track of this.tracks.values())await track.gateRpc.request('live-session',{token});}
+  async closeLive(token){if(this.liveSessionToken!==token)return;await this.requests().request('daw-live-close',{token});this.liveSessionToken=null;for(const track of this.tracks.values())track.gate.parameters.get('live').setTargetAtTime(0,this.context.currentTime,.01);}
+  liveMix(ids){if(!this.context)return;for(const [id,track] of this.tracks)track.gate.parameters.get('live').setTargetAtTime(ids.has(id)?1:0,this.context.currentTime,.01);}
   updateMix(project,restore=false){
     if(!this.context||!this.bus)return;const now=this.context.currentTime;
     this.lastProject=project;
@@ -76,8 +95,8 @@ export class DawPlayer {
   async start(controller,options={}){
     if(this.starting||this.playing)throw Error('DAW is already preparing or playing');
     if(this.bridge.isStudioBusy?.())throw Error('Stop Studio before starting DAW');
-    const project=controller.snapshot(),revision=controller.revision,slots=assignSlots(project),data=compileProject(project,slots),token=++this.generation,planId=crypto.randomUUID();
-    const looping=!!options.loop,schedule={length:looping?Math.max(data.length,options.loopEnd??data.length):data.length,fromFrame:options.fromFrame??0,loop:looping,loopStart:looping?options.loopStart??0:0,loopEnd:looping?options.loopEnd??data.length:data.length};prepareSchedule({...schedule,events:data.events});this.starting=true;this.projectId=project.id;
+    const project=controller.snapshot(),revision=controller.revision,slots=assignSlots(project),renderProject=options.excludeClips?{...project,clips:project.clips.filter(c=>!options.excludeClips.has(c.id))}:project,data=compileProject(renderProject,slots),token=++this.generation,planId=crypto.randomUUID();
+    const looping=!!options.loop,length=options.endFrame??(looping?Math.max(data.length,options.loopEnd??data.length):data.length),schedule={length,fromFrame:options.fromFrame??0,loop:looping,loopStart:looping?options.loopStart??0:0,loopEnd:looping?options.loopEnd??length:length},events=data.events.filter(e=>e.frame<length||e.frame===length&&!e.type&&!e.velocity);prepareSchedule({...schedule,events});this.starting=true;this.projectId=project.id;
     this.planId=planId;this.position=schedule.fromFrame;this.onState({playing:false,preparing:true,frame:schedule.fromFrame});
     try{
       if(project.master.fx.length||project.tracks.some(t=>t.fx.length))throw Error('Saved effect chains require the upcoming DAW effects phase; project data has been preserved');
@@ -90,18 +109,18 @@ export class DawPlayer {
       if(this.generation!==token)throw Error('Playback preparation cancelled');
       await this.configureTracks(project,slots,planId);
       await this.mediaRpc.request('prepare',{planId,clips:data.audio.map(({clip,track,start,seconds})=>({assetId:clip.assetId,output:project.tracks.findIndex(t=>t.id===track.id),start:Math.round(start*RATE),end:Math.round(start*RATE)+clip.frames,offset:clip.offset,gain:clip.gain,pan:clip.pan||0,fadeIn:clip.fadeIn,fadeOut:clip.fadeOut}))});
-      await rpc.request('daw-plan-begin',{projectId:project.id,revision,planId,count:data.events.length,data:schedule});
-      for(let offset=0;offset<data.events.length;offset+=1024){if(this.generation!==token)throw Error('Playback preparation cancelled');await rpc.request('daw-plan-append',{planId,offset,events:data.events.slice(offset,offset+1024)});}
+      await rpc.request('daw-plan-begin',{projectId:project.id,revision,planId,count:events.length,data:schedule});
+      for(let offset=0;offset<events.length;offset+=1024){if(this.generation!==token)throw Error('Playback preparation cancelled');await rpc.request('daw-plan-append',{planId,offset,events:events.slice(offset,offset+1024)});}
       if(this.generation!==token)throw Error('Playback preparation cancelled');
-      const startFrame=Math.ceil((this.context.currentTime*RATE+8192)/128)*128;
-      this.planId=planId;
-      await rpc.request('daw-start',{projectId:project.id,revision,startFrame,planId});
+      const startFrame=Math.ceil((this.context.currentTime*RATE+8192+(options.countInFrames||0))/128)*128;
+      this.planId=planId;await options.beforeStart?.({startFrame});if(this.generation!==token)throw Error('Playback preparation cancelled');
+      await rpc.request('daw-start',{projectId:project.id,revision,startFrame,planId,countInFrames:options.countInFrames||0,recordToken:options.recordToken,click:{...(options.click||this.clickSettings||{enabled:false,level:.25}),bpm:project.bpm,meter:project.meter}});
       if(this.generation!==token)throw Error('Playback preparation cancelled');
-      this.playing=true;this.startFrame=startFrame;this.length=data.length;this.schedule=schedule;return {startFrame,length:data.length};
+      this.playing=true;this.startFrame=startFrame;this.length=length;this.schedule=schedule;return {startFrame,length};
     }catch(error){await this.stop();throw error;}finally{this.starting=false;}
   }
   stopSources(){this.decodeJob?.cancel();this.sources=[];}
-  async stop(hard=false){this.generation++;this.stopSources();this.playing=false;if(this.lastProject)this.updateMix(this.lastProject,true);const node=this.bridge.getAudio().node;if(node&&(this.rpc||this.bus))await this.requests().request('daw-stop',{hard});this.onState({playing:false,preparing:false,frame:this.position||0,reason:'user'});}
+  async stop(hard=false){this.generation++;this.stopSources();this.playing=false;if(this.lastProject)this.updateMix(this.lastProject,true);const node=this.bridge.getAudio().node,result=node&&(this.rpc||this.bus)?await this.requests().request('daw-stop',{hard}):{};this.onState({playing:false,preparing:false,frame:this.position||0,reason:'user'});return result;}
   receive(m){
     if(m.t!=='daw-state'||m.projectId!==this.projectId||m.planId!==this.planId)return;
     this.playing=m.playing;this.position=m.frame;if(!m.playing){this.stopSources();if(this.lastProject)this.updateMix(this.lastProject,true);}this.onState(m);

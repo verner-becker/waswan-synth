@@ -210,3 +210,6 @@
 .ww-daw>.ww-section-header{align-items:center;padding-bottom:8px;margin-bottom:4px;gap:10px}.ww-daw-filebar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1;margin:0!important}.ww-daw-filebar button{font-size:12px;padding:6px 9px;min-height:32px}.ww-daw-filebar label{margin-left:auto;font-size:10px}.ww-daw-filebar label input{width:160px}.ww-daw-filebar .ww-muted{font-size:10px}.ww-daw-filebar .ww-chip{font-size:10px;padding:6px}
 .ww-daw-layout ::-webkit-scrollbar{width:12px;height:12px}.ww-daw-layout ::-webkit-scrollbar-track{background:#0c161c}.ww-daw-layout ::-webkit-scrollbar-thumb{background:#526a79;border:3px solid #0c161c;border-radius:8px}.ww-daw-layout ::-webkit-scrollbar-corner{background:#0c161c}.ww-daw-clip-pane,.ww-daw-mixer,.ww-daw-browser{scrollbar-gutter:stable}
 .ww-daw-arrangement-clip>span{position:absolute;top:5px;left:7px;right:5px;text-overflow:ellipsis;overflow:hidden;pointer-events:none}.ww-daw-arrangement-clip canvas{position:absolute;left:6px;right:6px;top:24px;width:calc(100% - 12px);height:calc(100% - 29px);pointer-events:none}.ww-daw-arrangement-row.is-folded .ww-daw-arrangement-clip canvas{display:none}
+
+.ww-daw-record { border-color: #c26879; color: #ffbcc8; }
+.ww-daw-record[aria-pressed="true"] { background: #852d42; color: #fff; border-color: #ff91a9; }

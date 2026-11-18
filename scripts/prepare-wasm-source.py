@@ -24,6 +24,7 @@ shutil.copy2(upstream / 'tests/host.c', target / 'tests/host.c')
 subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / f'patches/polyphony-{voices}.patch')], cwd=target, check=True)
 if args.daw:
     subprocess.run(['patch','--batch','--fuzz=0','-p1','-i',str(root/'patches/daw-runtime.patch')],cwd=target,check=True)
+    subprocess.run(['patch','--batch','--fuzz=0','-p1','-i',str(root/'patches/daw-monitor.patch')],cwd=target,check=True)
 # Optional host observation of the dry per-part bus, aligned with the buffered ISR.
 # No algorithm changes; the historical reference compiles with this hook absent.
 sim = target / 'web/sim/sim.c'

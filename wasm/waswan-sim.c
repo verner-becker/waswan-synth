@@ -17,6 +17,7 @@ static void waswan_daw_sample(uint32_t index, uint32_t position);
  * reference, whose source intentionally has no host observation hook. */
 static float daw_dry[NPART][2][SIM_MAXN];
 static float daw_owned_dry[NPART][2][SIM_MAXN];
+static float daw_live_dry[NPART][2][SIM_MAXN];
 static uint32_t daw_taps_enabled;
 static void waswan_daw_sample(uint32_t index, uint32_t position) {
     if (!daw_taps_enabled) return;
@@ -26,6 +27,8 @@ static void waswan_daw_sample(uint32_t index, uint32_t position) {
 #ifdef WASWAN_DAW_RUNTIME
         daw_owned_dry[p][0][index]=mm_on?0:(float)daw_bus[p][2u*position]*(1.0f/131072.0f);
         daw_owned_dry[p][1][index]=mm_on?0:(float)daw_bus[p][2u*position+1u]*(1.0f/131072.0f);
+        daw_live_dry[p][0][index]=mm_on?0:(float)daw_live_bus[p][2u*position]*(1.0f/131072.0f);
+        daw_live_dry[p][1][index]=mm_on?0:(float)daw_live_bus[p][2u*position+1u]*(1.0f/131072.0f);
 #endif
     }
 }
@@ -33,6 +36,7 @@ EXPORT uint32_t waswan_daw_taps(uint32_t enabled) {
     daw_taps_enabled=enabled && WASWAN_VOICES>8;
     memset(daw_dry,0,sizeof daw_dry);
     memset(daw_owned_dry,0,sizeof daw_owned_dry);
+    memset(daw_live_dry,0,sizeof daw_live_dry);
     return WASWAN_VOICES>8 ? NPART : 0;
 }
 EXPORT float *waswan_daw_output(uint32_t part, uint32_t channel) {
@@ -40,6 +44,7 @@ EXPORT float *waswan_daw_output(uint32_t part, uint32_t channel) {
 }
 EXPORT uint32_t waswan_daw_output_count(void) {return NPART;}
 EXPORT float *waswan_daw_owned_output(uint32_t part,uint32_t channel) {return part<NPART&&channel<2?daw_owned_dry[part][channel]:0;}
+EXPORT float *waswan_daw_live_output(uint32_t part,uint32_t channel) {return part<NPART&&channel<2?daw_live_dry[part][channel]:0;}
 
 #ifdef WASWAN_DAW_RUNTIME
 /* Independent project slots and note ownership. No flash/preset writes. */
@@ -68,39 +73,84 @@ EXPORT uint32_t waswan_daw_token(void) {
     uint32_t hash=2166136261u;for(uint32_t p=0;p<NPART;p++)for(uint32_t i=0;i<PATCH_BYTES;i++)hash=(hash^live_p[p].v[i])*16777619u;
     return (hash^daw_slots)*16777619u;
 }
+EXPORT uint32_t waswan_daw_active_slots(void) {return daw_slots;}
 static uint32_t daw_slot_busy(uint32_t part) {
     if(part>=NPART)return 1;
     for(uint32_t i=0;i<NV;i++)if(vc[i].part==part&&(vc[i].gate||vc[i].ae.stage!=E_IDLE))return 1;
-    return obv_pending_n[part]||guard_left[part]||daw_guard_left[part]||(part<NTRK&&drums_busy(part));
+    return obv_pending_n[part]||guard_left[part]||daw_guard_left[part]||daw_live_busy(part)||(part<NTRK&&drums_busy(part));
 }
 EXPORT uint32_t waswan_daw_apply(uint32_t mask,uint32_t token) {
     if(mask>>NPART||token!=waswan_daw_token()||mm_on||preset_ui||pb_confirm||save_armed||ctl_seq_run)return 0;
     for(uint32_t p=0;p<NPART;p++)if(mask>>p&1u){
         if(!daw_patch_valid(&daw_staged[p],p))return 0;
-        if(memcmp(&live_p[p],&daw_staged[p],PATCH_BYTES)&&daw_slot_busy(p))return 0;
+        if(memcmp(&live_p[p],&daw_staged[p],PATCH_BYTES)&&(daw_slot_busy(p)||daw_live_count(p)))return 0;
     }
     for(uint32_t p=0;p<NPART;p++)if(mask>>p&1u){
         live_p[p]=daw_staged[p];if(p<NTRK){trk_edited[p]=1;dirty_hdr=dirty_page=dirty_tags=1;}
         else daw_extra_active|=1u<<p;
     }
-    for(uint32_t p=NTRK;p<NPART;p++)if(!(mask>>p&1u)&&!daw_slot_busy(p))daw_extra_active&=~(1u<<p);
-    daw_slots=mask;return 1;
+    uint32_t retained=mask;for(uint32_t p=0;p<NPART;p++)if(daw_live_count(p))retained|=1u<<p;
+    for(uint32_t p=NTRK;p<NPART;p++)if(!(retained>>p&1u)&&!daw_slot_busy(p))daw_extra_active&=~(1u<<p);
+    daw_slots=retained;return 1;
 }
+static uint32_t daw_can_trigger(uint32_t part,uint32_t owner,uint32_t note);
 EXPORT uint32_t waswan_daw_note(uint32_t part,uint32_t note,uint32_t velocity) {
     if(part>=NPART||!(daw_slots>>part&1u)||note>127u||velocity>127u||(velocity&&mm_on))return 0;
+    if(velocity&&!daw_can_trigger(part,3,note))return 0;
     uint8_t source=seq_note_source;seq_note_source=3;
-    if(velocity)voice_trigger(part,note,velocity);else voice_release(part,note,0);
+    if(velocity){daw_held_on(3,part,note,velocity);voice_trigger(part,note,velocity);}else{daw_held_off(3,part,note);voice_release(part,note,0);}
     seq_note_source=source;return 1;
 }
 EXPORT uint32_t waswan_daw_expression(uint32_t part,int32_t bend,uint32_t modulation) {
     if(part>=NPART||!(daw_slots>>part&1u)||bend< -8192||bend>8191||modulation>127u)return 0;
     daw_bend[part]=bend;daw_mod[part]=modulation;return 1;
 }
+static uint32_t daw_can_trigger(uint32_t part,uint32_t owner,uint32_t note){
+    if(obv_engine_track[part].phase!=OBV_ENGINE_OUT||obv_engine_track[part].target==OBV_DRUMS||obv_pending_n[part]<NHELD)return 1;
+    for(uint32_t i=0;i<obv_pending_n[part];i++)if(obv_pending[part][i].note==note&&obv_pending[part][i].sequenced==owner)return 1;return 0;
+}
+EXPORT uint32_t waswan_daw_live_note_channel(uint32_t part,uint32_t channel,uint32_t note,uint32_t velocity) {
+    if(part>=NPART||channel>15u||note>127u||velocity>127u||(velocity&&(!(daw_slots>>part&1u)||mm_on)))return 0;
+    uint32_t owner=4u+channel,s=owner-3u;if(velocity&&!daw_can_trigger(part,owner,note))return 0;
+    uint8_t previous=seq_note_source;seq_note_source=(uint8_t)owner;
+    if(velocity){daw_held_on(owner,part,note,velocity);voice_trigger(part,note,velocity);}
+    else if(daw_held[s][part][note].active){daw_held[s][part][note].physical=0;if(!daw_live_sustain[channel][part]){daw_held_off(owner,part,note);voice_release(part,note,0);}}
+    seq_note_source=previous;return 1;
+}
+EXPORT uint32_t waswan_daw_live_note(uint32_t part,uint32_t note,uint32_t velocity) {return waswan_daw_live_note_channel(part,0,note,velocity);}
+EXPORT uint32_t waswan_daw_live_expression_channel(uint32_t part,uint32_t channel,int32_t bend,uint32_t modulation) {
+    if(part>=NPART||channel>15u||bend< -8192||bend>8191||modulation>127u)return 0;
+    daw_live_bend[channel][part]=bend;daw_live_mod[channel][part]=modulation;return 1;
+}
+EXPORT uint32_t waswan_daw_live_expression(uint32_t part,int32_t bend,uint32_t modulation) {return waswan_daw_live_expression_channel(part,0,bend,modulation);}
+EXPORT uint32_t waswan_daw_live_pedal_channel(uint32_t part,uint32_t channel,uint32_t down) {
+    if(part>=NPART||channel>15u||down>1u)return 0;daw_live_sustain[channel][part]=down;if(down)return 1;
+    uint8_t gone[128];uint32_t count=0,owner=channel+4u,s=channel+1u;uint8_t previous=seq_note_source;seq_note_source=(uint8_t)owner;
+    for(uint32_t note=0;note<128;note++)if(daw_held[s][part][note].active&&!daw_held[s][part][note].physical){daw_held_off(owner,part,note);gone[count++]=(uint8_t)note;}
+    for(uint32_t i=0;i<count;i++)voice_release(part,gone[i],0);seq_note_source=previous;return 1;
+}
+EXPORT uint32_t waswan_daw_live_pedal(uint32_t part,uint32_t down) {return waswan_daw_live_pedal_channel(part,0,down);}
+EXPORT uint32_t waswan_daw_live_held(uint32_t part) {return part<NPART?daw_live_count(part):0;}
+EXPORT void waswan_daw_live_stop_channel(uint32_t part,uint32_t channel,uint32_t hard) {
+    if(part>=NPART||channel>15u)return;uint32_t owner=channel+4u,s=channel+1u;uint8_t previous=seq_note_source;seq_note_source=(uint8_t)owner;
+    memset(daw_held[s][part],0,sizeof daw_held[s][part]);daw_held_count[s][part]=0;daw_live_sustain[channel][part]=0;
+    for(uint32_t i=0;i<NV;i++)if(vc[i].seq_owned==owner&&vc[i].part==part&&vc[i].gate)voice_release(part,vc[i].note,0);
+    for(uint32_t i=0;i<NV;i++)if(vc[i].seq_owned==owner&&vc[i].part==part){vc[i].gate=0;if(hard){vc[i].ae.stage=vc[i].fe.stage=E_IDLE;vc[i].ae.level=vc[i].fe.level=0;vc[i].amp0=vc[i].amp1=0;vc[i].guard_l=vc[i].guard_r=0;vc[i].guard_in=0;vc[i].grp=0;ui_vlevel[i]=0;}}
+    uint32_t n=0;for(uint32_t i=0;i<obv_pending_n[part];i++)if(obv_pending[part][i].sequenced!=owner)obv_pending[part][n++]=obv_pending[part][i];obv_pending_n[part]=(uint8_t)n;
+    daw_live_bend[channel][part]=daw_live_bend_sm[channel][part]=daw_live_bend8[channel][part]=0;daw_live_mod[channel][part]=0;
+    if(hard){daw_live_guard_left[channel][part]=0;memset(daw_live_guard_tail[channel][part],0,sizeof daw_live_guard_tail[channel][part]);if(part<NTRK)for(uint32_t l=0;l<8;l++)if(drum_hit[part][l].daw==owner)memset(&drum_hit[part][l],0,sizeof drum_hit[part][l]);}seq_note_source=previous;
+}
+EXPORT void waswan_daw_live_stop(uint32_t part,uint32_t hard) {
+    uint32_t first=part<NPART?part:0,end=part<NPART?part+1u:NPART;
+    for(uint32_t p=first;p<end;p++)for(uint32_t ch=0;ch<16;ch++){memset(daw_held[ch+1u][p],0,sizeof daw_held[ch+1u][p]);daw_held_count[ch+1u][p]=0;daw_live_sustain[ch][p]=0;}
+    for(uint32_t p=first;p<end;p++)for(uint32_t ch=0;ch<16;ch++)waswan_daw_live_stop_channel(p,ch,hard);
+}
 EXPORT uint32_t waswan_daw_parameter(uint32_t part,uint32_t parameter,uint32_t value) {
     if(part>=NPART||!(daw_slots>>part&1u)||parameter>=NPARAM||obv_patch_engine(&live_p[part])!=OBV_ANALOG||value>obv_param_max(&live_p[part],parameter)||((parameter==P_UNI_N||parameter==P_ARP_OCT)&&!value))return 0;
     live_p[part].v[parameter]=(uint8_t)value;if(part<NTRK){trk_edited[part]=1;dirty_hdr=dirty_page=1;}return 1;
 }
 EXPORT void waswan_daw_stop(uint32_t hard) {
+    memset(daw_held[0],0,sizeof daw_held[0]);memset(daw_held_count[0],0,sizeof daw_held_count[0]);
     /* Preserve the firmware's MONO/UNISON last-physical-key restoration. Directly
      * clearing a DAW-tagged mono group could otherwise erase a still-held key. */
     uint8_t previous_source=seq_note_source;seq_note_source=3;
@@ -111,7 +161,7 @@ EXPORT void waswan_daw_stop(uint32_t hard) {
         uint32_t n=0;for(uint32_t i=0;i<obv_pending_n[p];i++)if(obv_pending[p][i].sequenced!=3u)obv_pending[p][n++]=obv_pending[p][i];obv_pending_n[p]=(uint8_t)n;
         daw_bend[p]=daw_bend_sm[p]=daw_bend8[p]=0;daw_mod[p]=0;
     }
-    if(hard){memset(daw_guard_left,0,sizeof daw_guard_left);memset(daw_guard_tail,0,sizeof daw_guard_tail);for(uint32_t p=0;p<NTRK;p++)for(uint32_t l=0;l<8;l++)if(drum_hit[p][l].daw)memset(&drum_hit[p][l],0,sizeof drum_hit[p][l]);}
+    if(hard){memset(daw_guard_left,0,sizeof daw_guard_left);memset(daw_guard_tail,0,sizeof daw_guard_tail);for(uint32_t p=0;p<NTRK;p++)for(uint32_t l=0;l<8;l++)if(drum_hit[p][l].daw==3u)memset(&drum_hit[p][l],0,sizeof drum_hit[p][l]);}
 }
 #else
 EXPORT uint32_t waswan_daw_capacity(void) {return 0;}

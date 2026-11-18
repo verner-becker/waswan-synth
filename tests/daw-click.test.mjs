@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import assert from 'node:assert/strict';
+import {audioTransport} from '../web/daw-playback.js';
+let Processor;globalThis.sampleRate=44100;globalThis.currentFrame=0;globalThis.AudioWorkletProcessor=class{constructor(){this.port={};}};globalThis.registerProcessor=(_,p)=>Processor=p;await import('../web/daw-click.js');
+for(const bars of [1,2,4]){const count=bars*4*22050;Object.assign(audioTransport,{playing:true,planId:String(bars),startFrame:count,countInFrames:count,fromFrame:0,length:count*2,loop:false,click:{bpm:120,meter:[4,4],enabled:false,level:.5}});const click=new Processor(),out=[[new Float32Array(128),new Float32Array(128)]];let beats=0,prior=false;for(currentFrame=0;currentFrame<count+1024;currentFrame+=128){out[0].forEach(c=>c.fill(0));click.process([],out);const audible=out[0][0].some(v=>v!==0);if(audible&&!prior)beats++;prior=audible;if(currentFrame>=count)assert(!audible,'disabled metronome ends when count-in ends');}assert.equal(beats,bars*4);}
+Object.assign(audioTransport,{playing:false});const stopped=new Processor(),out=[[new Float32Array(128),new Float32Array(128)]];stopped.process([],out);assert(out[0].every(c=>c.every(v=>v===0)));console.log('PASS click: 1/2/4-bar count-in follows shared sample clock, stopped silence, click disabled after count-in');

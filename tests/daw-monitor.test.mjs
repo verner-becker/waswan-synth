@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {Engine} from '../.local/www/simulator/engine.js';
+const wasm=fs.readFileSync('.local/build/waswan-256.wasm'),seed=fs.readFileSync('upstream/SMKSYNTH/web/simulator/factory-session.bin');
+function fixture(mode=0,arp=false,part=4){const e=new Engine(wasm,seed.buffer.slice(seed.byteOffset,seed.byteOffset+seed.byteLength));e.advance(5000);const x=e.ex;x.waswan_daw_taps(1);x.waswan_daw_program(part,64);const p=new Uint8Array(x.memory.buffer,x.waswan_daw_stage_buffer()+part*80,80);p[0]=1;p[4]=0;p[24]=0;p[26]=127;p[38]=mode;p[39]=4;if(arp)p[47]=1;assert(x.waswan_daw_apply(1<<part,x.waswan_daw_token()));return e;}
+const owned=(e,source)=>e.frame().polyphony.slots.filter((v,i)=>v.gate&&e.ex.waswan_voice(i,6)===source),dry=(e,kind,n)=>new Float32Array(e.ex.memory.buffer,e.ex[kind](4,0),n);
+for(const mode of [0,2,3])for(const arp of [false,true]){
+ const e=fixture(mode,arp),x=e.ex;x.waswan_daw_live_note(4,72,90);e.advance(30);const count=owned(e,4).length;assert(count>0);x.waswan_daw_note(4,60,90);e.advance(30);x.waswan_daw_stop(1);assert.equal(owned(e,4).length,count,'playback Stop restores held live group');assert(owned(e,4).every(v=>v.note===72));assert.equal(x.waswan_daw_live_held(4),1);
+ x.waswan_daw_live_note(4,72,0);assert.equal(owned(e,4).length,0);x.waswan_daw_note(4,60,90);x.waswan_daw_live_note(4,72,90);e.advance(30);x.waswan_daw_live_stop(4,1);assert(owned(e,3).every(v=>v.note===60));assert.equal(owned(e,3).length,mode===2?4:1,'live Stop restores playback group');x.waswan_daw_stop(1);
+}
+const e=fixture(),x=e.ex;x.waswan_daw_live_note(4,60,100);e.render(1024);assert(dry(e,'waswan_daw_live_output',1024).some(v=>v!==0));assert(dry(e,'waswan_daw_owned_output',1024).every(v=>v===0));assert(new Float32Array(x.memory.buffer,x.sim_out_l(),1024).every(v=>v===0),'no double monitor in Legacy');
+x.waswan_daw_live_pedal(4,1);x.waswan_daw_live_note(4,60,0);for(let i=0;i<8;i++){x.waswan_daw_note(4,64+i,90);e.advance(20);x.waswan_daw_stop(1);assert(owned(e,4).some(v=>v.note===60));}x.waswan_daw_live_pedal(4,0);assert.equal(owned(e,4).length,0);
+// The JS clock sends repeated On but only one final Off: C3 must upsert.
+x.waswan_daw_note(4,60,90);x.waswan_daw_note(4,60,80);x.waswan_daw_note(4,60,0);x.waswan_daw_live_note(4,72,90);x.waswan_daw_live_note(4,72,0);assert.equal(owned(e,3).length,0);
+x.waswan_daw_live_note(4,72,90);e.input({t:'panic'});e.advance(40);x.waswan_daw_live_note(4,60,90);x.waswan_daw_live_note(4,60,0);assert.equal(owned(e,4).length,0,'panic cannot resurrect ledger4');
+for(const mode of [2,3]){
+ const base=fixture(mode,false,0),bx=base.ex;base.input({t:'midi',st:144,d1:72,d2:100});base.advance(30);bx.waswan_daw_live_note(0,60,100);bx.waswan_daw_note(0,64,100);base.advance(30);bx.waswan_daw_stop(1);assert(owned(base,4).every(v=>v.note===60));bx.waswan_daw_live_note(0,60,0);assert(base.frame().polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===72),'physical held0 is restored after both DAW origins release');base.input({t:'midi',st:128,d1:72,d2:0});base.advance(30);assert.equal(base.frame().polyphony.slots.filter(v=>v.gate).length,0);
+ bx.waswan_daw_live_note(0,60,100);base.input({t:'midi',st:144,d1:72,d2:100});base.advance(30);base.input({t:'midi',st:128,d1:72,d2:0});base.advance(30);assert(owned(base,4).every(v=>v.note===60),'physical key release restores older live4 key');bx.waswan_daw_live_stop(0,1);
+}
+for(const mode of [0,2,3]){
+ const channels=fixture(mode),cx=channels.ex;cx.waswan_daw_live_note_channel(4,0,60,100);cx.waswan_daw_live_note_channel(4,15,60,80);channels.advance(30);assert(owned(channels,19).length>0);cx.waswan_daw_live_stop_channel(4,0,1);assert(owned(channels,19).length>0,'CC120 channel0 preserves channel15 on the same pitch');cx.waswan_daw_live_pedal_channel(4,15,1);cx.waswan_daw_live_note_channel(4,15,60,0);cx.waswan_daw_stop(1);assert(owned(channels,19).length>0,'channel15 pedal survives Stop3');cx.waswan_daw_live_pedal_channel(4,0,0);assert(owned(channels,19).length>0,'other pedal does not release channel15');cx.waswan_daw_live_pedal_channel(4,15,0);assert.equal(owned(channels,19).length,0);
+}
+console.log('PASS DAW monitor: isolated output4, no Legacy doubling, MONO/UNISON restoration both ways incl ARP snapshots, sustain across Stop/loops, repeated pitch, panic without resurrection');
+
+// Existing DRUM-X hit slots carry the exact owner; Stop never clears another lane.
+const drum=fixture(0,false,0),dx=drum.ex;drum.input({t:'drums',part:0,kit:0});drum.advance(100);const patch=Uint8Array.from({length:80},(_,i)=>dx.waswan_daw_patch(0,i));new Uint8Array(dx.memory.buffer,dx.waswan_daw_stage_buffer(),80).set(patch);assert(dx.waswan_daw_apply(1,dx.waswan_daw_token()));dx.waswan_daw_note(0,38,100);dx.waswan_daw_live_note_channel(0,15,36,100);drum.render(512);dx.waswan_daw_stop(1);drum.render(512);assert(new Float32Array(dx.memory.buffer,dx.waswan_daw_live_output(0,0),512).some(n=>n!==0),'Stop3 preserves the live drum lane');dx.waswan_daw_live_stop_channel(0,0,1);drum.render(512);assert(new Float32Array(dx.memory.buffer,dx.waswan_daw_live_output(0,0),512).some(n=>n!==0),'CC120 channel0 preserves channel15 drum tail');dx.waswan_daw_live_stop_channel(0,15,1);drum.render(1024);drum.render(512);assert(new Float32Array(dx.memory.buffer,dx.waswan_daw_live_output(0,0),512).every(n=>n===0));

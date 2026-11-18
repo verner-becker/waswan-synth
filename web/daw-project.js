@@ -23,14 +23,16 @@ export function validateProject(p){
   if(p.transport!==undefined)assert(typeof p.transport?.loop==='boolean'&&int(p.transport.start,0,PPQ*8192-1)&&int(p.transport.end,p.transport.start+1,PPQ*8192),'Invalid transport interval');
   assert(Array.isArray(p.tracks)&&p.tracks.length<=LIMITS.tracks&&Array.isArray(p.assets)&&p.assets.length<=LIMITS.assets&&Array.isArray(p.clips)&&p.clips.length<=LIMITS.clips,'Project capacity exceeded');
   const tracks=unique(p.tracks,'track'),assets=unique(p.assets,'asset');unique(p.clips,'clip');
-  let total=0,notes=0;
+  let total=0,notes=0,midiEvents=0;
   for(const a of p.assets){assert(text(a.name,120)&&a.sampleRate===RATE&&a.channels===2&&int(a.frames,1,LIMITS.sourceFrames)&&a.bytes===44+a.frames*4,'Invalid audio source');total+=a.frames;}
   assert(total<=LIMITS.totalFrames,'Decoded audio budget: 30 minutes total / 20 minutes per source');
   for(const t of p.tracks){
     assert(['audio','midi'].includes(t.type)&&text(t.name,80)&&text(t.icon,32)&&/^#[a-fA-F0-9]{6}$/.test(t.color)&&number(t.volume,0,2)&&number(t.pan,-1,1)&&typeof t.mute==='boolean'&&typeof t.solo==='boolean'&&['in','auto','off'].includes(t.monitor),'Invalid track');
+    if(t.arm!==undefined)assert(typeof t.arm==='boolean','Invalid track arm');
     if(t.instrument!==null){assert(t.type==='midi'&&['analog','super','drumx'].includes(t.instrument?.type)&&Array.isArray(t.instrument.patch)&&t.instrument.patch.length===80&&t.instrument.patch.every(v=>int(v,0,255)),'Invalid instrument snapshot');}
     validateFx(t.fx);
   }
+  assert(p.tracks.filter(t=>t.arm).length<=1,'Only one track can be armed');
   for(const c of p.clips){
     const track=p.tracks.find(t=>t.id===c.trackId);
     assert(tracks.has(c.trackId)&&c.type===track.type&&text(c.name,120)&&['ticks','seconds'].includes(c.position?.unit)&&number(c.position.value,0,c.position.unit==='ticks'?PPQ*8192:1200),'Invalid clip position or track');
@@ -42,9 +44,12 @@ export function validateProject(p){
       assert(int(c.length,1,PPQ*8192)&&int(c.loopLength,1,c.length)&&typeof c.loop==='boolean'&&Array.isArray(c.notes),'Invalid MIDI clip');unique(c.notes,'note');
       notes+=c.notes.length;
       for(const n of c.notes)assert(int(n.pitch,0,127)&&int(n.velocity,1,127)&&int(n.start,0,c.loopLength-1)&&int(n.duration,1,c.loopLength-n.start),'Invalid MIDI note');
+      for(const n of c.notes)if(n.channel!==undefined)assert(int(n.channel,0,15),'Invalid MIDI note channel');
+      if(c.midiEvents!==undefined){assert(Array.isArray(c.midiEvents),'Invalid MIDI performance events');unique(c.midiEvents,'MIDI event');midiEvents+=c.midiEvents.length;for(const e of c.midiEvents)assert(int(e.tick,0,c.loopLength-1)&&int(e.channel,0,15)&&['bend','mod'].includes(e.type)&&int(e.value,e.type==='bend'?-8192:0,e.type==='bend'?8191:127),'Invalid MIDI performance event');}
     }
   }
   assert(notes<=LIMITS.notes,'MIDI note budget exceeded');
+  assert(midiEvents<=65536,'MIDI performance event budget exceeded');
   assert(Array.isArray(p.markers)&&p.markers.length<=256,'Invalid markers');unique(p.markers,'marker');
   for(const m of p.markers)assert(text(m.name,80)&&int(m.tick,0,p.length),'Invalid marker');
   assert(Array.isArray(p.automation)&&p.automation.length<=64,'Automation lane limit exceeded');unique(p.automation,'automation');
@@ -60,7 +65,7 @@ export function validateProject(p){
   return p;
 }
 export function makeTrack(type,name=type==='midi'?'Instrument':'Audio'){
-  return {id:uuid(),type,name,icon:type==='midi'?'keyboard':'audio',color:type==='midi'?'#8b6ce0':'#3699bb',volume:1,pan:0,mute:false,solo:false,monitor:'auto',instrument:null,fx:[]};
+  return {id:uuid(),type,name,icon:type==='midi'?'keyboard':'audio',color:type==='midi'?'#8b6ce0':'#3699bb',volume:1,pan:0,mute:false,solo:false,arm:false,monitor:'auto',instrument:null,fx:[]};
 }
 export const clipSeconds=(clip,bpm)=>clip.position.unit==='seconds'?clip.position.value:clip.position.value*60/(bpm*PPQ);
 export const clipDuration=(clip,bpm)=>clip.type==='audio'?clip.frames/RATE:clip.length*60/(bpm*PPQ);

@@ -2,7 +2,7 @@
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-const root='.local/validation/daw-mvp-wave-4';fs.mkdirSync(root,{recursive:true});
+const root=process.env.DAW_VALIDATION_ROOT||'.local/validation/daw-mvp-wave-4';fs.mkdirSync(root,{recursive:true});
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
 try{
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());

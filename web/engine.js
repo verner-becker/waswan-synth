@@ -153,11 +153,11 @@ export class Engine extends OriginalEngine {
       limit:x.waswan_voice_limit(),
       unisonLimit:x.waswan_unison_limit(),
       midiSustain:!!x.waswan_midi_sustain(),
-      slots:Array.from({length:x.waswan_voice_limit()},(_,i)=>({
+      slots:Array.from({length:x.waswan_voice_limit()},(_,i)=>{const owner=x.waswan_voice(i,6);return {
         active:!!x.waswan_voice(i,0),gate:!!x.waswan_voice(i,1),
         note:x.waswan_voice(i,2),part:x.waswan_voice(i,3),
-        stage:x.waswan_voice(i,4),sequence:x.waswan_voice(i,5),sequenced:!!x.waswan_voice(i,6),
-      })),
+        stage:x.waswan_voice(i,4),sequence:x.waswan_voice(i,5),sequenced:owner>0&&owner<4,monitorChannel:owner>=4&&owner<20?owner-4:null,
+      };}),
       parts:Array.from({length:4},(_,part)=>({mode:x.waswan_mode(part),
         unison:x.waswan_unison(part),arp:x.waswan_arp(part),sustain:!!x.waswan_sustain(part),
         held:x.waswan_held(part),limit:x.waswan_part_limit(part)})),
