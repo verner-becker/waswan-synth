@@ -18,6 +18,7 @@ Base `dfa6e1b` em `main`. Implementação em `feat/ux-stage-1-synth-shell`, para
 | UI Foundation e Tone Editor no Chrome | Navegação com notas e sustain mantidos, mesma instância e mesmos nós de teclado e pads. Passaram MIDI Learn, pickup, conexão opcional, modos de voz, sessão exportada e reimportada, DSP Monitor com exportação JSONL, edição ANALOG, Save e Save as, falha de armazenamento e recuperação. |
 | DAW e Studio no Chrome | Passaram aceite do MVP, sessão compartilhada e retorno durante reprodução, captura interna, Monitor MIDI, navegação entre workspaces e sequência Studio. |
 | Node | Passaram UI Foundation, Tone Editor, perfil MIDI, MIDI contextual e polifonia de 256 vozes. O teste de referência comparou 256.000 amostras e preservou igualdade bit a bit. |
+| Rota Legacy no Chrome | O teste de 256 vozes passou. A expectativa antiga de pickup após perda de foco falhou também na base `dfa6e1b`. A regressão passou a verificar o contrato da sessão DAW incorporada: foco mantém a captura MIDI e reconexão arma o pickup novamente. |
 
 Evidências em `.local/validation/ux-stage-1/`, `.local/validation/ui-foundation/`, `.local/validation/ui-foundation-v2/` e `.local/validation/tone-editor-v1/`. As capturas `performance-100.png`, `performance-125.png` e `tones-filter-125.png` registram o layout com zoom real. O release e o foco foram exercitados com teclado virtual e MIDI sintético. Aceite com o SMK-37 Pro físico e leitor de tela segue pendente.
 
