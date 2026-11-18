@@ -7,11 +7,16 @@ import {prepareSchedule,timelineFrame,eventPriority} from './daw-transport.js';
 export const audioTransport={playing:false,startFrame:0};
 export const trackAudible=(project,track)=>!track.mute&&(!project.tracks.some(t=>t.solo)||track.solo);
 // Logical track IDs are assigned on playback; no firmware part number is saved.
-export function assignSlots(project,capacity=8){
+export function assignSlots(project,capacity=8,reservedPart){
   const midi=project.tracks.filter(t=>t.type==='midi'&&t.instrument),slots=new Map(),used=new Set();
+  if(reservedPart!==undefined){
+    if(!Number.isInteger(reservedPart)||reservedPart<0||reservedPart>=4)throw Error('Choose a Synth part before recording');
+    used.add(reservedPart);
+    if(midi.length>=capacity)throw Error('Synth capture needs one part available for the live instrument');
+  }
   if(midi.length>capacity)throw Error(`This build supports ${capacity} simultaneous instruments`);
   for(const track of midi.filter(t=>t.instrument.type==='drumx')){
-    const part=[0,1,2,3].find(p=>!used.has(p));if(part===undefined)throw Error('DRUM-X supports four simultaneous instrument parts with its existing shared hit budget');slots.set(track.id,part);used.add(part);
+    const part=[0,1,2,3].find(p=>!used.has(p));if(part===undefined)throw Error(reservedPart===undefined?'DRUM-X supports four simultaneous instrument parts with its existing shared hit budget':'Synth capture reserves the current Synth part. Free one DRUM-X slot first.');slots.set(track.id,part);used.add(part);
   }
   // Extra slots first, retaining the live Synth parts whenever possible.
   const order=[...Array.from({length:Math.max(0,capacity-4)},(_,i)=>i+4),0,1,2,3].filter(p=>p<capacity);

@@ -34,6 +34,10 @@ class InstrumentRequests {
 export class DawPlayer {
   constructor(bridge,onState=()=>{}){Object.assign(this,{bridge,onState});this.generation=0;this.exporting=null;this.playing=false;this.starting=false;this.decoded=new Map();this.sources=[];this.tracks=new Map();this.slots=new Map();this.boundPatches=new Map();}
   requests(){const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before using an instrument');if(this.rpc?.node!==node){this.rpc?.close();this.rpc=new InstrumentRequests(node);}return this.rpc;}
+  setClick(settings){
+    this.clickSettings=settings;
+    if(this.playing&&!this.exporting)return this.requests().request('daw-click',settings);
+  }
   async tone(program){return this.requests().request('daw-program',{program});}
   async drumKits(){return this.requests().request('daw-drum-catalog');}
   async drumKit(kit){return this.requests().request('daw-drum-kit',{kit});}
@@ -184,7 +188,7 @@ export class DawPlayer {
     this.discardStaleGraph();
     if(this.starting||this.playing||(this.exporting&&this.exporting.token!==options.exportToken))throw Error('DAW is already preparing, playing or exporting');
     if(this.bridge.isStudioBusy?.())throw Error('Stop Studio before starting DAW');
-    const project=controller.snapshot();validateEffects(project);const revision=controller.revision,slots=assignSlots(project),renderProject=options.excludeClips?{...project,clips:project.clips.filter(c=>!options.excludeClips.has(c.id))}:project,data=compileProject(renderProject,slots,{endFrame:options.exportToken?options.endFrame:undefined}),token=++this.generation,planId=crypto.randomUUID();
+    const project=controller.snapshot();validateEffects(project);const revision=controller.revision,slots=assignSlots(project,8,options.reservedPart),renderProject=options.excludeClips?{...project,clips:project.clips.filter(c=>!options.excludeClips.has(c.id))}:project,data=compileProject(renderProject,slots,{endFrame:options.exportToken?options.endFrame:undefined}),token=++this.generation,planId=crypto.randomUUID();
     const looping=!!options.loop,length=options.endFrame??(looping?Math.max(data.length,options.loopEnd??data.length):data.length),schedule={length,fromFrame:options.fromFrame??0,loop:looping,loopStart:looping?options.loopStart??0:0,loopEnd:looping?options.loopEnd??length:length},events=data.events.filter(e=>e.frame<length||e.frame===length&&!e.type&&!e.velocity);prepareSchedule({...schedule,events});this.starting=true;this.projectId=project.id;
     const emit=!options.exportToken,check=()=>{options.signal?.throwIfAborted();if(this.generation!==token||this.node!==this.bridge.getAudio().node)throw Error('Playback preparation cancelled');};
     this.planId=planId;this.position=schedule.fromFrame;if(emit)this.onState({playing:false,preparing:true,frame:schedule.fromFrame});

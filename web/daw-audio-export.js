@@ -104,7 +104,7 @@ export class DawAudioExport {
     this.job=job;
     let root,dir,handle;
     try{
-      handle=plan.scope==='stems'?await showDirectoryPicker({mode:'readwrite'}):await showSaveFilePicker({
+      handle=plan.scope==='stems'?await this.w.pick('showDirectoryPicker',{mode:'readwrite'}):await this.w.pick('showSaveFilePicker',{
         suggestedName:plan.outputs[0].name,
         types:[{description:plan.format==='wav'?'Stereo WAV':'MP3 192 kbps',accept:{[plan.format==='wav'?'audio/wav':'audio/mpeg']:['.'+plan.format]}}]
       });

@@ -235,3 +235,11 @@
 .ww-daw-midi-profiles{display:grid;gap:6px}
 .ww-daw-midi-profiles label{display:grid;gap:4px;margin:6px 0}
 .ww-daw-midi-profiles li{margin:4px 0}
+
+.ww-daw-transport .ww-daw-click-volume{width:90px}
+.ww-daw-mixer-meter{width:100%;height:10px}
+.ww-daw-mixer .ww-daw-master-readout{font-size:11px;max-width:160px}
+
+.ww-daw-new-tab{margin:0 0 8px}
+.ww-daw-linked .ww-topbar{position:static}
+.ww-daw-linked [data-daw-tab-content]{min-width:0}

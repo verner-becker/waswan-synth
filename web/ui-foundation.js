@@ -7,6 +7,7 @@ import {MidiSetup} from './ui-midi-setup.js';
 import {StudioWorkspace} from './ui-studio.js';
 import {SequenceWorkspace} from './ui-studio-sequence.js';
 import {DawWorkspace} from './ui-daw.js';
+import {DawTab} from './ui-daw-tab.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,CompactMeter,RotaryKnob,VerticalFader,PlaceholderWorkspace,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
@@ -33,7 +34,18 @@ class Foundation {
     this.main=el('main','ww-main');this.shell.append(this.main);
     this.views=new Map();this.buildPerformance();this.buildFutureViews();this.studio=new StudioWorkspace(bridge);this.addView('studio',this.studio.node);this.sequence=new SequenceWorkspace(bridge,this.studio.recorder);this.addView('seq',this.sequence.node);this.toneEditor=new ToneEditor(m=>this.bridge.send(m));this.addView('tones',this.toneEditor.node);this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
     this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
-    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{toggleKeyboard:()=>{this.dawKeyboardVisible=!this.dawKeyboardVisible;this.dock.hidden=!this.dawKeyboardVisible;return this.dawKeyboardVisible;}});this.addView('daw',this.daw.node);bridge.isDawBusy=()=>this.daw.player.playing||this.daw.player.starting||this.daw.recorder.busy||this.daw.monitor.enabled||this.daw.audition?.busy||this.daw.audioExport?.exporter.busy;bridge.isStudioBusy=()=>!!(this.sequence.playing||this.sequence.starting||this.sequence.rendering||this.sequence.capture||this.studio.recorder.busy||this.studio.recorder.player||this.studio.recorder.playbackPreparing);
+    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{toggleKeyboard:()=>{
+      this.dawKeyboardVisible=!this.dawKeyboardVisible;
+      this.dock.hidden=!this.dawKeyboardVisible;
+      if(this.dawTab?.connected&&this.dawKeyboardVisible)window.focus();
+      return this.dawKeyboardVisible;
+    }});this.addView('daw',this.daw.node);bridge.isDawBusy=()=>this.daw.player.playing||this.daw.player.starting||this.daw.recorder.busy||this.daw.monitor.enabled||this.daw.audition?.busy||this.daw.audioExport?.exporter.busy;bridge.isStudioBusy=()=>!!(this.sequence.playing||this.sequence.starting||this.sequence.rendering||this.sequence.capture||this.studio.recorder.busy||this.studio.recorder.player||this.studio.recorder.playbackPreparing);
+    this.dawTab=new DawTab(this.daw,{
+      onMove:node=>this.views.set('daw',node),focusSynth:()=>this.selectWorkspace('perf'),
+      onError:message=>{this.notice.textContent=message;}
+    });
+    this.openDawTab=action('Open DAW in new tab',()=>this.dawTab.open(),'ww-daw-new-tab');
+    this.navigation.after(this.openDawTab);
     const footer=el('div','ww-footer');
     footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.3'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);
@@ -191,6 +203,7 @@ class Foundation {
   selectWorkspace(id) {
     if(id==='seq')queueMicrotask(()=>this.sequence?.draw());
     if(!this.views.has(id))return;
+    if(id==='daw'&&this.dawTab?.connected)this.dawTab.win.focus();
     this.workspace=id;this.legacy=false;
     this.focusMidiContext();this.legacyHost.hidden=true;this.main.hidden=false;
     this.shell.dataset.activeWorkspace=id;
@@ -218,7 +231,7 @@ class Foundation {
   }
   showSettings() {this.settingsPanel.hidden=false;this.settingsPanel.scrollIntoView({block:'nearest'});}
   receive(m) {
-    if(m.t==='audio-owner-busy'){this.midiSetupPending=false;this.notice.textContent='Audio is running in another WASWAN tab. Return to that tab or close it before starting here.';return;}
+    if(m.t==='audio-owner-busy'){this.midiSetupPending=false;this.openDawTab.disabled=true;this.notice.textContent='Audio is running in another WASWAN tab. Use Open DAW in new tab there to share its session, or close it before starting here.';return;}
     if(m.t==='audio-start-error'){this.midiSetupPending=false;this.notice.textContent=`Unable to start audio: ${m.message}`;return;}
     this.studio.update(m);
     this.sequence.update(m);
@@ -226,7 +239,7 @@ class Foundation {
     if(m.t==='daw-notice'){this.notice.textContent=m.message;return;}
     if(m.t==='tone-store'){this.toneEditor.stored(m.data,m.ok);return;}
     if(m.t==='ready'){
-      this.failed=false;this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();
+      this.failed=false;this.running=true;this.audio=!!m.audio;this.openDawTab.disabled=false;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();
       if(this.midiSetupPending){this.midiSetupPending=false;this.midiSetup.open();}
     }
     if(m.t==='error'){if(this.frame)this.toneEditor.update(this.frame,false);this.toneSelector.node.disabled=true;this.midiSetupPending=false;this.midiSetup.close();this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}

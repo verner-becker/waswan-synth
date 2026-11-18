@@ -57,7 +57,7 @@ export class DawArrangement {
     for(const event of ['pointerup','pointercancel','lostpointercapture'])node.addEventListener(event,()=>{if(drag){drag=null;this.persist();}});node.ondblclick=()=>{this.prefs[key]=defaultDawLayout()[key];this.layout();};
     node.onkeydown=e=>{if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home'].includes(e.key))return;e.preventDefault();e.stopPropagation();this.prefs[key]=e.key==='Home'?defaultDawLayout()[key]:Math.max(min,Math.min(max,this.prefs[key]+(['ArrowUp','ArrowRight'].includes(e.key)?20:-20)));this.layout();};return node;
   }
-  measure(){if(!this.w.node.offsetParent)return;const available=Math.max(320,innerHeight-this.root.getBoundingClientRect().top-28);if(!this.measured&&!this.savedLayout&&available<500)this.prefs.bottom=false;this.measured=true;this.available=available;this.root.style.height=available+'px';this.applyVisibility();if(this.viewport.clientWidth){this.headWidth=Math.max(196,Math.min(260,this.viewport.clientWidth*.23));this.root.style.setProperty('--daw-header-width',this.headWidth+'px');this.render();}}
+  measure(){if(!this.w.node.offsetParent)return;const available=Math.max(320,this.root.ownerDocument.defaultView.innerHeight-this.root.getBoundingClientRect().top-28);if(!this.measured&&!this.savedLayout&&available<500)this.prefs.bottom=false;this.measured=true;this.available=available;this.root.style.height=available+'px';this.applyVisibility();if(this.viewport.clientWidth){this.headWidth=Math.max(196,Math.min(260,this.viewport.clientWidth*.23));this.root.style.setProperty('--daw-header-width',this.headWidth+'px');this.render();}}
   applyVisibility(){
     const p=this.prefs,max=p.maximized;this.browser.hidden=!p.browser||max==='arrangement';this.hSplit.hidden=this.browser.hidden;this.upper.hidden=max==='editor';this.bottom.hidden=!p.bottom||max==='arrangement';this.vSplit.hidden=this.bottom.hidden||max==='editor';this.collapsedTabs.hidden=!this.bottom.hidden;
     this.browser.style.width=p.browserWidth+'px';this.bottom.style.flexBasis=Math.max(160,Math.min(p.bottomHeight,(this.available||700)-200))+'px';this.bottom.classList.toggle('is-expanded',max==='editor');for(const name of ['clip','mixer','effects','automation']){
@@ -100,9 +100,9 @@ export class DawArrangement {
     const presetButton=(label,task)=>action(label,()=>this.w.run(async()=>{
       const track=this.w.selectedTrack();if(track)this.w.status.textContent=await task(track);
     }));
-    this.saveTrackPreset=presetButton('Save track preset…',async track=>'Saved '+await saveTrackPreset(track,'track'));
-    this.saveInstrumentPreset=presetButton('Save instrument preset…',async track=>'Saved '+await saveTrackPreset(track,'instrument'));
-    this.loadTrackPreset=presetButton('Load preset on track…',async track=>'Applied '+await loadTrackPreset(this.w.controller,track));
+    this.saveTrackPreset=presetButton('Save track preset…',async track=>'Saved '+await saveTrackPreset(track,'track',options=>this.w.pick('showSaveFilePicker',options)));
+    this.saveInstrumentPreset=presetButton('Save instrument preset…',async track=>'Saved '+await saveTrackPreset(track,'instrument',options=>this.w.pick('showSaveFilePicker',options)));
+    this.loadTrackPreset=presetButton('Load preset on track…',async track=>'Applied '+await loadTrackPreset(this.w.controller,track,options=>this.w.pick('showOpenFilePicker',options)));
     presets.append(el('summary','','Track presets'),this.saveTrackPreset,this.saveInstrumentPreset,this.loadTrackPreset);
     this.browser.append(presets);
     const marker=Panel('Markers');this.markerSelect=el('select');this.markerSelect.setAttribute('aria-label','DAW markers');this.markerSelect.onchange=()=>this.markerFields();this.markerName=control('Marker name','text',marker);this.markerBeat=control('Marker beat','number',marker);this.markerBeat.min=1;this.markerBeat.step=.25;
@@ -148,9 +148,9 @@ export class DawArrangement {
     this.markers.replaceChildren();for(const marker of p.markers){const button=action(marker.name,()=>this.w.seek(beatFrame(marker.tick/PPQ,p)));button.style.left=marker.tick/PPQ*zoom+'px';button.title=marker.name+' · '+musicalPosition(marker.tick/PPQ,p);button.setAttribute('aria-label','Go to marker '+marker.name);this.markers.append(button);}
     for(const [id,row] of this.rows)if(!p.tracks.some(t=>t.id===id)){row.row.remove();this.rows.delete(id);}
     for(const [index,t] of p.tracks.entries()){
-      const row=this.rows.get(t.id)||this.makeRow(t);this.rows.set(t.id,row);if(this.body.children[index]!==row.row)this.body.insertBefore(row.row,this.body.children[index]||null);const folded=this.prefs.folded.includes(t.id);row.row.style.height=(folded?36:this.prefs.trackHeight)+'px';row.row.classList.toggle('is-selected',this.w.selected===t.id);row.row.classList.toggle('is-folded',folded);row.row.style.setProperty('--track-color',t.color);if(document.activeElement!==row.name)row.name.value=t.name;row.type.textContent=t.type.toUpperCase()+' · '+t.icon;row.choose.setAttribute('aria-label','Select '+t.name);row.choose.setAttribute('aria-pressed',String(this.w.selected===t.id));row.fold.setAttribute('aria-label',(folded?'Expand ':'Collapse ')+t.name);row.fold.textContent=folded?'▸':'▾';
+      const row=this.rows.get(t.id)||this.makeRow(t);this.rows.set(t.id,row);if(this.body.children[index]!==row.row)this.body.insertBefore(row.row,this.body.children[index]||null);const folded=this.prefs.folded.includes(t.id);row.row.style.height=(folded?36:this.prefs.trackHeight)+'px';row.row.classList.toggle('is-selected',this.w.selected===t.id);row.row.classList.toggle('is-folded',folded);row.row.style.setProperty('--track-color',t.color);if(row.name.ownerDocument.activeElement!==row.name)row.name.value=t.name;row.type.textContent=t.type.toUpperCase()+' · '+t.icon;row.choose.setAttribute('aria-label','Select '+t.name);row.choose.setAttribute('aria-pressed',String(this.w.selected===t.id));row.fold.setAttribute('aria-label',(folded?'Expand ':'Collapse ')+t.name);row.fold.textContent=folded?'▸':'▾';
       if(row.iconName!==t.icon){row.choose.replaceChildren(trackIcon(t.icon));row.iconName=t.icon;}
-      for(const [field,value] of [[row.volume,t.volume],[row.pan,t.pan]])if(document.activeElement!==field)field.value=value;row.name.disabled=locked;row.drag.disabled=locked;row.arm.disabled=locked;row.arm.setAttribute('aria-label','Arm '+p.tracks.find(t=>t.id===row.row.dataset.trackId)?.name);row.arm.setAttribute('aria-pressed',String(!!p.tracks.find(t=>t.id===row.row.dataset.trackId)?.arm));row.volume.disabled=this.w.busy||this.w.player.playing&&p.automation.some(l=>l.enabled&&l.trackId===t.id&&l.target==='volume'&&l.points.length);row.pan.disabled=this.w.busy||this.w.player.playing&&p.automation.some(l=>l.enabled&&l.trackId===t.id&&l.target==='pan'&&l.points.length);for(const [button,on,label] of [[row.mute,t.mute,'Mute '],[row.solo,t.solo,'Solo ']]){button.setAttribute('aria-label',label+t.name);button.setAttribute('aria-pressed',String(on));button.disabled=this.w.busy;}
+      for(const [field,value] of [[row.volume,t.volume],[row.pan,t.pan]])if(field.ownerDocument.activeElement!==field)field.value=value;row.name.disabled=locked;row.drag.disabled=locked;row.arm.disabled=locked;row.arm.setAttribute('aria-label','Arm '+p.tracks.find(t=>t.id===row.row.dataset.trackId)?.name);row.arm.setAttribute('aria-pressed',String(!!p.tracks.find(t=>t.id===row.row.dataset.trackId)?.arm));row.volume.disabled=this.w.busy||this.w.player.playing&&p.automation.some(l=>l.enabled&&l.trackId===t.id&&l.target==='volume'&&l.points.length);row.pan.disabled=this.w.busy||this.w.player.playing&&p.automation.some(l=>l.enabled&&l.trackId===t.id&&l.target==='pan'&&l.points.length);for(const [button,on,label] of [[row.mute,t.mute,'Mute '],[row.solo,t.solo,'Solo ']]){button.setAttribute('aria-label',label+t.name);button.setAttribute('aria-pressed',String(on));button.disabled=this.w.busy;}
     }
     for(const [id,clip] of this.clips)if(!p.clips.some(c=>c.id===id)){clip.remove();this.clips.delete(id);}
     for(const c of p.clips){
@@ -159,7 +159,7 @@ export class DawArrangement {
     }
     const t=this.w.selectedTrack();this.selection.textContent=t?.name||'Select a track';this.selectedType.textContent=t?t.type.toUpperCase()+(t.type==='midi'?' · '+shortSound(t.instrument?.patch):' · Audio source clips'):'';if(t){this.color.value=t.color;this.icon.value=t.icon;}this.preset.hidden=t?.type!=='midi';if(this.library!==this.w.programs||this.kits!==this.w.drumKits||this.selectedInstrument!==t?.instrument?.patch.join(',')){this.preset.replaceChildren(...this.w.instrumentOptions(shortSound(t?.instrument?.patch)));this.library=this.w.programs;this.kits=this.w.drumKits;this.selectedInstrument=t?.instrument?.patch.join(',');}this.preset.value='';
     for(const field of [this.preset,this.icon,this.color,this.duplicate,this.up,this.down,this.remove])field.disabled=locked||!t;this.preset.disabled=locked||!this.w.running||t?.type!=='midi';this.saveTrackPreset.disabled=this.loadTrackPreset.disabled=locked||!t;this.saveInstrumentPreset.disabled=locked||!t?.instrument;this.addAudio.disabled=locked;this.addClip.disabled=locked||t?.type!=='midi';this.meter.disabled=locked;this.rangeStart.disabled=this.w.busy||this.w.recorder?.busy;this.rangeEnd.disabled=this.w.busy||this.w.recorder?.busy;this.loop.disabled=this.w.busy||this.w.recorder?.busy;
-    const transport=this.transport();this.loop.setAttribute('aria-pressed',String(transport.loop));if(document.activeElement!==this.rangeStart)this.rangeStart.value=transport.start/PPQ+1;if(document.activeElement!==this.rangeEnd)this.rangeEnd.value=transport.end/PPQ+1;this.meter.value=p.meter.join('/');this.showRange(transport.start,transport.end);
+    const transport=this.transport();this.loop.setAttribute('aria-pressed',String(transport.loop));if(this.rangeStart.ownerDocument.activeElement!==this.rangeStart)this.rangeStart.value=transport.start/PPQ+1;if(this.rangeEnd.ownerDocument.activeElement!==this.rangeEnd)this.rangeEnd.value=transport.end/PPQ+1;this.meter.value=p.meter.join('/');this.showRange(transport.start,transport.end);
     const markerId=this.markerSelect.value;this.markerSelect.replaceChildren(...p.markers.map(m=>new Option(m.name,m.id)));if(p.markers.some(m=>m.id===markerId))this.markerSelect.value=markerId;this.markerFields();this.controls();this.w.paintPosition();this.ensurePeaks();if(!event||!['track.update','master.update','project.update'].includes(event.type))this.drawClipVisuals();
   }
   ensurePeaks(){
@@ -185,5 +185,19 @@ export class DawArrangement {
     }
   }
   position(frame){this.playhead.style.left=((this.headWidth||246)+frameBeat(frame,this.w.snapshot)*this.prefs.zoom)+'px';}
-  meters(){this.w.mix?.meters();for(const [id,row] of this.rows){const meter=this.w.player.tracks.get(id)?.meter;if(!meter){row.meter.value=0;continue;}meter.getFloatTimeDomainData(this.meterSamples);let peak=0;for(const sample of this.meterSamples)peak=Math.max(peak,Math.abs(sample));row.meter.value=Math.min(1,peak);row.meter.title=peak?`${(20*Math.log10(peak)).toFixed(1)} dBFS peak`:'−∞ dBFS peak';}}
+  meters(){
+    this.w.mix?.meters();
+    for(const [id,row] of this.rows){
+      const source=this.w.player.tracks.get(id)?.meter;
+      let peak=0;
+      if(source){
+        source.getFloatTimeDomainData(this.meterSamples);
+        for(const sample of this.meterSamples)if(Number.isFinite(sample))peak=Math.max(peak,Math.abs(sample));
+      }
+      const label=peak?`${(20*Math.log10(peak)).toFixed(1)} dBFS peak`:'−∞ dBFS peak';
+      for(const meter of [row.meter,this.w.rows.get(id)?.meter])if(meter){
+        meter.value=Math.min(1,peak);meter.title=label;meter.setAttribute('aria-valuetext',label);
+      }
+    }
+  }
 }

@@ -7,10 +7,11 @@ import {ImmutableAudioStore} from './daw-assets.js';
 export class DawImporter {
   constructor(workspace){this.w=workspace;this.busy=false;}
   cancel(){this.cancelled=true;this.w.status.textContent='Import cancelled; waiting for decoder/storage to release resources';this.cancelWorker?.();this.cancelProbe?.();}
-  async choose(){const [handle]=await showOpenFilePicker({multiple:false,types:[{description:'Audio or MIDI',accept:{'audio/*':['.wav','.mp3','.mid','.midi']}}]});return this.import(await handle.getFile());}
+  async choose(){const [handle]=await this.w.pick('showOpenFilePicker',{multiple:false,types:[{description:'Audio or MIDI',accept:{'audio/*':['.wav','.mp3','.mid','.midi']}}]});return this.import(await handle.getFile());}
   async import(file,{atBeat=this.w.cursor*this.w.snapshot.bpm/(RATE*60),trackId=this.w.selected}={}){
     if(this.busy||this.w.player.playing||this.w.recorder.busy)throw Error('Stop playback and recording before import');this.busy=true;this.cancelled=false;this.w.refreshControls();const controller=this.w.controller,project=controller.snapshot(),revision=controller.revision;let store;
     try{
+      if(!(file instanceof Blob))file=structuredClone(file);
       if(!(file instanceof Blob)||!file.size||file.size>256*1024*1024)throw Error('Import file limit: 256 MiB');if(!Number.isFinite(atBeat)||atBeat<0)throw Error('Choose a valid import position');this.w.status.textContent='Reading '+(file.name||'media');const extension=(file.name||'').split('.').at(-1).toLowerCase();let commands,assets=new Map(),selected,warnings=[];
       if(['mid','midi'].includes(extension)){const result=readSmf(await file.arrayBuffer(),{bpm:project.bpm,atTick:Math.round(atBeat*PPQ),name:(file.name||'Imported MIDI').slice(0,60)});if(project.tracks.length+result.tracks.length>LIMITS.tracks)throw Error('Not enough track capacity for MIDI track/channel structure');commands=[...result.tracks.map(payload=>({type:'track.create',payload})),...result.clips.map(payload=>({type:'clip.add',payload}))];selected=result.clips[0];warnings=result.warnings;}
       else{

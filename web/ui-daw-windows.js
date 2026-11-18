@@ -23,9 +23,9 @@ export class DawWindows {
     if(!Object.hasOwn(labels,name)||!pane)return;
     const stored={width:850,height:460,...this.positions[name]};
     const position=['left','top','width','height'].flatMap(key=>Number.isInteger(stored[key])?[key+'='+stored[key]]:[]);
-    const win=window.open('','_blank',['popup',...position].join(','));
+    const win=pane.ownerDocument.defaultView.open('','_blank',['popup',...position].join(','));
     if(!win){this.w.error(Error('Allow pop-ups for WASWAN to detach this panel'));return;}
-    const doc=win.document,anchor=document.createComment('WASWAN '+name+' panel');
+    const doc=win.document,anchor=pane.ownerDocument.createComment('WASWAN '+name+' panel');
     pane.before(anchor);
     try{
       doc.documentElement.lang='en';

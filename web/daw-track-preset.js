@@ -27,17 +27,17 @@ export function presetChanges(track,preset){
   validateProject(candidate);validateEffects(candidate);
   return changes;
 }
-export async function saveTrackPreset(track,kind){
+export async function saveTrackPreset(track,kind,savePicker=options=>showSaveFilePicker(options)){
   const preset=trackPreset(track,kind);
-  const handle=await showSaveFilePicker({types,suggestedName:track.name.replace(/[\\/:*?"<>|]/g,'-')+extension});
+  const handle=await savePicker({types,suggestedName:track.name.replace(/[\\/:*?"<>|]/g,'-')+extension});
   const writer=await handle.createWritable();
   try{await writer.write(JSON.stringify(preset));await writer.close();}
   catch(error){await writer.abort().catch(()=>{});throw error;}
   return handle.name;
 }
-export async function loadTrackPreset(controller,track){
+export async function loadTrackPreset(controller,track,openPicker=options=>showOpenFilePicker(options)){
   const revision=controller.revision;
-  const [handle]=await showOpenFilePicker({types,multiple:false});
+  const [handle]=await openPicker({types,multiple:false});
   const file=await handle.getFile();
   if(file.size>128*1024)throw Error('Preset file exceeds 128 KiB');
   const changes=presetChanges(track,JSON.parse(await file.text())),project=controller.snapshot();

@@ -18,6 +18,7 @@ Esta série DAW é distinta das ondas Studio 0–5 já integradas. O histórico 
 - Se entrar em loop sem solução, interromper a frente bloqueada, preservar trabalho e evidências e trazer o problema ao usuário. Não insistir indefinidamente nem trocar a arquitetura silenciosamente.
 - Após a apresentação do diagnóstico, o usuário autorizou: “proceda fase a fase, vou dormir”, até 18/11/2026 às 07:30 America/Sao_Paulo (10:30 UTC). Pode parar diante de bloqueio ou decisão que deva caber ao usuário. Sua eventual visita durante a madrugada não é dependência de execução.
 - O usuário autorizou retomar o desenvolvimento em 18/11/2026, mantendo a sequência de fases e branches.
+- O usuário autorizou completar as lacunas identificadas após a fase 9: volume do click, medição no Mixer, aba DAW ligada ao Synth, captura interna e preparação do aceite físico.
 - A autorização cobre as fases propostas e adaptações de host/DSP necessárias ao MVP, preservando uma instância, upstream e pool global de 256. Não integrar na main nem ampliar polifonia. Multi-instância, redução dos requisitos e continuidade transparente ao fechar o host não foram decididas; parar a dependência se forem necessárias.
 
 ## Protocolo de execução proposto
@@ -42,7 +43,8 @@ Uma hipótese que falha só justifica outra tentativa com evidência ou abordage
 | Fase 6 | Concluída como editores/importação: [fechamento](wave-6.md), `feat/daw-wave-6-editors-import`, fechamento `6ea5dff` |
 | Fase 7 | Concluída com efeitos, automação, presets e exportação WAV/MP3/MIDI/stems. [Fechamento](wave-7.md), `feat/daw-wave-7-mix-export`, fechamento `63c2cda` |
 | Fase 8 | Concluída com janelas, foco e perfis MIDI. [Fechamento](wave-8.md), `feat/daw-wave-8-windows-midi`, fechamento `40d5009` |
-| Fase 9 | Validação de software concluída com jornadas, recuperação, cargas de 5 e 20 minutos e manual. [Fechamento](wave-9.md), `test/daw-wave-9-stabilization` |
+| Fase 9 | Validação de software concluída com jornadas, recuperação, cargas de 5 e 20 minutos e manual. [Fechamento](wave-9.md), `test/daw-wave-9-stabilization`, fechamento `d558119` |
+| Aceite do MVP | [Quatro lacunas implementadas e roteiro de aceite físico](acceptance.md). Branch `feat/daw-mvp-acceptance` sobre `d558119`. |
 
 Decisões de trabalho iniciais: host em documento com posse exclusiva por Web Locks; fechar o host interrompe áudio, sem failover automático ou promessa de continuidade. Carga inicial de prova: cinco minutos, três trilhas instrumentais e cinco de áudio; não representa limite suportado certificado. Stems propostos pós-FX/fader/pan da trilha e pré-Master, para validar na fase de exportação. Caso uma dessas escolhas não sustente os requisitos, trazer evidência ao usuário.
 
