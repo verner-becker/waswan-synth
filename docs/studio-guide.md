@@ -1,6 +1,6 @@
 # WASWAN Studio — roteiro de uso e validação
 
-Implementação na branch `feat/studio-waves`. Estado por etapa: [controle das ondas](studio-waves.md). Cada fechamento registra implementação, testes, limitações, decisões e próximo passo.
+Implementação disponível na `main`, integrada com aprovação do usuário em 17/11/2026. Estado por etapa: [controle das ondas](studio-waves.md). Cada fechamento registra implementação, testes, limitações, decisões e próximo passo.
 
 ## Executar
 

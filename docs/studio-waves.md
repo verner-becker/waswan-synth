@@ -2,6 +2,14 @@
 
 Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83db16d2fc` (main local). Branch de planejamento e investigação: `docs/studio-waves-plan`.
 
+## Integração e encerramento Git — 17/11/2026
+
+O usuário aprovou explicitamente integrar tudo na `main` e limpar as branches. As entregas preservadas são: planejamento `02ffe93`, ondas `4485a9d` a `c6e3c67`, revisão SEQ `04dc1c8` e manual PDF `feb3687`. A linha é descendente da main `97ab4ec`, permitindo fast-forward sem reescrita ou squash.
+
+Validação conferida antes da integração: 19 suites Node, 12 Chrome distintas (onze de baseline mais a nova UX e repetições dos fluxos afetados), manual de 44 páginas com links/margens verificados e submódulo fixado. Não houve alteração funcional após essa validação; este encerramento atualiza referências documentais. Avaliação física/musical permanece distinta e pendente.
+
+Após publicar a main e conferir todos os SHAs como ancestrais da referência remota, remover as branches temporárias `docs/studio-waves-plan`, `feat/studio-waves` e `feat/studio-seq-ux`, localmente e no origin. Não criar tags, não usar force push e não apagar commits. Os registros das ondas abaixo são históricos; nomes de branches não são instruções de checkout.
+
 ## Acordo de trabalho
 
 - Preferir execução local no navegador; não migrar para nativo sem uma necessidade comprovada.
@@ -90,7 +98,7 @@ Ear e Academy ficam futuros. Preparação inicial: dados musicais claros e versi
 
 Ao retomar: ler este arquivo, o diagnóstico, status Git e evidências; continuar de onde parou. Antes de implementar outra onda, registrar escopo aprovado e seus critérios. Ao encerrar uma etapa, registrar resultados, limitações e próximo passo. Trabalho autônomo ocorre durante a execução da sessão; este documento não cria agendamento nem processo em segundo plano.
 
-Próximo passo: avaliação musical física com o [roteiro de uso](studio-guide.md); ondas 0–5 concluídas em software. Integração na main continua sujeita à aprovação explícita. Branch de implementação `feat/studio-waves`, baseada na main conferida e nos registros da onda 0. Sem merge automático.
+Próximo passo: avaliação musical física com o [roteiro de uso](studio-guide.md); ondas 0–5 concluídas em software. A integração na main foi aprovada explicitamente em 17/11/2026. Branch de implementação `feat/studio-waves`, baseada na main conferida e nos registros da onda 0. Sem merge automático.
 
 ## Decisões adotadas para a onda 1
 

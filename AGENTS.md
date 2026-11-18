@@ -2,7 +2,7 @@
 
 ## Current Baseline
 
-`main` is the official functional reference: UI Foundation v0.3 with the tone selector and ANALOG Tone Editor (TONES, Save/Save as), 256 voices, DSP Monitor, MIDI diagnostics, knob soft takeover, and the UX audit. Historical branch names are not checkout instructions; use commit SHAs or tags.
+`main` is the official functional reference: UI Foundation v0.3 with the tone selector and ANALOG Tone Editor (TONES, Save/Save as), 256 voices, DSP Monitor, MIDI diagnostics, knob soft takeover, Studio waves 0–5, the revised SEQ project/recording workflow, and the root Portuguese PDF manual. The Studio integration and branch cleanup were explicitly approved by the user on 2026-11-17. Historical branch names are not checkout instructions; use commit SHAs or tags.
 
 ## Studio Evolution
 

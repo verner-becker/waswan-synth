@@ -6,13 +6,13 @@ O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commi
 
 ## Manual de uso
 
-[Manual completo em PDF](MANUAL-WASWAN-SYNTH.pdf), na raiz: 44 páginas em português, com sumário clicável, capturas reais, referência dos 63 parâmetros ANALOG, Studio/SEQ, recursos Legacy, exercícios e ficha de avaliação de usabilidade. A edição descreve a revisão `04dc1c8`, incluindo o Studio da branch de desenvolvimento; não pressupõe sua integração na `main`.
+[Manual completo em PDF](MANUAL-WASWAN-SYNTH.pdf), na raiz: 44 páginas em português, com sumário clicável, capturas reais, referência dos 63 parâmetros ANALOG, Studio/SEQ, recursos Legacy, exercícios e ficha de avaliação de usabilidade. A edição descreve a revisão `04dc1c8`, incluindo Studio e a revisão do SEQ integrados à `main` por aprovação do usuário. A referência `04dc1c8` identifica a implementação descrita, preservada no histórico.
 
 Fonte editável: [docs/manual-waswan-synth.html](docs/manual-waswan-synth.html). Para gerar novamente com o Chrome/Playwright já preparado no projeto: `node scripts/build-manual.mjs`. O gerador verifica imagens, links e conteúdo fora dos limites de página antes de escrever o PDF.
 
 ## UI Foundation v0.3
 
-A `main` reúne a UI Foundation v0.3 com seletor de timbres, MIDI Setup e modos de voz na Performance, o motor de 256 vozes, o DSP Monitor e as correções de knobs. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
+A `main` reúne a UI Foundation v0.3 com seletor de timbres, MIDI Setup e modos de voz na Performance, o motor de 256 vozes, o DSP Monitor, as correções de knobs e o WASWAN Studio com SEQ revisado. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
 
 ```sh
 git switch main
@@ -21,6 +21,12 @@ python3 scripts/serve-simulator.py
 ```
 
 Abra http://localhost:8737/simulator/, use **Start audio** e conecte MIDI em **Settings**. Perfis existentes são preservados; nenhum mapeamento é instalado automaticamente. A composição legada completa está em `http://localhost:8737/simulator/?legacy=1&lang=pt`. Consulte [arquitetura, testes, limites e cinco screenshots](docs/ui-foundation-v1.md).
+
+## WASWAN Studio e SEQ
+
+As ondas 0–5, a revisão de UX do SEQ e o manual foram aprovados e integrados à `main` em 17/11/2026, preservando os commits originais. O SEQ oferece New/Open/Save project, Record MIDI com preview e destino A–D, piano roll centrado em C3, clipes, overdub, automação e áudio importado limitado. STUDIO captura e recupera tomadas, exporta WAV/MP3 e projetos locais; o SEQ também exporta MIDI.
+
+Comece por **SEQ → New project → Record MIDI → Stop → Save project**. Consulte o [roteiro de uso](docs/studio-guide.md), o [controle das ondas](docs/studio-waves.md) e a [revisão de UX](docs/studio-seq-ux.md). Validação física/musical e limites documentados continuam distintos dos testes automatizados; não houve atualização de firmware, submódulo ou criação de tag nesta integração.
 
 ## Executar no Ubuntu
 

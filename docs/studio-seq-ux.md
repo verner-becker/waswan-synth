@@ -1,6 +1,6 @@
 # WASWAN Studio — revisão da experiência do SEQ
 
-Estado: implementado na branch `feat/studio-seq-ux`, dependente das ondas em `c6e3c67`. Sem integração na main. Revisão solicitada pelo usuário após não encontrar como limpar o projeto e gravar o teclado. Escopo: projeto, captura MIDI, transporte e orientação no piano roll, preservando a base sonora.
+Estado: integrado à `main` por aprovação explícita do usuário em 17/11/2026, junto das ondas e do manual. A implementação está preservada em `04dc1c8`, sobre as ondas em `c6e3c67`; a antiga branch `feat/studio-seq-ux` pode ser removida após confirmar sua preservação na main. Revisão solicitada pelo usuário após não encontrar como limpar o projeto e gravar o teclado. Escopo: projeto, captura MIDI, transporte e orientação no piano roll, preservando a base sonora.
 
 ## Pesquisa e plano revisado
 
@@ -65,4 +65,4 @@ Não houve ensaio com controlador ou saída físicos, leitor de tela ou telefone
 - **Efetivamente testado:** 19 suites Node e 12 Chrome distintas, incluindo regressões e os cenários novos acima; evidências antes/depois salvas e inspecionadas.
 - **Limitado:** desktop primeiro; mobile exige scroll; entrada MIDI externa na captura de notas; avaliação física e com tecnologia assistiva pendente.
 - **Decisões:** preservar instrumento/mappings/OPFS; New e Clear notes separados; dados gravados como fonte final; controles avançados em details; sem novo framework ou DSP.
-- **Próximo passo:** usuário avaliar **New project → Record MIDI → Stop → Save project** com seu controlador; integrar na main somente com aprovação explícita.
+- **Próximo passo:** usuário avaliar **New project → Record MIDI → Stop → Save project** com seu controlador; avaliar eventuais melhorias em nova branch a partir da main; a integração desta entrega já foi aprovada.
