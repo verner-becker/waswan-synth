@@ -22,7 +22,7 @@ try{
   });
   const button=name=>page.getByRole('button',{name,exact:true}),status=page.locator('.ww-studio-status');
   const state=name=>page.waitForFunction(name=>document.querySelector('.ww-studio-status')?.dataset.state===name,name);
-  const start=async()=>{await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await button('Connect MIDI keyboard').click();await page.waitForFunction(()=>!!audit.source.onmidimessage);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();};
+  const start=async()=>{await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await button('Connect MIDI keyboard').click();await page.waitForFunction(()=>!!audit.source.onmidimessage);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();};
   const midi=(st,d1,d2)=>page.evaluate(([st,d1,d2])=>audit.source.onmidimessage({data:[st,d1,d2],timeStamp:performance.now()}),[st,d1,d2]);
   const download=async(name,path)=>{const wait=page.waitForEvent('download');await button(name).click();const file=await wait;await file.saveAs(path);return fs.readFileSync(path);};
   await page.goto('http://localhost:8737/simulator/');await start();

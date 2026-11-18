@@ -40,7 +40,7 @@ try{
   await host.goto(base+'?workspace=daw');
   await host.getByRole('button',{name:'Start audio',exact:true}).click();
   await host.waitForFunction(()=>audit.frame?.ms>5000);
-  await host.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
+  await host.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
   await host.evaluate(async()=>{
     const {DawMix}=await import('./ui-daw-mix.js'),refresh=DawMix.prototype.refresh;
     DawMix.prototype.refresh=function(...args){audit.w=this.w;return refresh.apply(this,args);};

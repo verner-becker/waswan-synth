@@ -6,6 +6,8 @@ Em 18/11/2026, o usuário autorizou registrar este plano, integrar o MVP à `mai
 
 ## 1. Synth e navegação principal
 
+Implementada para revisão na branch `feat/ux-stage-1-synth-shell`. [Fechamento e evidências](ux-stage-1.md).
+
 - Organizar a navegação em **Synth** e **DAW**, com **Performance** e **TONES** dentro do Synth. Manter SEQ, Studio e a interface SMK acessíveis pela navegação secundária durante a migração. Retirar as telas planejadas da primeira linha. Manter os grupos implementados de osciladores, filtro, envelopes, modulação e efeitos compartilhados acessíveis em TONES.
 - Usar **Settings** como entrada única para conexão MIDI, atribuições, sessão e diagnósticos. Identificar os mixers pelo alvo, partes do Synth ou projeto DAW. Oferecer uma opção explícita para usar teclado e pads no MIDI Setup.
 - Compactar os medidores e a informação sobre a parte ativa. Usar um modo explícito para atribuir MIDI e mostrar pickup durante a interação. Definir o padrão dos ícones, foco, seleção, cores de estado e dicas no mouse e no teclado.

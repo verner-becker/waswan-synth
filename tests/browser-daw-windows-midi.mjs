@@ -55,7 +55,7 @@ try{
   await setup.getByRole('button',{name:'Connect MIDI keyboard',exact:true}).click();
   await page.locator('#midiInput').selectOption('id-a');
   await page.waitForFunction(()=>!!audit.source.onmidimessage);
-  await setup.getByRole('button',{name:'OK',exact:true}).click();
+  await setup.locator('.ww-midi-continue').click();
   await page.evaluate(async()=>{
     const {DawMix}=await import('/simulator/ui-daw-mix.js'),refresh=DawMix.prototype.refresh;
     DawMix.prototype.refresh=function(...args){audit.w=this.w;return refresh.apply(this,args);};

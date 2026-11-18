@@ -8,8 +8,8 @@ const LABELS={0:'OSC1 wave',1:'OSC1 pulse width / detune',2:'OSC1 level',3:'Nois
   32:'LFO → pitch',33:'LFO → PWM',34:'LFO → filter',35:'LFO → amp',36:'LFO pitch destination',37:'LFO PWM destination',39:'Unison voices',40:'Unison / dual detune',44:'Bend range',46:'Mod depth (legacy)',
   52:'Chorus rate',53:'Chorus depth',54:'Chorus return',55:'Delay time',56:'Delay feedback',57:'Delay tone',58:'Delay return',59:'Reverb size',60:'Reverb damping',61:'Reverb pre-delay',62:'Reverb return'};
 export class ToneEditor {
-  constructor(send){
-    this.send=send;this.request=0;this.controls=new Map();this.groups=[];
+  constructor(send,onGroupChange){
+    this.send=send;this.onGroupChange=onGroupChange;this.request=0;this.controls=new Map();this.groups=[];
     this.node=Panel('Tone Editor','ANALOG · original parameters');this.node.classList.add('ww-tone-editor');
     this.heading=el('p','','Start audio to inspect the selected tone.');
     this.save=action('Save',()=>this.openSave(false),'ww-primary');this.saveAs=action('Save as…',()=>this.openSave(true));this.save.disabled=this.saveAs.disabled=true;
@@ -17,7 +17,7 @@ export class ToneEditor {
     this.status=el('p','ww-muted','Edits apply immediately. Saving remains explicit.');this.status.setAttribute('role','status');this.node.append(this.status);
     this.unavailable=el('p','ww-muted');this.node.append(this.unavailable);
     this.nav=el('nav','ww-editor-tabs');this.nav.setAttribute('aria-label','Tone parameter groups');this.node.append(this.nav);
-    this.hint=el('p','ww-muted','Original scales · drag knobs or use arrow keys for one step. Existing MIDI assignments keep their current destinations.');this.node.append(this.hint);
+    this.hint=el('p','ww-muted','Drag knobs vertically · Shift for fine adjustment · arrow keys for one step');this.hint.id='ww-tones-help';this.node.append(this.hint);
     this.content=el('div');this.node.append(this.content);
     this.dialog=el('dialog','ww-map-dialog ww-editor-save');this.dialog.setAttribute('aria-labelledby','ww-editor-save-title');
     this.form=el('form');const title=el('h2','','Save tone');title.id='ww-editor-save-title';
@@ -33,7 +33,7 @@ export class ToneEditor {
     this.catalog=catalog;this.controls.clear();this.groups=[];this.nav.replaceChildren();this.content.replaceChildren();
     for(const [group,ids] of GROUPS){
       const panel=el('section','ww-editor-group');panel.hidden=this.groups.length>0;const button=action(group,()=>this.selectGroup(group));button.dataset.group=group;button.setAttribute('aria-pressed',String(!this.groups.length));this.nav.append(button);panel.append(el('h3','',group));
-      if(group==='Shared effects')panel.append(el('p','ww-muted','Global return effects for all parts. Controls belong to part A/settings, not an independent FX chain in this tone. Part sends and mixer stay in Performance / Legacy.'));
+      if(group==='Shared effects')panel.append(el('p','ww-muted','These returns are shared by all Synth parts. Use Performance for part levels and the chorus, delay and reverb sends.'));
       if(group==='Oscillators')panel.append(el('p','ww-muted','X-MOD is linear FM: OSC2 → OSC1. SUPER uses seven saws in OSC1, with a shared five-voice limit; sync/FM are bypassed. SUPER MIX remains in Legacy SMK.'));
       const grid=el('div','ww-editor-grid');panel.append(grid);
       for(const id of ids){
@@ -44,7 +44,7 @@ export class ToneEditor {
           p.options.forEach((name,value)=>input.add(new Option(name,String(value))));input.onchange=()=>this.set(id,Number(input.value));node.append(input);
           control={node,update:(s,display)=>{input.disabled=!s.available;input.value=String(s.value);input.title=display;}};
         }else{
-          control=RotaryKnob({name:label,min:p.min,max:p.max,onInput:value=>this.set(id,value)});control.badge.hidden=true;
+          control=RotaryKnob({name:label,min:p.min,max:p.max,onInput:value=>this.set(id,value)});control.badge.hidden=true;control.dial.setAttribute('aria-describedby',this.hint.id);
           const input=el('input','ww-editor-number');input.type='number';input.min=p.min;input.max=p.max;input.step=1;input.setAttribute('aria-label',`${label} internal value`);
           input.onchange=()=>{if(input.checkValidity())this.set(id,Number(input.value));};control.node.append(input);const original=control.update;
           control.update=(s,display,secondary)=>{original(s,display,secondary);input.disabled=!s.available;if(document.activeElement!==input)input.value=String(s.value);};
@@ -55,7 +55,7 @@ export class ToneEditor {
     }
     this.selectGroup(this.selectedGroup??GROUPS[0][0]);
   }
-  selectGroup(group){this.selectedGroup=group;for(const g of this.groups){g.panel.hidden=g.group!==group;g.button.setAttribute('aria-pressed',String(g.group===group));}}
+  selectGroup(group){this.selectedGroup=group;for(const g of this.groups){g.panel.hidden=g.group!==group;g.button.setAttribute('aria-pressed',String(g.group===group));}this.onGroupChange(group);}
   set(id,value){if(this.frame?.editor?.available)this.send({t:'editor-set',id,value,scope:this.frame.instrument.scope});}
   openSave(as){
     const f=this.frame;if(!f?.editor?.available)return;

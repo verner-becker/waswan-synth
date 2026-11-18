@@ -61,18 +61,12 @@ export function VerticalFader({name,onInput,onMap}) {
   input.oninput=()=>onInput(Number(input.value));node.append(el('span','ww-control-name',name),input,value,el('small','ww-muted','100 = unity'),badge);
   return {node,badge,input,update(state,display){input.disabled=!state?.available;input.max=state?.max??127;input.value=state?.value??0;input.setAttribute('aria-valuetext',display);input.style.setProperty('--fill',`${100*(state?.value??0)/(state?.max??127)}%`);value.textContent=display;}};
 }
-export function PlaceholderWorkspace(title,description,items=[]) {
-  const node=Panel(title,'Foundation · preview');node.classList.add('ww-placeholder');
-  node.append(el('p','ww-placeholder-intro',description));const list=el('div','ww-future-grid');
-  for(const [name,detail] of items){const item=el('div','ww-future-item');item.append(el('span','ww-planned','PLANNED'),el('h3','',name),el('p','ww-muted',detail));list.append(item);}
-  node.append(list);return node;
-}
-export function WorkspaceNavigation(items,onSelect) {
-  const node=el('nav','ww-navigation');node.setAttribute('aria-label','Workspaces');
+export function WorkspaceNavigation(items,onSelect,label) {
+  const node=el('nav','ww-navigation');node.setAttribute('aria-label',label);
   for(const [id,label,title] of items){const button=action(label,()=>onSelect(id));button.dataset.workspace=id;button.title=title;button.setAttribute('aria-label',title);button.setAttribute('aria-pressed','false');node.append(button);}
-  node.addEventListener('keydown',event=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;const buttons=[...node.children],i=buttons.indexOf(document.activeElement);if(i<0)return;event.preventDefault();const n=event.key==='Home'?0:event.key==='End'?buttons.length-1:(i+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;buttons[n].focus();buttons[n].click();});
+  node.addEventListener('keydown',event=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;const buttons=[...node.querySelectorAll('[data-workspace]')],i=buttons.indexOf(document.activeElement);if(i<0)return;event.preventDefault();const n=event.key==='Home'?0:event.key==='End'?buttons.length-1:(i+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;buttons[n].focus();buttons[n].click();});
   return node;
 }
 export const AppShell=()=>el('div','ww-shell');
 export const TopBar=()=>el('div','ww-topbar');
-export const BottomPerformanceDock=()=>Panel('Play','Keyboard & pads · current performance bank');
+export const BottomPerformanceDock=()=>Panel('Keyboard & pads','');

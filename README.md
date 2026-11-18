@@ -52,9 +52,9 @@ node tests/polyphony-256.test.mjs
 python3 scripts/serve-simulator.py
 ```
 
-Abra **http://localhost:8737/simulator/**, clique em **Start audio**, abra **Settings** e use **Connect MIDI keyboard**, autorize o acesso e escolha **SMK-37 Pro-Master**. Mantenha a aba em foco: o original ignora entrada MIDI em abas ocultas e solta notas ao perder o foco. **Release all** libera as notas e o sustain. Para escolher POLY, MONO, DUAL ou UNISON, abra **DIAG → Voice allocation & execution modes**.
+Abra **http://localhost:8737/simulator/** e clique em **Start audio**. Use **Use keyboard & pads** para tocar com os controles virtuais. Para usar o SMK-37 Pro, abra **Settings**, clique em **Connect MIDI keyboard** e escolha **SMK-37 Pro-Master**. **Release all** libera notas e sustain. A Performance oferece POLY, MONO, DUAL e UNISON. As opções de diagnóstico ficam em **Settings → Diagnostics → Voice allocation & execution modes**.
 
-Para ouvir os exemplos, use **Play / stop** ou PLAY no **Legacy SMK**. Para tocar pela entrada MIDI na parte selecionada, mantenha `GLOBAL → MIDI CH = OMNI`. O `MIDI MODE` do painel simulado suspende o sintetizador; deixe esse modo desligado para produzir áudio.
+Para ouvir os exemplos, use **Play / stop pattern** ou PLAY no **Legacy SMK**. Para tocar pela entrada MIDI na parte selecionada, mantenha `GLOBAL → MIDI CH = OMNI`. O `MIDI MODE` do painel simulado suspende o sintetizador. Use o modo Synth para produzir áudio.
 
 As ferramentas ficam em `.tools/` e os resultados em `.local/`, ambos ignorados pelo Git. O servidor usa apenas o loopback e serve o simulador, a tradução e os avisos de licença. Os instaladores de firmware não são publicados por esse servidor. Os links originais de instalação no rodapé não possuem destino nesta execução local.
 
@@ -78,7 +78,7 @@ A captura física confirmou um limite do controle absoluto por deltas: CC53 com 
 
 ## DSP Monitor v1
 
-Em **DIAG**, o botão **Mostrar WASWAN DSP Monitor** habilita a instrumentação opcional. Use **Iniciar captura → Encerrar captura → Exportar JSONL**. O monitor nasce desligado e não altera o DSP. No Chrome instalado, o relógio do worklet tem resolução nominal de 1 ms: percentis são aproximados e exceder o orçamento não comprova underrun. Veja [arquitetura, precisão, testes e resultados](docs/dsp-monitor-v1.md).
+O botão **Mostrar WASWAN DSP Monitor** em **Settings → Diagnostics** habilita a instrumentação opcional. Use **Iniciar captura → Encerrar captura → Exportar JSONL**. O monitor nasce desligado e não altera o DSP. No Chrome instalado, o relógio do worklet tem resolução nominal de 1 ms: percentis são aproximados e exceder o orçamento não comprova underrun. Veja [arquitetura, precisão, testes e resultados](docs/dsp-monitor-v1.md).
 
 Use `sh scripts/stage-simulator.sh` para atualizar somente a interface após gerar os artefatos WASM e recarregue o navegador. As etapas anteriores estão preservadas no histórico e nas tags existentes.
 

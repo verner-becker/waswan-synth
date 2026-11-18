@@ -13,7 +13,7 @@ await p.addInitScript(()=>{
 });
 const send=m=>p.evaluate(m=>audit.node.port.postMessage(m),m),tone=p.getByRole('combobox',{name:'Tone program',exact:true});
 const waitProgram=(part,program)=>p.waitForFunction(([part,program])=>audit.frame.track===part&&audit.frame.programs[part]===program&&document.querySelector('.ww-tone-selector').value===String(program),[part,program]);
-const start=async()=>{await p.getByRole('button',{name:'Start audio',exact:true}).click();await p.locator('.ww-midi-setup[open]').waitFor();await p.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();await p.waitForFunction(()=>audit.frame?.ms>5000);};
+const start=async()=>{await p.getByRole('button',{name:'Start audio',exact:true}).click();await p.locator('.ww-midi-setup[open]').waitFor();await p.locator('.ww-midi-setup').locator('.ww-midi-continue').click();await p.waitForFunction(()=>audit.frame?.ms>5000);};
 const dialog=p.locator('.ww-tone-confirm');
 const choose=async(program,consent=true)=>{const edited=await p.evaluate(()=>audit.frame.instrument.edited);await tone.selectOption(String(program));if(edited){await dialog.waitFor({state:'visible'});await dialog.getByRole('button',{name:consent?'Discard and load':'Cancel',exact:true}).click();}};
 try{

@@ -10,7 +10,7 @@ try{
   window.audit={};const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;}};
   const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...args){super(...args);if(args[1]!=='obervave-smk37')return;audit.node=this;this.port.addEventListener('message',({data:m})=>{if(m.t==='frame')audit.frame=m;});}};
  });
- await page.goto('http://localhost:8737/simulator/');await page.getByRole('button',{name:'Start audio',exact:true}).click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
+ await page.goto('http://localhost:8737/simulator/');await page.getByRole('button',{name:'Start audio',exact:true}).click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
  await page.evaluate(async()=>{
   audit.node.port.postMessage({t:'voice-mode',part:0,mode:0});for(const n of [48,52,55,60])audit.node.port.postMessage({t:'midi',st:144,d1:n,d2:100});
   audit.analyser=audit.context.createAnalyser();audit.node.connect(audit.analyser);

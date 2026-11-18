@@ -13,13 +13,18 @@ const STATUS={
 
 // A portal for the existing controls: one select, one controller, one device list.
 export class MidiSetup {
-  constructor(controller,panel) {
+  constructor(controller,panel,onVirtualKeyboard) {
+    this.controller=controller;
     this.panel=panel;panel.setAttribute('aria-label','MIDI input');this.home=document.createComment('MIDI controls in Settings');panel.before(this.home);
     this.dialog=el('dialog','ww-map-dialog ww-midi-setup');this.dialog.setAttribute('aria-labelledby','ww-midi-setup-title');
     const title=el('h2','','MIDI Setup');title.id='ww-midi-setup-title';
-    this.dialog.append(title,el('p','ww-muted','Choose your MIDI input, or continue with the virtual keyboard and pads.'));
-    this.ok=action('OK',()=>this.dialog.close(),'ww-primary');this.ok.autofocus=true;this.dialog.append(this.ok);
-    this.dialog.addEventListener('close',()=>{this.home.after(panel);});
+    this.help=el('p','ww-muted');this.dialog.append(title,this.help);
+    this.continueButton=action('',()=>this.dialog.close(this.keyboard&&!controller.input?'keyboard':''),'ww-primary ww-midi-continue');
+    this.continueButton.autofocus=true;this.dialog.append(this.continueButton);
+    this.dialog.addEventListener('close',()=>{
+      this.home.after(panel);
+      if(this.dialog.returnValue==='keyboard')onVirtualKeyboard();
+    });
     document.body.append(this.dialog);
     panel.querySelector('#midiConnect').textContent='Connect MIDI keyboard';
     const label=panel.querySelector('.midi-controls label');
@@ -27,11 +32,18 @@ export class MidiSetup {
     panel.querySelector('#midiStatus').textContent=STATUS[!navigator.requestMIDIAccess||!isSecureContext?'unsupported':'choose'];
     panel.querySelector('.midi-help').textContent='Notes, velocity, sustain, pitch bend and modulation use the existing MIDI input. Your saved controller assignments are preserved.';
     const onStatus=controller.onStatus,onPorts=controller.onPorts;
-    controller.onStatus=(code,name='')=>{onStatus(code,name);panel.querySelector('#midiStatus').textContent=(STATUS[code]??code)+(code==='connected'?name:'');};
+    controller.onStatus=(code,name='')=>{onStatus(code,name);panel.querySelector('#midiStatus').textContent=(STATUS[code]??code)+(code==='connected'?name:'');this.refreshContinue();};
     controller.onPorts=(ports,id)=>{onPorts(ports,id);this.labelEmptyOption();};
     this.labelEmptyOption();
   }
   labelEmptyOption() {const option=this.panel.querySelector('#midiInput option[value=""]');if(option)option.textContent='No MIDI input selected';}
-  open() {if(this.dialog.open)return;this.dialog.insertBefore(this.panel,this.ok);this.dialog.showModal();}
-  close() {if(this.dialog.open)this.dialog.close();}
+  refreshContinue() {this.continueButton.textContent=this.controller.input?'Continue':this.keyboard?'Use keyboard & pads':'Continue without MIDI';}
+  open({keyboard}) {
+    if(this.dialog.open)return;
+    this.keyboard=keyboard;
+    this.help.textContent=keyboard?'Choose a MIDI input or play with the virtual keyboard and pads.':'Choose a MIDI input. You can also connect a controller later in Settings.';
+    this.refreshContinue();this.dialog.returnValue='';
+    this.dialog.insertBefore(this.panel,this.continueButton);this.dialog.showModal();
+  }
+  close() {if(this.dialog.open)this.dialog.close('');}
 }

@@ -40,7 +40,7 @@ try {
   await page.waitForFunction(()=>audit.frame?.ms>5000);
   await page.getByRole('button',{name:'Connect MIDI keyboard',exact:true}).click();
   await page.waitForFunction(()=>!!audit.source.onmidimessage);
-  await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
+  await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
   // POLY and a held chord produce real synth output through the original input path.
   await page.evaluate(()=>{
     audit.node.port.postMessage({t:'voice-mode',part:0,mode:0});

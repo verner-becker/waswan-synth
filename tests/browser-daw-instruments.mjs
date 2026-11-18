@@ -14,7 +14,7 @@ try{
  });
  await page.goto('http://localhost:8737/simulator/?workspace=daw');const daw=page.locator('[data-view="daw"]'),button=name=>daw.getByRole('button',{name,exact:true}),field=name=>daw.getByLabel(name,{exact:true});
  assert(await daw.isVisible());assert(await page.locator('.ww-dock').isHidden());
- await page.getByRole('button',{name:'Start audio',exact:true}).click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
+ await page.getByRole('button',{name:'Start audio',exact:true}).click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
  await field('DAW project name').fill('Roundtrip composition');await field('DAW project name').press('Tab');
  for(let i=0;i<3;i++){
   await daw.getByRole('button',{name:'Mixer',exact:true}).click();

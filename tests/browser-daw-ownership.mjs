@@ -12,7 +12,7 @@ try{
   const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...a){super(...a);if(a[1]!=='obervave-smk37')return;audit.node=this;const post=this.port.postMessage.bind(this.port);this.port.postMessage=(m,...rest)=>{audit.sent.push(m.t);post(m,...rest);};this.port.addEventListener('message',({data:m})=>{if(m.t==='frame')audit.frame=m;if(m.t==='daw-state')audit.state=m;if(m.t==='daw-instruments-changed')audit.changes.push(m);if(m.t==='daw-reply')audit.reply=m;});}};
   window.showOpenFilePicker=async()=>[audit.handle];window.showSaveFilePicker=async()=>audit.handle;
  });
- await page.goto('http://localhost:8737/simulator/?workspace=daw');await page.getByRole('button',{name:'Start audio',exact:true}).click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
+ await page.goto('http://localhost:8737/simulator/?workspace=daw');await page.getByRole('button',{name:'Start audio',exact:true}).click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
  await page.evaluate(async()=>{
   const {emptyProject,makeTrack,uuid}=await import('/simulator/daw-project.js'),{projectBlob}=await import('/simulator/daw-format.js');
   const request=crypto.randomUUID(),reply=new Promise(resolve=>{const listener=({data:m})=>{if(m.t==='daw-reply'&&m.request===request){audit.node.port.removeEventListener('message',listener);resolve(m.result);}};audit.node.port.addEventListener('message',listener);});audit.node.port.postMessage({t:'daw-program',request,program:68});const sound=await reply;

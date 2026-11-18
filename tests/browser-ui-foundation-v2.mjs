@@ -21,8 +21,11 @@ async function fixture(scenario='devices') {
   return {p,context};
 }
 const start=async p=>{await p.getByRole('button',{name:'Start audio',exact:true}).click();await p.locator('.ww-midi-setup[open]').waitFor();await p.waitForFunction(()=>audit.frame?.ms>5000);};
-const ok=async p=>{await p.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();await p.waitForFunction(()=>!document.querySelector('.ww-midi-setup').open&&document.querySelector('.ww-settings .midi-panel'));};
-const go=(p,id)=>p.locator(`[data-workspace="${id}"]`).click();
+const ok=async p=>{await p.locator('.ww-midi-setup').locator('.ww-midi-continue').click();await p.waitForFunction(()=>!document.querySelector('.ww-midi-setup').open&&document.querySelector('.ww-settings .midi-panel'));};
+const go=async(p,id)=>{
+  if(id==='diag')await p.getByRole('button',{name:'Settings',exact:true}).click();
+  await p.locator(`[data-workspace="${id}"]`).click();
+};
 const mode=(p,id)=>p.locator(`[data-performance-mode="${id}"]`);
 const waitMode=(p,part,id)=>p.waitForFunction(([part,id])=>audit.frame.polyphony.parts[part].mode===id&&document.querySelector(`[data-performance-mode="${id}"]`).getAttribute('aria-pressed')==='true',[part,id]);
 const virtualKey=async p=>{const key=p.locator('#keys [data-key="0"]');await key.focus();await p.keyboard.down('Enter');await p.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate));await p.keyboard.up('Enter');await p.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.gate));};
@@ -54,19 +57,23 @@ try {
   const midi=(st,d1,d2)=>p.evaluate(([st,d1,d2])=>audit.sources[1].onmidimessage({data:[st,d1,d2]}),[st,d1,d2]);
   await midi(0xb0,64,127);for(const n of [60,64,67]){await midi(0x90,n,100);await midi(0x80,n,0);}await p.waitForFunction(()=>audit.frame.polyphony.slots.filter(v=>v.gate).length===3);
   await p.evaluate(()=>{audit.sent=[];audit.programs=JSON.stringify(audit.frame.programs);});
-  for(const id of ['diag','perf','osc','perf'])await go(p,id);await p.locator('.ww-legacy-toggle').click();await p.locator('.ww-legacy-toggle').click();
+  for(const id of ['diag','perf','tones','perf'])await go(p,id);await p.locator('.ww-legacy-toggle').click();await p.locator('.ww-legacy-toggle').click();
   assert.deepEqual(await p.evaluate(()=>audit.sent),[]);assert.equal(await p.evaluate(()=>audit.contexts),1);assert.equal(await p.evaluate(()=>audit.ready),1);assert.equal(await p.evaluate(()=>audit.frame.polyphony.slots.filter(v=>v.gate).length),3);assert(await p.evaluate(()=>JSON.stringify(audit.frame.programs)===audit.programs));assert.equal(await p.locator('.ww-midi-setup').evaluate(n=>n.open),false);
   await midi(0xb0,64,0);await p.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.active));
   // Automatic resume never opens setup; manual Resume audio does.
   await p.evaluate(async()=>{await audit.context.suspend();await audit.context.resume();});assert.equal(await p.locator('.ww-midi-setup').evaluate(n=>n.open),false);
   await p.evaluate(()=>audit.context.suspend());await p.getByRole('button',{name:'Resume audio',exact:true}).click();await p.locator('.ww-midi-setup[open]').waitFor();await ok(p);assert.equal(await p.evaluate(()=>audit.contexts),1);
-  // Compare panel size and old-content positions against the measured v0.1 layout.
+  // Keep the voice modes in one row and confirm the compact panel gives the keyboard more space.
   const geometry={};for(const width of [1560,1440,1100,390]){await p.setViewportSize({width,height:1100});geometry[width]=await p.locator('.ww-musical-grid>section').last().evaluate(n=>({panel:n.getBoundingClientRect().toJSON(),children:[...n.children].map(x=>({tag:x.tagName,text:x.textContent,rect:x.getBoundingClientRect().toJSON()})),buttons:[...n.querySelectorAll('[data-performance-mode]')].map(x=>x.getBoundingClientRect().toJSON())}));const ys=geometry[width].buttons.map(x=>x.y);assert(ys.every(y=>Math.abs(y-ys[0])<1));assert(geometry[width].buttons.at(-1).right<=geometry[width].panel.right);}
   fs.writeFileSync(`${root}/layout-after.json`,JSON.stringify(geometry,null,2));
-  const previous=JSON.parse(fs.readFileSync('tests/fixtures/ui-foundation-v1-panel.json','utf8'));for(const width of [1560,1440]){assert.equal(geometry[width].panel.width,previous[width].width);assert.equal(geometry[width].panel.height,previous[width].height);for(let i=0;i<5;i++)assert(Math.abs((geometry[width].children[i].rect.y-geometry[width].panel.y)-previous[width].contentTopOffsets[i])<1);}
+  const previous=JSON.parse(fs.readFileSync('tests/fixtures/ui-foundation-v1-panel.json','utf8'));
+  for(const width of [1560,1440]){
+    assert(geometry[width].panel.height<previous[width].height);
+    assert(geometry[width].buttons.every(button=>button.bottom<=geometry[width].panel.bottom));
+  }
   await p.setViewportSize({width:1560,height:1100});await p.screenshot({path:`${root}/performance-modes.png`,fullPage:true});
   await p.setViewportSize({width:390,height:844});await p.evaluate(()=>document.querySelector('.ww-topbar').scrollIntoView());await p.evaluate(()=>audit.context.suspend());await p.getByRole('button',{name:'Resume audio',exact:true}).click();await p.locator('.ww-midi-setup[open]').waitFor();await p.screenshot({path:`${root}/midi-setup-mobile.png`});assert(await p.locator('.ww-midi-setup').evaluate(n=>n.getBoundingClientRect().width<=innerWidth&&n.scrollWidth<=n.clientWidth));await ok(p);
-  results.push({scenario:'devices and voice modes',result:'PASS',sameMidiNodes:true,profilePreserved:true,allFourModes:true,partSelection:true,legacyAndDiagnostics:true,drumGuard:true,sustainNavigation:true,contexts:1,automaticResumeNoModal:true,manualResumeSetup:true,desktopPanelUnchanged:true});await context.close();
+  results.push({scenario:'devices and voice modes',result:'PASS',sameMidiNodes:true,profilePreserved:true,allFourModes:true,partSelection:true,legacyAndDiagnostics:true,drumGuard:true,sustainNavigation:true,contexts:1,automaticResumeNoModal:true,manualResumeSetup:true,desktopPanelMoreCompact:true});await context.close();
   for(const scenario of ['empty','denied']){
     const {p,context}=await fixture(scenario);await start(p);
     if(scenario==='empty'){

@@ -15,7 +15,7 @@ try{
  const button=name=>page.getByRole('button',{name,exact:true}),field=name=>page.getByLabel(name,{exact:true});
  const send=m=>page.evaluate(m=>audit.node.port.postMessage(m),m);
  const download=async(name,path)=>{const wait=page.waitForEvent('download');await button(name).click();await(await wait).saveAs(path);return fs.readFileSync(path);};
- await page.goto('http://localhost:8737/simulator/');await page.locator('.ww-sequence').waitFor({state:'attached'});await page.locator('.ww-sequence > details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
+ await page.goto('http://localhost:8737/simulator/');await page.locator('.ww-sequence').waitFor({state:'attached'});await page.locator('.ww-sequence > details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
  await send({t:'voice-mode',part:0,mode:0});await page.locator('[data-workspace="seq"]').click();
  await field('Sequence BPM').fill('120');await field('Sequence BPM').dispatchEvent('change');
  await field('Length in quarter beats').fill('4');await field('Length in quarter beats').dispatchEvent('change');
@@ -45,7 +45,10 @@ try{
  await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.sequenced&&v.note===60));
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===60)));
  const mark=await page.evaluate(()=>audit.sent.length);
- for(const id of ['perf','studio','tones','diag','seq'])await page.locator(`[data-workspace="${id}"]`).click();
+ for(const id of ['perf','studio','tones','diag','seq']){
+  if(id==='diag')await page.getByRole('button',{name:'Settings',exact:true}).click();
+  await page.locator(`[data-workspace="${id}"]`).click();
+ }
  assert.deepEqual(await page.evaluate(n=>audit.sent.slice(n),mark),[],'navigation sends no musical commands');
  await page.waitForFunction(()=>audit.sequence?.cycle>=1);await button('Stop').click();await page.waitForFunction(()=>!audit.sequence.playing);
  await page.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.gate||!v.sequenced));
