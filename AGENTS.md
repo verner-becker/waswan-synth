@@ -6,6 +6,8 @@
 
 ## Studio Evolution
 
+For the new DAW MVP discovery, read `docs/daw-mvp-discovery/README.md` and its assessment/source documents. This is a separate series: analysis is authorized; implementation awaits the user's scope decision. The user requested one stacked branch per phase and permits GPT-6.1 Sol xhigh for advisory assessments. Stop a blocked line of work without repetitive retries and bring evidence/options to the user. Historical Studio approvals below do not approve new DAW DSP capabilities.
+
 Track scope, approvals, wave status, decisions, and handoffs in `docs/studio-waves.md`; keep technical evidence for wave 0 in `docs/studio-wave-0.md`. The user has authorized continuing through the planned waves, starting with wave 1 and the wave 0 recommendations. Close each wave with a short record of implementation, actual validation, limitations, decisions, and next step. Prefer the browser, subject to measured feasibility. Challenge proposals when evidence warrants it. If a real blocker persists or a decision exceeds approved scope, preserve the work and ask the user for a decision rather than retrying indefinitely. Integration into `main`, additional DSP capabilities, and polyphony changes still require explicit approval.
 
 ## Project Structure
