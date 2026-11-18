@@ -6,11 +6,12 @@ import {ToneEditor} from './ui-tone-editor.js';
 import {MidiSetup} from './ui-midi-setup.js';
 import {StudioWorkspace} from './ui-studio.js';
 import {SequenceWorkspace} from './ui-studio-sequence.js';
+import {DawWorkspace} from './ui-daw.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,CompactMeter,RotaryKnob,VerticalFader,PlaceholderWorkspace,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
 
-const WORKSPACES=[['perf','PERF','Performance'],['osc','OSC','Sound Design · Oscillators'],['mix','MIX','Mixer'],['filter','FILTER','Sound Design · Filter'],['env','ENV','Sound Design · Envelopes'],['mod','MOD','Sound Design · Modulation'],['fx','FX','Sound Design · Effects'],['routing','ROUTING','Sound Design · Routing'],['seq','SEQ','Sequencer'],['studio','STUDIO','Studio recorder'],['tones','TONES','Tone Editor'],['diag','DIAG','Diagnostics']];
+const WORKSPACES=[['perf','PERF','Performance'],['osc','OSC','Sound Design · Oscillators'],['mix','MIX','Mixer'],['filter','FILTER','Sound Design · Filter'],['env','ENV','Sound Design · Envelopes'],['mod','MOD','Sound Design · Modulation'],['fx','FX','Sound Design · Effects'],['routing','ROUTING','Sound Design · Routing'],['seq','SEQ','Sequencer'],['daw','DAW','DAW'],['studio','STUDIO','Studio recorder'],['tones','TONES','Tone Editor'],['diag','DIAG','Diagnostics']];
 let app;
 export function updateFoundation(message) { app?.receive(message); }
 export function mountFoundation(bridge) {
@@ -32,6 +33,7 @@ class Foundation {
     this.main=el('main','ww-main');this.shell.append(this.main);
     this.views=new Map();this.buildPerformance();this.buildFutureViews();this.studio=new StudioWorkspace(bridge);this.addView('studio',this.studio.node);this.sequence=new SequenceWorkspace(bridge,this.studio.recorder);this.addView('seq',this.sequence.node);this.toneEditor=new ToneEditor(m=>this.bridge.send(m));this.addView('tones',this.toneEditor.node);this.buildDiagnostics();this.buildSettings();this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'));this.buildDock();this.buildMidiDialog();
     this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
+    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{toggleKeyboard:()=>{this.dawKeyboardVisible=!this.dawKeyboardVisible;this.dock.hidden=!this.dawKeyboardVisible;return this.dawKeyboardVisible;}});this.addView('daw',this.daw.node);bridge.isDawBusy=()=>this.daw.player.playing||this.daw.player.starting;bridge.isStudioBusy=()=>!!(this.sequence.playing||this.sequence.starting||this.sequence.rendering||this.sequence.capture||this.studio.recorder.busy||this.studio.recorder.player||this.studio.recorder.playbackPreparing);
     const footer=el('div','ww-footer');
     footer.append(el('span','ww-muted','WASWAN Synth · UI Foundation 0.3'),action('Legacy SMK',()=>this.toggleLegacy(),'ww-legacy-toggle'),action('Settings / MIDI',()=>this.showSettings()));
     this.shell.append(footer);
@@ -40,7 +42,7 @@ class Foundation {
     const lame=el('a','','LAME / lamejs'),source=el('a','','source & license');lame.href='https://lame.sourceforge.net/';source.href='./vendor/lamejs/index.html';credits.append(el('span','',' · MP3: '),lame,el('span','',' · '),source);this.shell.append(credits);
     const previous=this.bridge.midi.profile.onChange;
     this.bridge.midi.profile.onChange=()=>{previous();this.updateBadges();this.updateLearnState();this.updateAssignments();};
-    this.updateAssignments();this.selectWorkspace('perf');this.animate=()=>{this.drawAudio();this.animation=requestAnimationFrame(this.animate);};this.animate();
+    this.updateAssignments();this.selectWorkspace(new URLSearchParams(location.search).get('workspace')==='daw'?'daw':'perf');this.animate=()=>{this.drawAudio();this.animation=requestAnimationFrame(this.animate);};this.animate();
   }
   buildHeader() {
     const top=TopBar(),brand=el('div','ww-brand');brand.append(el('strong','','WASWAN'),el('span','','SYNTH'));
@@ -183,6 +185,7 @@ class Foundation {
     if(id==='seq')queueMicrotask(()=>this.sequence?.draw());
     if(!this.views.has(id))return;
     this.workspace=id;this.legacy=false;this.legacyHost.hidden=true;this.main.hidden=false;
+    if(this.dock)this.dock.hidden=id==='daw'&&!this.dawKeyboardVisible;
     for(const [key,node] of this.views)node.hidden=key!==id;
     for(const button of this.navigation.children)button.setAttribute('aria-pressed',String(button.dataset.workspace===id));
     this.shell.querySelector('.ww-legacy-toggle')?.setAttribute('aria-pressed','false');
@@ -191,6 +194,7 @@ class Foundation {
   }
   toggleLegacy(force) {
     this.legacy=force??!this.legacy;this.main.hidden=this.legacy;this.legacyHost.hidden=!this.legacy;
+    if(this.legacy&&this.dock)this.dock.hidden=false;
     this.shell.querySelector('.ww-legacy-toggle').setAttribute('aria-pressed',String(this.legacy));
     if(this.legacy)for(const button of this.navigation.children)button.setAttribute('aria-pressed','false');
     else this.selectWorkspace(this.workspace);
@@ -209,6 +213,8 @@ class Foundation {
     if(m.t==='audio-start-error'){this.midiSetupPending=false;this.notice.textContent=`Unable to start audio: ${m.message}`;return;}
     this.studio.update(m);
     this.sequence.update(m);
+    this.daw.receive(m);
+    if(m.t==='daw-notice'){this.notice.textContent=m.message;return;}
     if(m.t==='tone-store'){this.toneEditor.stored(m.data,m.ok);return;}
     if(m.t==='ready'){
       this.failed=false;this.running=true;this.audio=!!m.audio;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();

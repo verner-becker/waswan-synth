@@ -174,3 +174,19 @@
 @media (max-width:600px) {
   .ww-project-open {width:auto;}
 }
+/* DAW foundation: real project controls; Arrangement replaces this editor in wave 4. */
+.ww-daw-transport,.ww-daw-note-fields,.ww-daw-master{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:12px 0}
+.ww-daw label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ww-muted,#a8b7c0)}
+.ww-daw input[type="text"]{min-width:120px;max-width:100%}
+.ww-daw input[type="number"]{width:110px}
+.ww-daw input:not([type="range"]),.ww-daw select{background:#0c171c;color:#edf3f5;border:1px solid #34454d;border-radius:6px;padding:7px 8px}
+.ww-daw input:disabled,.ww-daw select:disabled{background:#17262c;color:#a0b2bd;opacity:.75}
+.ww-daw-position{font-variant-numeric:tabular-nums;font-size:24px;min-width:72px;color:var(--ww-text,#edf3f5)}
+.ww-daw-track-scroll{overflow:auto;max-width:100%;margin:12px 0}
+.ww-daw-track{display:grid;grid-template-columns:minmax(170px,1.5fr) minmax(180px,2fr) 110px 90px auto auto auto;align-items:center;gap:12px;padding:12px;min-width:800px;border:1px solid var(--ww-border,#34454d);border-radius:8px;margin-bottom:8px}
+.ww-daw-track.is-selected{border-color:var(--ww-accent,#27e3dd);background:#14252b}
+.ww-daw-track-identity{display:grid;grid-template-columns:auto minmax(90px,1fr);gap:6px;align-items:center}
+.ww-daw-track-identity small{grid-column:2}
+.ww-daw-track input,.ww-daw-track select{min-width:0;width:100%}
+.ww-daw-track button[aria-pressed="true"]{background:#21545b;border-color:#27e3dd}
+.ww-daw [aria-label="DAW notes"]{width:100%;min-height:110px}

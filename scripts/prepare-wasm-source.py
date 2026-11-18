@@ -7,7 +7,11 @@ import subprocess
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--voices', type=int, choices=[16, 32, 64, 128, 256], default=16)
-voices = parser.parse_args().voices
+parser.add_argument('--daw', action='store_true', help='Apply the isolated DAW runtime slots to the 256-voice build')
+args=parser.parse_args()
+voices = args.voices
+if args.daw and voices!=256:
+    parser.error('DAW runtime is validated only with the 256-voice stage')
 root = Path(__file__).resolve().parents[1]
 upstream = root / 'upstream/SMKSYNTH'
 target = root / f'.local/build/source-{voices}'
@@ -18,6 +22,8 @@ for relative in ['firmware', 'web/sim']:
 (target / 'tests').mkdir(parents=True)
 shutil.copy2(upstream / 'tests/host.c', target / 'tests/host.c')
 subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / f'patches/polyphony-{voices}.patch')], cwd=target, check=True)
+if args.daw:
+    subprocess.run(['patch','--batch','--fuzz=0','-p1','-i',str(root/'patches/daw-runtime.patch')],cwd=target,check=True)
 # Optional host observation of the dry per-part bus, aligned with the buffered ISR.
 # No algorithm changes; the historical reference compiles with this hook absent.
 sim = target / 'web/sim/sim.c'

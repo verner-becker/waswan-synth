@@ -38,6 +38,10 @@ version = {'referenceCommit':subprocess.check_output(['git','rev-parse','HEAD'],
 (root / 'dsp-version.js').write_text('export const build='+json.dumps(version)+';\n')
 p = root / 'app.js'
 s = p.read_text()
+# Reserve output ports at startup; workspace navigation never replaces the node.
+outputs_anchor = "numberOfInputs:0,outputChannelCount:[2],processorOptions:{wasm,store}"
+assert s.count(outputs_anchor) == 1
+s = s.replace(outputs_anchor,"numberOfInputs:0,numberOfOutputs:9,outputChannelCount:[2,2,2,2,2,2,2,2,2],processorOptions:{wasm,store}")
 s = "import {AudioOwner,SessionObserver} from './daw-session.js';\nconst audioOwner=new AudioOwner(),sessionObserver=new SessionObserver(audioOwner);\n" + s
 # Reserve the session before creating AudioContext/WASM, including Legacy URL.
 start_anchor = "try{const audioMode=window.isSecureContext&&window.AudioWorkletNode;"

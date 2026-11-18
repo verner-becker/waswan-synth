@@ -16,27 +16,111 @@ static void waswan_daw_sample(uint32_t index, uint32_t position);
  * Legacy output and allocation are unchanged. Disabled on the original 8-voice
  * reference, whose source intentionally has no host observation hook. */
 static float daw_dry[NPART][2][SIM_MAXN];
+static float daw_owned_dry[NPART][2][SIM_MAXN];
 static uint32_t daw_taps_enabled;
 static void waswan_daw_sample(uint32_t index, uint32_t position) {
     if (!daw_taps_enabled) return;
     for (uint32_t p=0; p<NPART; p++) {
-        daw_dry[p][0][index]=(float)bus[p][2u*position]*(1.0f/131072.0f);
-        daw_dry[p][1][index]=(float)bus[p][2u*position+1u]*(1.0f/131072.0f);
+        daw_dry[p][0][index]=mm_on?0:(float)bus[p][2u*position]*(1.0f/131072.0f);
+        daw_dry[p][1][index]=mm_on?0:(float)bus[p][2u*position+1u]*(1.0f/131072.0f);
+#ifdef WASWAN_DAW_RUNTIME
+        daw_owned_dry[p][0][index]=mm_on?0:(float)daw_bus[p][2u*position]*(1.0f/131072.0f);
+        daw_owned_dry[p][1][index]=mm_on?0:(float)daw_bus[p][2u*position+1u]*(1.0f/131072.0f);
+#endif
     }
 }
 EXPORT uint32_t waswan_daw_taps(uint32_t enabled) {
     daw_taps_enabled=enabled && WASWAN_VOICES>8;
     memset(daw_dry,0,sizeof daw_dry);
+    memset(daw_owned_dry,0,sizeof daw_owned_dry);
     return WASWAN_VOICES>8 ? NPART : 0;
 }
 EXPORT float *waswan_daw_output(uint32_t part, uint32_t channel) {
     return part<NPART && channel<2 ? daw_dry[part][channel] : 0;
 }
+EXPORT uint32_t waswan_daw_output_count(void) {return NPART;}
+EXPORT float *waswan_daw_owned_output(uint32_t part,uint32_t channel) {return part<NPART&&channel<2?daw_owned_dry[part][channel]:0;}
+
+#ifdef WASWAN_DAW_RUNTIME
+/* Independent project slots and note ownership. No flash/preset writes. */
+static patch_t daw_staged[NPART];
+static uint32_t daw_slots;
+EXPORT uint32_t waswan_daw_capacity(void) {return NPART;}
+EXPORT uint32_t waswan_daw_drum_hits(void) {return sizeof drum_hit/sizeof drum_hit[0][0];}
+EXPORT void waswan_daw_transport_guard(uint32_t active) {daw_transport_guard=!!active;}
+EXPORT uint32_t waswan_daw_stage_buffer(void) {return (uint32_t)(uintptr_t)daw_staged;}
+EXPORT uint32_t waswan_daw_program(uint32_t part,uint32_t program) {
+    if(part>=NPART||program>=NPROG)return 0;prog_get(program,&daw_staged[part]);return 1;
+}
+EXPORT uint32_t waswan_daw_patch(uint32_t part,uint32_t byte) {return part<NPART&&byte<PATCH_BYTES?live_p[part].v[byte]:0;}
+static uint32_t daw_patch_valid(const patch_t *patch,uint32_t part) {
+    uint32_t engine=obv_patch_engine(patch);
+    if((engine!=OBV_ANALOG&&engine!=OBV_DRUMS)||(part>=NTRK&&engine!=OBV_ANALOG))return 0;
+    for(uint32_t p=0;p<NPARAM;p++){
+        if(engine==OBV_DRUMS){if(patch->v[p]>127u)return 0;}
+        else if(patch->v[p]>obv_param_max(patch,p)||((p==P_UNI_N||p==P_ARP_OCT)&&!patch->v[p]))return 0;
+    }
+    for(uint32_t p=NPARAM;p<NPARAM+PATCH_NAME;p++)if(patch->v[p]&&(patch->v[p]<32u||patch->v[p]>126u))return 0;
+    return 1;
+}
+EXPORT int32_t waswan_daw_staged_engine(uint32_t part) {return part<NPART&&daw_patch_valid(&daw_staged[part],part)?(int32_t)obv_patch_engine(&daw_staged[part]):-1;}
+EXPORT uint32_t waswan_daw_token(void) {
+    uint32_t hash=2166136261u;for(uint32_t p=0;p<NPART;p++)for(uint32_t i=0;i<PATCH_BYTES;i++)hash=(hash^live_p[p].v[i])*16777619u;
+    return (hash^daw_slots)*16777619u;
+}
+static uint32_t daw_slot_busy(uint32_t part) {
+    if(part>=NPART)return 1;
+    for(uint32_t i=0;i<NV;i++)if(vc[i].part==part&&(vc[i].gate||vc[i].ae.stage!=E_IDLE))return 1;
+    return obv_pending_n[part]||guard_left[part]||daw_guard_left[part]||(part<NTRK&&drums_busy(part));
+}
+EXPORT uint32_t waswan_daw_apply(uint32_t mask,uint32_t token) {
+    if(mask>>NPART||token!=waswan_daw_token()||mm_on||preset_ui||pb_confirm||save_armed||ctl_seq_run)return 0;
+    for(uint32_t p=0;p<NPART;p++)if(mask>>p&1u){
+        if(!daw_patch_valid(&daw_staged[p],p))return 0;
+        if(memcmp(&live_p[p],&daw_staged[p],PATCH_BYTES)&&daw_slot_busy(p))return 0;
+    }
+    for(uint32_t p=0;p<NPART;p++)if(mask>>p&1u){
+        live_p[p]=daw_staged[p];if(p<NTRK){trk_edited[p]=1;dirty_hdr=dirty_page=dirty_tags=1;}
+        else daw_extra_active|=1u<<p;
+    }
+    for(uint32_t p=NTRK;p<NPART;p++)if(!(mask>>p&1u)&&!daw_slot_busy(p))daw_extra_active&=~(1u<<p);
+    daw_slots=mask;return 1;
+}
+EXPORT uint32_t waswan_daw_note(uint32_t part,uint32_t note,uint32_t velocity) {
+    if(part>=NPART||!(daw_slots>>part&1u)||note>127u||velocity>127u||(velocity&&mm_on))return 0;
+    uint8_t source=seq_note_source;seq_note_source=3;
+    if(velocity)voice_trigger(part,note,velocity);else voice_release(part,note,0);
+    seq_note_source=source;return 1;
+}
+EXPORT uint32_t waswan_daw_expression(uint32_t part,int32_t bend,uint32_t modulation) {
+    if(part>=NPART||!(daw_slots>>part&1u)||bend< -8192||bend>8191||modulation>127u)return 0;
+    daw_bend[part]=bend;daw_mod[part]=modulation;return 1;
+}
+EXPORT uint32_t waswan_daw_parameter(uint32_t part,uint32_t parameter,uint32_t value) {
+    if(part>=NPART||!(daw_slots>>part&1u)||parameter>=NPARAM||obv_patch_engine(&live_p[part])!=OBV_ANALOG||value>obv_param_max(&live_p[part],parameter)||((parameter==P_UNI_N||parameter==P_ARP_OCT)&&!value))return 0;
+    live_p[part].v[parameter]=(uint8_t)value;if(part<NTRK){trk_edited[part]=1;dirty_hdr=dirty_page=1;}return 1;
+}
+EXPORT void waswan_daw_stop(uint32_t hard) {
+    /* Preserve the firmware's MONO/UNISON last-physical-key restoration. Directly
+     * clearing a DAW-tagged mono group could otherwise erase a still-held key. */
+    uint8_t previous_source=seq_note_source;seq_note_source=3;
+    for(uint32_t i=0;i<NV;i++)if(vc[i].seq_owned==3u&&vc[i].gate)voice_release(vc[i].part,vc[i].note,0);
+    seq_note_source=previous_source;
+    for(uint32_t i=0;i<NV;i++)if(vc[i].seq_owned==3u){vc[i].gate=0;if(hard){vc[i].ae.stage=vc[i].fe.stage=E_IDLE;vc[i].ae.level=vc[i].fe.level=0;vc[i].amp0=vc[i].amp1=0;vc[i].guard_l=vc[i].guard_r=0;vc[i].guard_in=0;vc[i].grp=0;ui_vlevel[i]=0;}}
+    for(uint32_t p=0;p<NPART;p++){
+        uint32_t n=0;for(uint32_t i=0;i<obv_pending_n[p];i++)if(obv_pending[p][i].sequenced!=3u)obv_pending[p][n++]=obv_pending[p][i];obv_pending_n[p]=(uint8_t)n;
+        daw_bend[p]=daw_bend_sm[p]=daw_bend8[p]=0;daw_mod[p]=0;
+    }
+    if(hard){memset(daw_guard_left,0,sizeof daw_guard_left);memset(daw_guard_tail,0,sizeof daw_guard_tail);for(uint32_t p=0;p<NTRK;p++)for(uint32_t l=0;l<8;l++)if(drum_hit[p][l].daw)memset(&drum_hit[p][l],0,sizeof drum_hit[p][l]);}
+}
+#else
+EXPORT uint32_t waswan_daw_capacity(void) {return 0;}
+#endif
 
 /* Studio uses the existing sequenced-note path with a distinct ownership tag.
  * No DSP algorithm, voice allocation limit, MIDI routing or legacy transport changes. */
 EXPORT uint32_t waswan_studio_note(uint32_t part,uint32_t note,uint32_t velocity) {
-    if(part>=NPART||note>127u||velocity>127u||(velocity&&mm_on))return 0;
+    if(part>=NTRK||note>127u||velocity>127u||(velocity&&mm_on))return 0;
     uint8_t source=seq_note_source;seq_note_source=2;
     if(velocity)voice_trigger(part,note,velocity);else voice_release(part,note,0);
     seq_note_source=source;
@@ -75,14 +159,14 @@ EXPORT uint32_t waswan_held_state_bytes(void) { return sizeof held + sizeof obv_
 EXPORT uint32_t waswan_queue_bytes(void) { return sizeof nq + sizeof mq; }
 EXPORT uint32_t waswan_internal_frames(void) { return HALF_FRAMES; }
 EXPORT uint32_t waswan_parameter_count(void) { return NPARAM; }
-EXPORT uint32_t waswan_mode(uint32_t p) { return p < NPART ? live_p[p].v[P_MODE] : 0u; }
-EXPORT uint32_t waswan_unison(uint32_t p) { return p < NPART ? live_p[p].v[P_UNI_N] : 0u; }
-EXPORT uint32_t waswan_arp(uint32_t p) { return p < NPART ? live_p[p].v[P_ARP_MODE] : 0u; }
-EXPORT uint32_t waswan_sustain(uint32_t p) { return p < NPART ? !!part_sus(p) : 0u; }
+EXPORT uint32_t waswan_mode(uint32_t p) { return p < NTRK ? live_p[p].v[P_MODE] : 0u; }
+EXPORT uint32_t waswan_unison(uint32_t p) { return p < NTRK ? live_p[p].v[P_UNI_N] : 0u; }
+EXPORT uint32_t waswan_arp(uint32_t p) { return p < NTRK ? live_p[p].v[P_ARP_MODE] : 0u; }
+EXPORT uint32_t waswan_sustain(uint32_t p) { return p < NTRK ? !!part_sus(p) : 0u; }
 EXPORT uint32_t waswan_midi_sustain(void) { return !!midi_sustain; }
 EXPORT void waswan_set_sustain(uint32_t enabled) { if (enabled <= 1u && !mm_on) { midi_sustain = enabled; sustain_apply(); } }
-EXPORT uint32_t waswan_held(uint32_t p) { return p < NPART ? nheld[p] : 0u; }
-EXPORT uint32_t waswan_part_limit(uint32_t p) { return p < NPART ? (super_part(p) ? SUPER_LIMIT : NV) : 0u; }
+EXPORT uint32_t waswan_held(uint32_t p) { return p < NTRK ? nheld[p] : 0u; }
+EXPORT uint32_t waswan_part_limit(uint32_t p) { return p < NTRK ? (super_part(p) ? SUPER_LIMIT : NV) : 0u; }
 EXPORT uint32_t waswan_voice(uint32_t i, uint32_t field)
 {
     if (i >= NV) return 0;
@@ -100,7 +184,7 @@ EXPORT uint32_t waswan_voice(uint32_t i, uint32_t field)
 }
 EXPORT uint32_t waswan_set_mode(uint32_t p, uint32_t mode)
 {
-    if (p >= NPART || mode > M_MONO || mm_on || obv_patch_engine(&live_p[p]) != OBV_ANALOG) return 0;
+    if (p >= NTRK || mode > M_MONO || mm_on || obv_patch_engine(&live_p[p]) != OBV_ANALOG) return 0;
     /* Same parameter setter as the original editor; no preset replacement/save. */
     set_param_in(&live_p[p], P_MODE, (int32_t)mode);
     dirty_hdr = dirty_page = dirty_tags = 1;
@@ -108,7 +192,7 @@ EXPORT uint32_t waswan_set_mode(uint32_t p, uint32_t mode)
 }
 EXPORT uint32_t waswan_set_unison(uint32_t p, uint32_t count)
 {
-    if (p >= NPART || count < 1u || count > PDEF[P_UNI_N].max || mm_on || obv_patch_engine(&live_p[p]) != OBV_ANALOG) return 0;
+    if (p >= NTRK || count < 1u || count > PDEF[P_UNI_N].max || mm_on || obv_patch_engine(&live_p[p]) != OBV_ANALOG) return 0;
     set_param_in(&live_p[p], P_UNI_N, (int32_t)count);
     dirty_hdr = dirty_page = dirty_tags = 1;
     return 1;
@@ -308,14 +392,14 @@ EXPORT uint32_t waswan_editor_save(uint32_t n,uint32_t scope,uint32_t token,uint
 
 /* Existing part mixer, explicitly addressed without changing editor context. */
 EXPORT int32_t waswan_studio_mix_value(uint32_t part,uint32_t field) {
-    if(part>=NPART||field>7u)return -32768;
+    if(part>=NTRK||field>7u)return -32768;
     if(field==0u)return set.mix_lvl[part];if(field==1u)return set.mix_pan[part];
     if(field==2u)return set.mix_cho[part];if(field==3u)return set.mix_dly[part];
     if(field==4u)return set.mix_rev[part];if(field==5u)return set.mix_drv[part];
     return field==6u?!!(set.mix_mute>>part&1u):!!(set.mix_solo>>part&1u);
 }
 EXPORT uint32_t waswan_studio_mix_set(uint32_t part,uint32_t field,int32_t value) {
-    if(part>=NPART||field>7u||mm_on)return 0;
+    if(part>=NTRK||field>7u||mm_on)return 0;
     if(field==1u){if(value< -64||value>64)return 0;set.mix_pan[part]=(int8_t)value;}
     else if(field>=6u){if(value<0||value>1)return 0;uint8_t *mask=field==6u?&set.mix_mute:&set.mix_solo;*mask=(uint8_t)((*mask&~(1u<<part))|((uint32_t)value<<part));}
     else {if(value<0||value>127)return 0;
@@ -324,12 +408,12 @@ EXPORT uint32_t waswan_studio_mix_set(uint32_t part,uint32_t field,int32_t value
     }
     mix_apply();set_dirty=1;set_t=fm1_ms;dirty_hdr=dirty_page=dirty_steps=1;return 1;
 }
-EXPORT uint32_t waswan_studio_patch(uint32_t part,uint32_t byte) {return part<NPART&&byte<PATCH_BYTES?live_p[part].v[byte]:0;}
+EXPORT uint32_t waswan_studio_patch(uint32_t part,uint32_t byte) {return part<NTRK&&byte<PATCH_BYTES?live_p[part].v[byte]:0;}
 EXPORT uint32_t waswan_studio_tempo(uint32_t bpm) {
     if(bpm<40u||bpm>240u||mm_on)return 0;set.tempo=(uint16_t)bpm;ctl_tempo=bpm;set_dirty=1;set_t=fm1_ms;dirty_hdr=dirty_page=1;return 1;
 }
 EXPORT uint32_t waswan_studio_parameter_set(uint32_t part,uint32_t parameter,int32_t value) {
-    if(part>=NPART||parameter>=NPARAM||mm_on||preset_ui||pb_confirm||save_armed||obv_patch_engine(&live_p[part])!=OBV_ANALOG||value<0||value>(int32_t)obv_param_max(&live_p[part],parameter)||((parameter==P_UNI_N||parameter==P_ARP_OCT)&&value<1))return 0;
+    if(part>=NTRK||parameter>=NPARAM||mm_on||preset_ui||pb_confirm||save_armed||obv_patch_engine(&live_p[part])!=OBV_ANALOG||value<0||value>(int32_t)obv_param_max(&live_p[part],parameter)||((parameter==P_UNI_N||parameter==P_ARP_OCT)&&value<1))return 0;
     if(is_a_only(parameter))part=0;
     if(live_p[part].v[parameter]==value)return 1;
     set_param_in(&live_p[part],parameter,value);if(is_a_only(parameter))fx_sync();dirty_hdr=dirty_page=1;return 1;
@@ -341,11 +425,11 @@ EXPORT uint32_t waswan_studio_expression_set(uint32_t field,int32_t value) {
     else {if(value<0||value>127)return 0;ctl_vib=value;}
     return 1;
 }
-static patch_t studio_context_patches[NPART];
+static patch_t studio_context_patches[NTRK];
 EXPORT uint32_t waswan_studio_context_buffer(void) {return (uint32_t)(uintptr_t)studio_context_patches;}
 EXPORT uint32_t waswan_studio_context_token(void) {
     uint32_t hash=2166136261u;
-    for(uint32_t part=0;part<NPART;part++){
+    for(uint32_t part=0;part<NTRK;part++){
         for(uint32_t i=0;i<PATCH_BYTES;i++)hash=(hash^live_p[part].v[i])*16777619u;
         hash=(hash^trk_prog[part])*16777619u;
         for(uint32_t field=0;field<8u;field++)hash=(hash^(uint32_t)waswan_studio_mix_value(part,field))*16777619u;
@@ -353,12 +437,15 @@ EXPORT uint32_t waswan_studio_context_token(void) {
     return ((hash^set.tempo)*16777619u^(uint32_t)smk_master)*16777619u;
 }
 EXPORT uint32_t waswan_studio_apply_patches(uint32_t token,uint32_t a,uint32_t b,uint32_t c,uint32_t d) {
-    const uint32_t programs[NPART]={a,b,c,d};
+#ifdef WASWAN_DAW_RUNTIME
+    if(daw_transport_guard)return 0;
+#endif
+    const uint32_t programs[NTRK]={a,b,c,d};
     if(token!=waswan_studio_context_token()||mm_on||preset_ui||pb_confirm||save_armed||ctl_seq_run)return 0;
     for(uint32_t i=0;i<HOST_NENC;i++)if(host_enc[i])return 0;
     for(uint32_t q=mq_r;q!=mq_w;q++)if((mq[q%(sizeof mq/sizeof mq[0])][0]&0xF0u)==0xC0u)return 0;
     /* Validate every part before touching any live data. */
-    for(uint32_t part=0;part<NPART;part++){
+    for(uint32_t part=0;part<NTRK;part++){
         patch_t *patch=&studio_context_patches[part];uint32_t engine=obv_patch_engine(patch);
         if(programs[part]>=NPROG||(engine!=OBV_ANALOG&&engine!=OBV_DRUMS))return 0;
         for(uint32_t p=0;p<NPARAM;p++){
@@ -367,7 +454,7 @@ EXPORT uint32_t waswan_studio_apply_patches(uint32_t token,uint32_t a,uint32_t b
         }
         for(uint32_t p=NPARAM;p<NPARAM+PATCH_NAME;p++)if(patch->v[p]&&(patch->v[p]<32u||patch->v[p]>126u))return 0;
     }
-    for(uint32_t part=0;part<NPART;part++){
+    for(uint32_t part=0;part<NTRK;part++){
         patch_t stored;prog_get(programs[part],&stored);
         live_p[part]=studio_context_patches[part];trk_prog[part]=programs[part];set.tprog[part]=(uint8_t)programs[part];
         trk_edited[part]=!!memcmp(&stored,&live_p[part],sizeof stored);

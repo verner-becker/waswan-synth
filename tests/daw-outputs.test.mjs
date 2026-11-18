@@ -44,5 +44,5 @@ for(let block=0;block<24;block++){
   }
 }
 assert.equal(whole.ex.waswan_voice_limit(),256);
-assert.equal(whole.ex.waswan_daw_output(4,0),0);
+assert.equal(whole.ex.waswan_daw_output(whole.ex.waswan_daw_output_count(),0),0);
 console.log('PASS dry outputs: final stereo bit-identical, part isolation, pre-mixer tap, variable render boundaries, 256 pool preserved');

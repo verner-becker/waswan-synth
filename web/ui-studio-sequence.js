@@ -16,7 +16,7 @@ export class SequenceWorkspace {
     recorder.onInput=input=>{this.preview?.input(input);if(this.capture&&!this.previewDraw){this.previewDraw=true;requestAnimationFrame(()=>{this.previewDraw=false;this.draw();});}};
     recorder.newProject=()=>this.newProject();
     recorder.stopFromUI=()=>this.capture||this.arrangement?.overdub||this.rendering?this.stopTransport():recorder.stop();
-    recorder.canApplyContext=()=>!this.playing&&!this.starting&&!this.legacyPlaying;
+    recorder.canApplyContext=()=>!this.playing&&!this.starting&&!this.legacyPlaying&&!this.bridge.isDawBusy?.();
     recorder.prepareProject=async()=>{if(!this.sequence.notes.length&&!this.sequence.clips?.length&&!this.sequence.audioClips?.length)return;if(this.bridge.getAudio().node)await this.storeProject();else if(recorder.take){recorder.take.project.sequence=structuredClone(this.sequence);this.audio.attach(recorder.take);}};
     const previous=recorder.onChange;recorder.onChange=r=>{previous(r);this.update({t:'studio-project'});};
     this.node=Panel('Studio arrangement','MIDI and audio clips · four instrument parts · current live timbres');this.node.classList.add('ww-sequence');
@@ -140,6 +140,7 @@ export class SequenceWorkspace {
     finally{this.saving=false;}
   }
   async start(allowEmpty=false,onePass=false){
+    if(this.bridge.isDawBusy?.())throw Error('Stop DAW before starting Studio');
     if(this.legacyPlaying)throw Error('Stop the Legacy sequencer before playing Studio MIDI');
     if(this.frame?.midiMode)throw Error('Return to synth mode in Legacy SMK before playing MIDI');
     const {context,node,gain}=this.bridge.getAudio();if(!context||!node)throw Error('Start audio before playing MIDI');

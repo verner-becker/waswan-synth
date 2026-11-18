@@ -30,4 +30,10 @@ c.markSaved(saved);assert(c.dirty,'finishing an older save does not clear newer 
 c.command('batch',{commands:[{type:'clip.remove',payload:{id:clip.id}},{type:'asset.remove',payload:{id:meta.id}}]});c.clearHistory();assert(!c.assets.has(meta.id),'collect only after history releases the source');
 const exposed=c.snapshot();exposed.name='Mutated outside controller';assert.notEqual(c.snapshot().name,exposed.name);
 assert.throws(()=>validateProject({...emptyProject(),tracks:Array.from({length:33},()=>makeTrack('audio'))}));
+const gesture=new ProjectController(),initial=gesture.snapshot();
+for(const volume of [.9,.8,.7])gesture.command('master.update',{volume},{mergeKey:'master:volume'});
+gesture.command('undo');assert.deepEqual(gesture.snapshot(),initial,'one slider gesture is one Undo');
+gesture.command('redo');assert.equal(gesture.snapshot().master.volume,.7);
+gesture.endCoalescing();gesture.command('master.update',{volume:.6},{mergeKey:'master:volume'});gesture.command('undo');assert.equal(gesture.snapshot().master.volume,.7,'separate gestures retain separate history');
+assert.throws(()=>gesture.command('master.update',{volume:1},{mergeKey:{}}),/gesture/);
 console.log('PASS DAW project: >4 logical tracks, revision conflicts, idempotence, atomic batches, byte-owning Undo/Redo, anchors, dirty/save races, asset collection');

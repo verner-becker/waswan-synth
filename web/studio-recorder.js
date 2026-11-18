@@ -28,6 +28,7 @@ export class StudioRecorder {
     const {context,node}=this.bridge.getAudio();if(!this.mixBus){this.mixBus=context.createGain();node.connect(this.mixBus);}return this.mixBus;
   }
   async start(){
+    if(this.bridge.isDawBusy?.())throw Error('Stop DAW before recording in Studio');
     if(this.busy)return;
     const {context,node}=this.bridge.getAudio();
     if(!context||!node||context.state!=='running')throw Error('Start or resume audio before recording');
@@ -145,7 +146,7 @@ export class StudioRecorder {
   }
   async applyContext(){
     if(this.busy||!this.take)throw Error('Load a project and finish the current operation first');
-    if(this.canApplyContext&&!this.canApplyContext())throw Error('Stop Studio and Legacy playback before applying tones');
+    if(this.canApplyContext&&!this.canApplyContext())throw Error('Stop DAW, Studio and Legacy playback before applying tones');
     const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before applying saved tones');
     const context=this.take.project.sequenceContext||this.take.project.context;
     if(!context.parts.every(p=>p.patch))throw Error('This older project has no full tone snapshot; audio and MIDI remain available');
@@ -180,13 +181,19 @@ export class StudioRecorder {
   }
   cancelMp3(){this.mp3Worker?.terminate();this.mp3Worker=null;this.encoding=false;this.mp3Message='MP3 export cancelled · source unchanged';this.changed();}
   async play(){
+    if(this.bridge.isDawBusy?.())throw Error('Stop DAW before listening to a Studio take');
     if(!this.take?.project.frames||this.busy)return;this.stopPlayback();
     const {context,gain}=this.bridge.getAudio();if(!context||!gain)throw Error('Start audio before listening to a take');
-    await context.resume();this.playURL=URL.createObjectURL(this.take.audio);this.player=new Audio(this.playURL);
-    this.playerSource=context.createMediaElementSource(this.player);this.playerSource.connect(gain);
-    this.player.onended=()=>{this.stopPlayback();this.changed();};await this.player.play();this.message='Playing recorded audio';this.changed();
+    const token=this.playbackGeneration;this.playbackPreparing=true;
+    try{
+      await context.resume();if(token!==this.playbackGeneration)return;if(this.bridge.isDawBusy?.())throw Error('Stop DAW before listening to a Studio take');
+      this.playURL=URL.createObjectURL(this.take.audio);this.player=new Audio(this.playURL);
+      this.playerSource=context.createMediaElementSource(this.player);this.playerSource.connect(gain);
+      this.player.onended=()=>{this.stopPlayback();this.changed();};await this.player.play();if(token===this.playbackGeneration){this.message='Playing recorded audio';this.changed();}
+    }catch(error){if(token===this.playbackGeneration)this.stopPlayback();throw error;}finally{if(token===this.playbackGeneration)this.playbackPreparing=false;}
   }
   stopPlayback(){
+    this.playbackGeneration=(this.playbackGeneration||0)+1;this.playbackPreparing=false;
     if(this.player){this.player.pause();this.player.removeAttribute('src');this.player.load();this.player=null;if(this.state==='ready')this.message='Take ready';}
     this.playerSource?.disconnect();this.playerSource=null;
     if(this.playURL)URL.revokeObjectURL(this.playURL);this.playURL=null;

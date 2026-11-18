@@ -35,7 +35,7 @@ function apply(p,type,data){
   fail('UNKNOWN_COMMAND','Unknown project command');
 }
 export class ProjectController {
-  #project;#revision=0;#saved;#past=[];#future=[];#commands=new Map();#listeners=new Set();#assets;
+  #project;#revision=0;#saved;#past=[];#future=[];#commands=new Map();#listeners=new Set();#assets;#merge=null;
   constructor(project=emptyProject(),assets=new Map()){
     validateProject(project);this.#assets=new Map(assets);this.#checkAssets(project);this.#project=clone(project);this.#saved=JSON.stringify(project);
   }
@@ -47,21 +47,26 @@ export class ProjectController {
   get canRedo(){return this.#future.length>0;}
   snapshot(){return clone(this.#project);}
   subscribe(listener){this.#listeners.add(listener);return ()=>this.#listeners.delete(listener);}
-  #notify(kind){for(const listener of this.#listeners){try{listener({kind,revision:this.#revision,dirty:this.dirty});}catch(error){queueMicrotask(()=>{throw error;});}}}
-  markSaved(document){validateProject(document);if(document.id!==this.#project.id)fail('WRONG_PROJECT','Save belongs to a different project');this.#saved=JSON.stringify(document);this.#notify('saved');}
-  execute({id,projectId,expectedRevision,type,payload={}}){
+  #notify(kind,type){for(const listener of this.#listeners){try{listener({kind,type,revision:this.#revision,dirty:this.dirty});}catch(error){queueMicrotask(()=>{throw error;});}}}
+  markUnsaved(){this.#saved=null;this.#notify('unsaved');}
+  markSaved(document){validateProject(document);if(document.id!==this.#project.id)fail('WRONG_PROJECT','Save belongs to a different project');this.#saved=JSON.stringify(document);this.#merge=null;this.#notify('saved');}
+  endCoalescing(){this.#merge=null;}
+  execute({id,projectId,expectedRevision,type,payload={},mergeKey}){
     if(typeof id!=='string'||!id.length||id.length>100||typeof type!=='string'||!payload||typeof payload!=='object'||Array.isArray(payload))fail('INVALID_COMMAND','Invalid command envelope');
+    if(mergeKey!==undefined&&(typeof mergeKey!=='string'||!mergeKey.length||mergeKey.length>160))fail('INVALID_COMMAND','Invalid edit gesture');
     if(projectId!==this.#project.id)fail('WRONG_PROJECT','Command belongs to a different project');
-    const fingerprint=JSON.stringify({projectId,expectedRevision,type,payload}),prior=this.#commands.get(id);
+    const fingerprint=JSON.stringify({projectId,expectedRevision,type,payload,mergeKey}),prior=this.#commands.get(id);
     if(fingerprint.length>16*1024*1024)fail('INVALID_COMMAND','Command metadata is too large');
     if(prior){if(prior.fingerprint!==fingerprint)fail('DUPLICATE_ID','Command ID was reused with different data');return clone(prior.result);}
     if(expectedRevision!==this.#revision)fail('REVISION_CONFLICT','Project changed; refresh before retrying');
     if(type==='undo'||type==='redo'){
+      this.#merge=null;
       const from=type==='undo'?this.#past:this.#future,to=type==='undo'?this.#future:this.#past;
       if(!from.length)fail('EMPTY_HISTORY','No edit to '+type);to.push(this.#project);this.#project=from.pop();
     }else{
       const next=clone(this.#project);apply(next,type,payload);validateProject(next);this.#checkAssets(next);
-      this.#past.push(this.#project);this.#future=[];this.#project=next;
+      const now=performance.now(),merge=typeof mergeKey==='string'&&mergeKey.length<=160&&this.#merge?.key===mergeKey&&this.#merge.revision===this.#revision&&now-this.#merge.time<400&&this.#past.length>0;
+      if(!merge)this.#past.push(this.#project);this.#future=[];this.#project=next;this.#merge=mergeKey?{key:mergeKey,revision:this.#revision+1,time:now}:null;
     }
     this.#revision++;
     // Bounded metadata history. Audio is immutable and retained by reference.
@@ -70,13 +75,13 @@ export class ProjectController {
     const result={revision:this.#revision,projectId:this.#project.id};this.#commands.set(id,{fingerprint,result});
     let commandBytes=0;for(const entry of this.#commands.values())commandBytes+=entry.fingerprint.length*2;
     while(this.#commands.size>256||commandBytes>32*1024*1024){const first=this.#commands.keys().next().value;commandBytes-=this.#commands.get(first).fingerprint.length*2;this.#commands.delete(first);}
-    this.collectAssets();this.#notify('edit');return clone(result);
+    this.collectAssets();this.#notify('edit',type);return clone(result);
   }
-  command(type,payload={}){return this.execute({id:uuid(),projectId:this.#project.id,expectedRevision:this.#revision,type,payload});}
+  command(type,payload={},options={}){return this.execute({id:uuid(),projectId:this.#project.id,expectedRevision:this.#revision,type,payload,mergeKey:options.mergeKey});}
   addAsset(meta,blob){
     if(this.#assets.has(meta.id))fail('DUPLICATE_ID','Audio source already exists');this.#assets.set(meta.id,blob);
     try{return this.command('asset.add',meta);}catch(error){this.#assets.delete(meta.id);throw error;}
   }
   collectAssets(){const retained=new Set([this.#project,...this.#past,...this.#future].flatMap(p=>p.assets.map(a=>a.id)));for(const id of this.#assets.keys())if(!retained.has(id))this.#assets.delete(id);}
-  clearHistory(){this.#past=[];this.#future=[];this.#commands.clear();this.collectAssets();}
+  clearHistory(){this.#past=[];this.#future=[];this.#commands.clear();this.#merge=null;this.collectAssets();}
 }

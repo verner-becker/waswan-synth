@@ -26,7 +26,11 @@ sh "$upstream/tools/build_controls_sim.sh"
 "$WASM_OPT" "$SIM_OUT/waswan-8-raw.wasm" --enable-bulk-memory --asyncify \
   -O2 --strip-debug --strip-producers -o "$SIM_OUT/waswan-8.wasm"
 for voice_count in $stages; do
-  python3 "$root/scripts/prepare-wasm-source.py" --voices "$voice_count"
+  if [ "$voice_count" = 256 ]; then
+    python3 "$root/scripts/prepare-wasm-source.py" --voices "$voice_count" --daw
+  else
+    python3 "$root/scripts/prepare-wasm-source.py" --voices "$voice_count"
+  fi
   source_tree="$SIM_OUT/source-$voice_count"
   "$ZIG" cc --target=wasm32-freestanding -mcpu=generic+bulk_memory -O2 \
     '-DAPP_VER="1.2.0"' -DOBV_EXPERIMENTAL=1 "-DWASWAN_VOICES=$voice_count" \

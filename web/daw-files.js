@@ -17,7 +17,7 @@ export class ProjectFiles {
     if(!this.locks?.request)throw Error('Web Locks is required for project writes');
     return this.locks.request(name,{mode:'exclusive',ifAvailable:true},lock=>{if(!lock)throw Error('Another project write is in progress');return task();});
   }
-  async open({accept=()=>true}={}){
+  async open({accept=()=>true,deferBinding=false}={}){
     if(this.busy)throw Error('Finish the current file operation');this.busy=true;
     let assetStore;
     try{
@@ -25,14 +25,14 @@ export class ProjectFiles {
       assetStore=this.createAssetStore?await this.createAssetStore(await this.root()):null;const loaded=await readProject(file,{assetStore});
       if(!await accept(loaded)){await assetStore?.dispose();return null;}
       if(await fileToken(await handle.getFile())!==token)throw Error('Project file changed while opening');
-      this.handle=handle;this.token=token;return loaded;
+      loaded.binding={handle,token};if(!deferBinding)this.adoptBinding(loaded.binding);return loaded;
     }catch(error){await assetStore?.dispose().catch(()=>{});throw error;}finally{this.busy=false;}
   }
   async save(controller,{saveAs=false}={}){
     if(this.busy)throw Error('Finish the current file operation');this.busy=true;
     try{
       const document=controller.snapshot(),assets=new Map(controller.assets),revision=controller.revision;
-      const handle=saveAs||!this.handle?await this.savePicker({types:[type],suggestedName:document.name+'.wsproj'}):this.handle;
+      const handle=saveAs||!this.handle?await this.savePicker({types:[type],suggestedName:document.name.replace(/[\\/:*?"<>|]/g,'-')+'.wsproj'}):this.handle;
       const expected=handle===this.handle?this.token:await fileToken(await handle.getFile());
       if(handle.requestPermission&&await handle.requestPermission({mode:'readwrite'})!=='granted')throw Error('Project write permission was denied');
       const blob=await projectBlob(document,assets),nextToken=await fileToken(blob);
@@ -46,6 +46,16 @@ export class ProjectFiles {
     }finally{this.busy=false;}
   }
   forget(){this.handle=null;this.token=null;}
+  adoptBinding(binding){this.handle=binding.handle;this.token=binding.token;}
+  async listRecovery(){
+    let base;try{base=await(await this.root()).getDirectoryHandle('waswan-daw-recovery-v3');}catch(error){if(error.name==='NotFoundError')return [];throw error;}
+    const projects=[];
+    for await(const [id,dir] of base.entries())if(dir.kind==='directory'&&safeId(id)){
+      const candidates=[];for await(const [name,h] of dir.entries())if(h.kind==='file'&&/^[\w-]+\.wsmeta$/.test(name)){try{const file=await h.getFile(),{envelope}=await archiveHeader(file);if(envelope.project.id===id)candidates.push({id,name:envelope.project.name,modified:file.lastModified});}catch{}}
+      candidates.sort((a,b)=>b.modified-a.modified);if(candidates.length)projects.push(candidates[0]);
+    }
+    return projects.sort((a,b)=>b.modified-a.modified);
+  }
   async recoveryParts(dir,name){
     if(!/^[\w-]+\.wsmeta$/.test(name))throw Error('Invalid recovery generation name');
     const file=await(await dir.getFileHandle(name)).getFile(),{envelope,header}=await archiveHeader(file);
@@ -93,12 +103,12 @@ export class ProjectFiles {
       return {projectId:document.id,generations:keep.length};
     });
   }
-  async recover(projectId,{accept=()=>true}={}){
+  async recover(projectId,{accept=()=>true,deferBinding=false}={}){
     if(this.busy)throw Error('Finish the current file operation');this.busy=true;let loaded;
     try{
       loaded=await this.exclusive('waswan-project-recovery-writer-v1',()=>this.#readRecovery(projectId));
       if(!await accept(loaded)){await loaded.dispose();return null;}
-      this.forget();return loaded;
+      if(!deferBinding)this.forget();return loaded;
     }catch(error){await loaded?.dispose().catch(()=>{});throw error;}finally{this.busy=false;}
   }
   async #readRecovery(projectId){
@@ -122,9 +132,9 @@ export class RecoveryAutosave {
   schedule(){if(this.closed)return;this.pending=true;clearTimeout(this.timer);this.timer=setTimeout(()=>void this.flush(),this.delay);}
   async flush(){
     clearTimeout(this.timer);if(this.closed||this.saving||!this.pending)return;this.pending=false;this.saving=true;this.onStatus({state:'saving'});
-    try{await this.files.saveRecovery(this.controller);if(!this.closed)this.onStatus({state:'saved'});}
+    try{this.operation=this.files.saveRecovery(this.controller);await this.operation;if(!this.closed)this.onStatus({state:'saved'});}
     catch(error){if(!this.closed)this.onStatus({state:'error',message:error.message});}
     finally{this.saving=false;if(this.pending&&!this.closed)this.schedule();}
   }
-  close(){this.closed=true;clearTimeout(this.timer);this.unsubscribe();}
+  close(){this.closed=true;clearTimeout(this.timer);this.unsubscribe();return this.operation?.catch(()=>{});}
 }

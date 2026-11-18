@@ -91,7 +91,7 @@ export function updatePolyphony(frame) {
   state.slots.forEach((v,i)=>{
     const slot=panel.querySelectorAll('.voice-slot')[i];
     slot.dataset.state=!v.active?'idle':v.gate?'held':'release';
-    const label=!v.active?`Voz ${i+1}: livre`:`Voz ${i+1}: ${noteName(v.note)}, parte ${'ABCD'[v.part]}, ${v.gate?'sustentada':'release'}`;
+    const label=!v.active?`Voz ${i+1}: livre`:`Voz ${i+1}: ${noteName(v.note)}, ${v.part<4?'parte '+'ABCD'[v.part]:'slot DAW '+(v.part+1)}, ${v.gate?'sustentada':'release'}`;
     slot.title=label;slot.setAttribute('aria-label',label);
     slot.textContent=v.active?noteName(v.note):String(i+1);
   });

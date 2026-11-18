@@ -3,20 +3,55 @@ import {OberVave} from './worklet-original.js';
 import {accumulator,block} from './dsp-stats.js';
 import {COMMANDS} from './studio-format.js';
 import {StudioClock} from './studio-clock.js';
+import {DawClock,audioTransport} from './daw-playback.js';
 import {AUTOMATION_TARGETS,readAutomation,applyAutomation} from './studio-automation.js';
 class MonitoredOberVave extends OberVave {
  constructor(options){
   super(options);this.enabled=false;this.session=null;this.stats=accumulator();this.elapsed=0;this.voiceElapsed=0;
   this.dawOutputs=!!options.processorOptions?.dawOutputs;
-  if(this.dawOutputs&&this.engine)this.engine.ex.waswan_daw_taps?.(1);
+  if(this.dawOutputs&&this.engine)this.dawParts=this.engine.ex.waswan_daw_taps?.(1)||0;
   this.voices={active:0,gate:0,release:0,capacity:0};
   this.clockName=typeof globalThis.performance?.now==='function'?'performance.now':typeof globalThis.Date?.now==='function'?'Date.now':null;
   this.clock=this.clockName==='performance.now'?()=>globalThis.performance.now():this.clockName?()=>globalThis.Date.now():null;
   const original=this.port.onmessage;
   this.port.onmessage=e=>{
    const m=e.data;
+   if(typeof m.t==='string'&&m.t.startsWith('daw-')){
+    try{
+     if(typeof m.request!=='string'||!/^[\w-]{1,80}$/.test(m.request))throw Error('Invalid DAW request ID');
+     const x=this.engine?.ex;if(!x?.waswan_daw_capacity?.())throw Error('Rebuild the 256-voice simulator to enable the DAW runtime');
+     let result;
+     if(m.t==='daw-state-request')result={capacity:x.waswan_daw_capacity(),token:x.waswan_daw_token()>>>0,patches:Array.from({length:x.waswan_daw_capacity()},(_,p)=>Array.from({length:80},(_,i)=>x.waswan_daw_patch(p,i)))};
+     else if(m.t==='daw-program'){
+      if(!Number.isInteger(m.program)||m.program<0||m.program>98||!x.waswan_daw_program(0,m.program))throw Error('Invalid instrument program');
+      result={patch:Array.from(new Uint8Array(x.memory.buffer,x.waswan_daw_stage_buffer(),80)),engine:x.waswan_daw_staged_engine(0)};
+     }else if(m.t==='daw-apply'){
+      if(this.sequence?.active||this.daw?.active||x.waswan_ui_playing())throw Error('Stop the active transport before preparing DAW instruments');
+      if(typeof m.projectId!=='string'||!/^[\w-]{1,80}$/.test(m.projectId)||!Number.isSafeInteger(m.revision)||m.revision<0||!Array.isArray(m.slots)||m.slots.length>x.waswan_daw_capacity())throw Error('Invalid instrument transaction');
+      let mask=0;const stage=new Uint8Array(x.memory.buffer,x.waswan_daw_stage_buffer(),80*x.waswan_daw_capacity());
+      for(const slot of m.slots){
+       if(!Number.isInteger(slot.part)||slot.part<0||slot.part>=x.waswan_daw_capacity()||mask>>slot.part&1||!['analog','super','drumx'].includes(slot.type)||!Array.isArray(slot.patch)||slot.patch.length!==80||!slot.patch.every(v=>Number.isInteger(v)&&v>=0&&v<=255))throw Error('Invalid instrument slot');
+       stage.set(slot.patch,slot.part*80);const engine=x.waswan_daw_staged_engine(slot.part);
+       if(engine<0||engine!==(slot.type==='drumx'?2:0))throw Error('Instrument snapshot is invalid or unavailable in this slot');mask|=1<<slot.part;
+      }
+      if(!Number.isInteger(m.token)||m.token<0||m.token>0xffffffff||!x.waswan_daw_apply(mask,m.token))throw Error('Instrument changed or notes are still sounding; release notes before applying a different sound');
+      this.dawProject={id:m.projectId,revision:m.revision};this.dawObservedToken=x.waswan_daw_token()>>>0;this.dawObserved=new Map(m.slots.map(s=>[s.part,[...s.patch]]));this.dawPoll=0;this.dawOutputs='owned';this.dawParts=x.waswan_daw_taps(1);result={mask,token:this.dawObservedToken};
+     }else if(m.t==='daw-start'){
+      if(this.sequence?.active||x.waswan_ui_playing())throw Error('Stop Studio and Legacy before starting DAW');
+      if(m.projectId!==this.dawProject?.id||m.revision!==this.dawProject?.revision)throw Error('Project changed during playback preparation');
+      if(!Number.isSafeInteger(m.startFrame)||m.startFrame<currentFrame+128||m.startFrame>currentFrame+sampleRate*2)throw Error('Playback preparation missed its start time; try Play again');
+      this.daw??=new DawClock((part,note,velocity)=>!!this.engine?.ex.waswan_daw_note(part,note,velocity),()=>this.engine?.ex.waswan_daw_stop(0),state=>{audioTransport.playing=state.playing;if(state.startFrame!==undefined)audioTransport.startFrame=state.startFrame;if(!state.playing)this.engine?.ex.waswan_daw_transport_guard?.(0);this.port.postMessage({t:'daw-state',projectId:this.dawProject?.id,...state});},x.waswan_daw_capacity());
+      this.daw.start(m.data,m.startFrame);x.waswan_daw_transport_guard(1);result={startFrame:m.startFrame};
+     }else if(m.t==='daw-stop'){this.daw?.stop();audioTransport.playing=false;x.waswan_daw_transport_guard(0);x.waswan_daw_stop(m.hard?1:0);result={stopped:true};}
+     else throw Error('Unknown DAW command');
+     this.port.postMessage({t:'daw-reply',request:m.request,ok:true,result});
+    }catch(error){this.port.postMessage({t:'daw-reply',request:m.request,ok:false,error:error.message});}
+    return;
+   }
+   if(this.daw?.active&&m.t==='btn'&&[16,17].includes(m.b)){if(m.down)this.port.postMessage({t:'daw-notice',message:'Stop DAW before using the Legacy transport'});return;}
    if(m.t==='studio-sequence-start'){
     try{
+     if(this.daw?.active)throw Error('Stop DAW before starting Studio');
      if(!this.engine?.ex.waswan_studio_note)throw Error('Rebuild the simulator to enable Studio MIDI playback');
      this.sequence??=new StudioClock((part,note,velocity)=>{
       const applied=!!this.engine?.ex.waswan_studio_note(part,note,velocity);
@@ -31,7 +66,7 @@ class MonitoredOberVave extends OberVave {
    }
    if(m.t==='studio-sequence-stop'){this.sequence?.stop();return;}
    if(m.t==='studio-context-apply'){
-    try{if(this.sequence?.active)throw Error('Stop Studio MIDI before applying tones');this.engine.restoreStudioContext(m.context,m.token);this.port.postMessage({t:'studio-context-applied',request:m.request,ok:true});}
+    try{if(this.sequence?.active||this.daw?.active)throw Error('Stop DAW and Studio MIDI before applying tones');this.engine.restoreStudioContext(m.context,m.token);this.port.postMessage({t:'studio-context-applied',request:m.request,ok:true});}
     catch(error){this.port.postMessage({t:'studio-context-applied',request:m.request,ok:false,error:error.message});}return;
    }
    if(m.t==='studio-context'){
@@ -51,10 +86,10 @@ class MonitoredOberVave extends OberVave {
     else if(m.action==='start'){if(this.session)this.publish(true,'replaced');this.session=m.session;this.enabled=true;this.reset();}
     else if(m.action==='enable'){if(this.session)this.publish(true,'disabled');this.enabled=!!m.enabled;this.reset();}
    }else {
-    if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');if(this.session)this.publish(true,'reboot');}
+    if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');this.daw?.stop('instrument-reboot');this.dawProject=null;this.dawObserved=null;audioTransport.playing=false;if(this.session)this.publish(true,'reboot');}
     if(this.studioEvents&&COMMANDS.has(m.t))this.studioEvents.postMessage({t:'command',frame:currentFrame,command:m});
     original(e);
-    if(m.t==='reboot'&&this.dawOutputs)this.engine?.ex.waswan_daw_taps?.(1);
+    if(m.t==='reboot'&&this.dawOutputs)this.dawParts=this.engine?.ex.waswan_daw_taps?.(1)||0;
    }
   };
  }
@@ -73,11 +108,24 @@ class MonitoredOberVave extends OberVave {
  process(inputs,outputs){
   const frames=outputs[0]?.[0]?.length||0,start=this.enabled&&this.clock?this.clock():null;
   if(this.sequence?.active)this.sequence.tick(currentFrame);
+  if(this.daw?.active){if(!this.engine)this.daw.stop('engine-error');else if(this.engine.ex.sim_midi_mode?.())this.daw.stop('midi-mode');else if(this.engine.ex.waswan_ui_playing())this.daw.stop('legacy-transport');else this.daw.tick(currentFrame);}
   const result=super.process(inputs,outputs);
+  if(!this.engine&&this.daw?.active)this.daw.stop('engine-error');
+  if(this.engine&&this.dawProject){
+   this.dawPoll+=frames;
+   if(this.dawPoll>=1764){
+    this.dawPoll=0;const x=this.engine.ex,token=x.waswan_daw_token()>>>0;
+    if(token!==this.dawObservedToken){
+     const changes=[];
+     for(const [part,previous] of this.dawObserved){const patch=Array.from({length:80},(_,i)=>x.waswan_daw_patch(part,i));if(patch.some((v,i)=>v!==previous[i])){changes.push({part,patch});this.dawObserved.set(part,patch);}}
+     this.dawObservedToken=token;if(changes.length)this.port.postMessage({t:'daw-instruments-changed',projectId:this.dawProject.id,changes});
+    }
+   }
+  }
   if(this.dawOutputs&&this.engine){
    const x=this.engine.ex;
-   for(let p=0;p<4;p++)for(let c=0;c<2;c++){
-    const output=outputs[p+1]?.[c],pointer=x.waswan_daw_output?.(p,c);
+   for(let p=0;p<this.dawParts;p++)for(let c=0;c<2;c++){
+    const output=outputs[p+1]?.[c],pointer=this.dawOutputs==='owned'?x.waswan_daw_owned_output?.(p,c):x.waswan_daw_output?.(p,c);
     if(output&&pointer)output.set(new Float32Array(x.memory.buffer,pointer,output.length));
    }
   }
