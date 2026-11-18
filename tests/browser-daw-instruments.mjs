@@ -2,7 +2,7 @@
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const root='.local/validation/daw-mvp-wave-3';fs.mkdirSync(root,{recursive:true});
+const root=process.env.DAW_VALIDATION_ROOT||'.local/validation/daw-mvp-wave-3';fs.mkdirSync(root,{recursive:true});
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
 try{
  const context=await browser.newContext({viewport:{width:1560,height:1100}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
@@ -17,10 +17,12 @@ try{
  await page.getByRole('button',{name:'Start audio',exact:true}).click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').getByRole('button',{name:'OK',exact:true}).click();
  await field('DAW project name').fill('Roundtrip composition');await field('DAW project name').press('Tab');
  for(let i=0;i<3;i++){
+  await daw.getByRole('button',{name:'Mixer',exact:true}).click();
   await button('Add MIDI track').click();await page.waitForFunction(n=>document.querySelectorAll('.ww-daw-track').length===n,i+1);
   const row=daw.locator('.ww-daw-track').nth(i);await row.getByLabel('DAW track name').fill(['Piano','Bass','Lead'][i]);await row.getByLabel('DAW track name').press('Tab');
   await row.getByLabel('DAW instrument preset').selectOption(String([68,6,2][i]));await page.waitForFunction(()=>!document.querySelector('.ww-daw [aria-label="DAW note pitch"]').disabled);
   await row.getByRole('button',{name:'Select track',exact:true}).click();
+  await daw.getByRole('button',{name:'Clip editor',exact:true}).click();
   await field('DAW note pitch').fill(String([60,48,67][i]));await field('DAW note start beat').fill('1');await field('DAW note duration beats').fill('16');await button('Add DAW note').click();
   await page.waitForFunction(()=>document.querySelector('[aria-label="DAW notes"]').options.length===1);
  }

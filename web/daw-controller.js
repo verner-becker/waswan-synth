@@ -6,7 +6,7 @@ const find=(items,id,label)=>items.find(item=>item.id===id)||fail('NOT_FOUND',`$
 const fields=(target,changes,allowed)=>{for(const key of Object.keys(changes))if(!allowed.includes(key))fail('INVALID_COMMAND',`Cannot change ${key}`);Object.assign(target,clone(changes));};
 function apply(p,type,data){
   if(type==='batch'){if(!Array.isArray(data.commands)||data.commands.length>512)fail('INVALID_COMMAND','Invalid transaction');for(const c of data.commands){if(c.type==='batch')fail('INVALID_COMMAND','Nested transactions are not supported');apply(p,c.type,c.payload);}return;}
-  if(type==='project.update')return fields(p,data,['name','bpm','meter','length']);
+  if(type==='project.update')return fields(p,data,['name','bpm','meter','length','transport']);
   if(type==='track.create'){const t={...makeTrack(data.type,data.name),...clone(data)};p.tracks.push(t);return;}
   if(type==='track.update')return fields(find(p.tracks,data.id,'Track'),data.changes,['name','icon','color','volume','pan','mute','solo','monitor','instrument','fx']);
   if(type==='track.remove'){find(p.tracks,data.id,'Track');p.tracks=p.tracks.filter(t=>t.id!==data.id);p.clips=p.clips.filter(c=>c.trackId!==data.id);p.automation=p.automation.filter(l=>l.trackId!==data.id);return;}

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {RATE,PPQ,clipSeconds,clipDuration,validateProject} from './daw-project.js';
+import {prepareSchedule,timelineFrame} from './daw-transport.js';
 // Shared only inside one AudioWorkletGlobalScope. The main-thread import has its
 // own copy and cannot change the audio gate through UI state.
 export const audioTransport={playing:false,startFrame:0};
@@ -40,30 +41,37 @@ export function compileProject(project,slots=assignSlots(project)){
 // Runs in AudioWorklet. No UI timer schedules notes. Frame notifications are UI only.
 export class DawClock {
   constructor(note,stop,notify=()=>{},capacity=8){Object.assign(this,{note,stopNotes:stop,notify,capacity});this.active=false;this.held=new Map();}
-  start(data,frame){
-    if(!data||!Array.isArray(data.events)||data.events.length>131072||!Number.isSafeInteger(data.length)||data.length<1||data.length>RATE*1200||typeof data.loop!=='boolean'||!Number.isSafeInteger(frame)||frame<0)throw Error('Invalid DAW schedule');
-    let previous=-1;const density=new Map();
-    for(const e of data.events){
-      if(!Number.isSafeInteger(e.frame)||e.frame<0||e.frame<previous||e.frame>data.length||!Number.isInteger(e.part)||e.part<0||e.part>=this.capacity||!Number.isInteger(e.note)||e.note<0||e.note>127||!Number.isInteger(e.velocity)||e.velocity<0||e.velocity>127)throw Error('Invalid DAW note event');
-      previous=e.frame;const block=Math.floor(e.frame/128),count=(density.get(block)||0)+1;if(count>512)throw Error('DAW event density exceeds the audio budget');density.set(block,count);
-    }
-    this.stop('replaced');this.events=data.events;this.length=data.length;this.loop=data.loop;this.startFrame=frame;this.index=0;this.cycle=0;this.lastNotify=frame;this.active=true;this.notify({playing:true,frame:0,startFrame:frame,reason:'started'});
+  start(data,frame){this.startPrepared(prepareSchedule(data,this.capacity),frame);}
+  startPrepared(data,frame){
+    if(!Number.isSafeInteger(frame)||frame<0)throw Error('Invalid DAW start frame');
+    this.stop('replaced');Object.assign(this,data);this.startFrame=frame;this.index=data.initialIndex;this.pendingChase=data.initial;this.cycle=0;this.lastNotify=frame;this.active=true;this.position=data.fromFrame;this.notify({playing:true,frame:this.position,startFrame:frame,reason:'started'});
   }
   stop(reason='user'){if(!this.active)return;this.stopNotes();this.held.clear();this.active=false;this.notify({playing:false,frame:this.position||0,reason});}
+  dispatch(until,inclusive,count){
+    while(this.index<this.events.length&&(inclusive?this.events[this.index].frame<=until:this.events[this.index].frame<until)){
+      if(++count>512){this.stop('clock-event-budget');return count;}
+      const e=this.events[this.index++],key=e.part*128+e.note;
+      if(e.velocity){this.held.set(key,(this.held.get(key)||0)+1);if(!this.note(e.part,e.note,e.velocity)){this.stop('instrument-unavailable');return count;}}
+      else if(this.held.has(key)){const n=this.held.get(key)-1;if(n>0)this.held.set(key,n);else{this.held.delete(key);this.note(e.part,e.note,0);}}
+    }
+    return count;
+  }
   tick(frame){
     if(!this.active||frame<this.startFrame)return;
-    const elapsed=frame-this.startFrame,cycle=Math.floor(elapsed/this.length);
+    const elapsed=frame-this.startFrame,absolute=this.fromFrame+elapsed,cycle=this.loop&&absolute>=this.loopEnd?1+Math.floor((absolute-this.loopEnd)/(this.loopEnd-this.loopStart)):0;
+    if(!this.loop&&absolute>=this.length){this.position=this.length;this.dispatch(this.length,true,0);if(this.active)this.stop('ended');return;}
+    let dispatched=0;
     if(cycle>this.cycle){
-      if(!this.loop){this.position=this.length;this.stop('ended');return;}
+      if(cycle>this.cycle+1){this.stop('clock-gap');return;}
+      // Preserve events in the remaining fraction of the previous quantum.
+      // MIDI is quantum/buffer bounded; do not silently drop the right edge.
+      dispatched=this.dispatch(this.loopEnd,false,dispatched);if(!this.active)return;
       this.stopNotes();this.held.clear();
-      this.cycle=cycle;this.index=0;
+      this.cycle=cycle;this.index=this.loopIndex;this.pendingChase=this.repeated;
     }
-    const relative=elapsed-this.cycle*this.length;this.position=relative;
-    while(this.index<this.events.length&&this.events[this.index].frame<=relative){
-      const e=this.events[this.index++],key=e.part*128+e.note;
-      if(e.velocity){this.held.set(key,(this.held.get(key)||0)+1);if(!this.note(e.part,e.note,e.velocity)){this.stop('instrument-unavailable');return;}}
-      else{const n=(this.held.get(key)||0)-1;if(n>0)this.held.set(key,n);else{this.held.delete(key);this.note(e.part,e.note,0);}}
-    }
+    const relative=timelineFrame({playing:true,startFrame:this.startFrame,fromFrame:this.fromFrame,length:this.length,loop:this.loop,loopStart:this.loopStart,loopEnd:this.loopEnd},frame);this.position=relative;
+    if(this.pendingChase){for(const n of this.pendingChase){if(++dispatched>512){this.stop('clock-event-budget');return;}this.held.set(n.part*128+n.note,n.count);if(!this.note(n.part,n.note,n.velocity)){this.stop('instrument-unavailable');return;}}this.pendingChase=null;}
+    this.dispatch(relative,true,dispatched);if(!this.active)return;
     if(frame-this.lastNotify>=1764){this.lastNotify=frame;this.notify({playing:true,frame:relative,cycle:this.cycle,startFrame:this.startFrame});}
   }
 }

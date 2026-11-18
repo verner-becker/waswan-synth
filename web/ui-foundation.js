@@ -185,6 +185,7 @@ class Foundation {
     if(id==='seq')queueMicrotask(()=>this.sequence?.draw());
     if(!this.views.has(id))return;
     this.workspace=id;this.legacy=false;this.legacyHost.hidden=true;this.main.hidden=false;
+    this.shell.dataset.activeWorkspace=id;
     if(this.dock)this.dock.hidden=id==='daw'&&!this.dawKeyboardVisible;
     for(const [key,node] of this.views)node.hidden=key!==id;
     for(const button of this.navigation.children)button.setAttribute('aria-pressed',String(button.dataset.workspace===id));

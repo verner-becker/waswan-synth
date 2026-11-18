@@ -4,6 +4,7 @@ import {accumulator,block} from './dsp-stats.js';
 import {COMMANDS} from './studio-format.js';
 import {StudioClock} from './studio-clock.js';
 import {DawClock,audioTransport} from './daw-playback.js';
+import {ScheduleBuilder} from './daw-transport.js';
 import {AUTOMATION_TARGETS,readAutomation,applyAutomation} from './studio-automation.js';
 class MonitoredOberVave extends OberVave {
  constructor(options){
@@ -36,16 +37,23 @@ class MonitoredOberVave extends OberVave {
       }
       if(!Number.isInteger(m.token)||m.token<0||m.token>0xffffffff||!x.waswan_daw_apply(mask,m.token))throw Error('Instrument changed or notes are still sounding; release notes before applying a different sound');
       this.dawProject={id:m.projectId,revision:m.revision};this.dawObservedToken=x.waswan_daw_token()>>>0;this.dawObserved=new Map(m.slots.map(s=>[s.part,[...s.patch]]));this.dawPoll=0;this.dawOutputs='owned';this.dawParts=x.waswan_daw_taps(1);result={mask,token:this.dawObservedToken};
+     }else if(m.t==='daw-plan-begin'){
+      if(this.sequence?.active||this.daw?.active||x.waswan_ui_playing()||m.projectId!==this.dawProject?.id||m.revision!==this.dawProject?.revision||typeof m.planId!=='string'||!/^[\w-]{1,80}$/.test(m.planId)||!Number.isSafeInteger(m.count)||m.count<0||m.count>131072)throw Error('Invalid playback plan');
+      this.dawPending={planId:m.planId,count:m.count,builder:new ScheduleBuilder(m.data,x.waswan_daw_capacity())};result={prepared:0};
+     }else if(m.t==='daw-plan-append'){
+      const pending=this.dawPending;if(!pending||pending.planId!==m.planId||m.offset!==pending.builder.events.length||m.events?.length+pending.builder.events.length>pending.count)throw Error('Stale playback plan');
+      pending.builder.append(m.events);result={prepared:pending.builder.events.length};
      }else if(m.t==='daw-start'){
       if(this.sequence?.active||x.waswan_ui_playing())throw Error('Stop Studio and Legacy before starting DAW');
       if(m.projectId!==this.dawProject?.id||m.revision!==this.dawProject?.revision)throw Error('Project changed during playback preparation');
       if(!Number.isSafeInteger(m.startFrame)||m.startFrame<currentFrame+128||m.startFrame>currentFrame+sampleRate*2)throw Error('Playback preparation missed its start time; try Play again');
-      this.daw??=new DawClock((part,note,velocity)=>!!this.engine?.ex.waswan_daw_note(part,note,velocity),()=>this.engine?.ex.waswan_daw_stop(0),state=>{audioTransport.playing=state.playing;if(state.startFrame!==undefined)audioTransport.startFrame=state.startFrame;if(!state.playing)this.engine?.ex.waswan_daw_transport_guard?.(0);this.port.postMessage({t:'daw-state',projectId:this.dawProject?.id,...state});},x.waswan_daw_capacity());
-      this.daw.start(m.data,m.startFrame);x.waswan_daw_transport_guard(1);result={startFrame:m.startFrame};
-     }else if(m.t==='daw-stop'){this.daw?.stop();audioTransport.playing=false;x.waswan_daw_transport_guard(0);x.waswan_daw_stop(m.hard?1:0);result={stopped:true};}
+      const pending=this.dawPending;if(!pending||pending.planId!==m.planId||pending.builder.events.length!==pending.count)throw Error('Playback plan is incomplete');const prepared=pending.builder.finish();this.dawPending=null;
+      this.daw??=new DawClock((part,note,velocity)=>!!this.engine?.ex.waswan_daw_note(part,note,velocity),()=>this.engine?.ex.waswan_daw_stop(0),state=>{audioTransport.playing=state.playing;if(state.startFrame!==undefined)audioTransport.startFrame=state.startFrame;if(!state.playing)this.engine?.ex.waswan_daw_transport_guard?.(0);this.port.postMessage({t:'daw-state',projectId:this.dawProject?.id,planId:this.dawPlanId,...state});},x.waswan_daw_capacity());
+      this.dawPlanId=m.planId;this.daw.startPrepared(prepared,m.startFrame);Object.assign(audioTransport,{...prepared,events:undefined,initial:undefined,repeated:undefined,planId:m.planId,startFrame:m.startFrame,playing:true});x.waswan_daw_transport_guard(1);result={startFrame:m.startFrame};
+     }else if(m.t==='daw-stop'){this.daw?.stop();this.dawPending=null;audioTransport.playing=false;audioTransport.planId=null;x.waswan_daw_transport_guard(0);x.waswan_daw_stop(m.hard?1:0);result={stopped:true};}
      else throw Error('Unknown DAW command');
      this.port.postMessage({t:'daw-reply',request:m.request,ok:true,result});
-    }catch(error){this.port.postMessage({t:'daw-reply',request:m.request,ok:false,error:error.message});}
+    }catch(error){if(['daw-plan-begin','daw-plan-append','daw-start'].includes(m.t))this.dawPending=null;this.port.postMessage({t:'daw-reply',request:m.request,ok:false,error:error.message});}
     return;
    }
    if(this.daw?.active&&m.t==='btn'&&[16,17].includes(m.b)){if(m.down)this.port.postMessage({t:'daw-notice',message:'Stop DAW before using the Legacy transport'});return;}
@@ -86,7 +94,7 @@ class MonitoredOberVave extends OberVave {
     else if(m.action==='start'){if(this.session)this.publish(true,'replaced');this.session=m.session;this.enabled=true;this.reset();}
     else if(m.action==='enable'){if(this.session)this.publish(true,'disabled');this.enabled=!!m.enabled;this.reset();}
    }else {
-    if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');this.daw?.stop('instrument-reboot');this.dawProject=null;this.dawObserved=null;audioTransport.playing=false;if(this.session)this.publish(true,'reboot');}
+    if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');this.daw?.stop('instrument-reboot');this.dawProject=null;this.dawObserved=null;this.dawPending=null;audioTransport.playing=false;audioTransport.planId=null;if(this.session)this.publish(true,'reboot');}
     if(this.studioEvents&&COMMANDS.has(m.t))this.studioEvents.postMessage({t:'command',frame:currentFrame,command:m});
     original(e);
     if(m.t==='reboot'&&this.dawOutputs)this.dawParts=this.engine?.ex.waswan_daw_taps?.(1)||0;

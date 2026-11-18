@@ -9,7 +9,7 @@ const id=s=>typeof s==='string'&&/^[\w-]{1,80}$/.test(s);
 const text=(s,n)=>typeof s==='string'&&s.length>0&&s.length<=n;
 const assert=(ok,message)=>{if(!ok)throw Error(message);};
 const unique=(items,label)=>{const ids=new Set();for(const item of items){assert(id(item?.id)&&!ids.has(item.id),`Invalid or duplicate ${label} ID`);ids.add(item.id);}return ids;};
-export function emptyProject(){return {format:'waswan-daw-project',version:3,id:uuid(),name:'Untitled',sampleRate:RATE,ppq:PPQ,bpm:120,meter:[4,4],length:PPQ*16,tracks:[],clips:[],assets:[],markers:[],automation:[],master:{volume:1,fx:[]}};}
+export function emptyProject(){return {format:'waswan-daw-project',version:3,id:uuid(),name:'Untitled',sampleRate:RATE,ppq:PPQ,bpm:120,meter:[4,4],length:PPQ*16,transport:{loop:false,start:0,end:PPQ*16},tracks:[],clips:[],assets:[],markers:[],automation:[],master:{volume:1,fx:[]}};}
 export function validateFx(effects){
   assert(Array.isArray(effects)&&effects.length<=16,'FX chain limit: 16');unique(effects,'effect');
   for(const e of effects){
@@ -20,6 +20,7 @@ export function validateFx(effects){
 export function validateProject(p){
   assert(p?.format==='waswan-daw-project'&&p.version===3&&id(p.id)&&text(p.name,120)&&p.sampleRate===RATE&&p.ppq===PPQ,'Invalid DAW project');
   assert(number(p.bpm,40,240)&&Array.isArray(p.meter)&&p.meter.length===2&&int(p.meter[0],1,12)&&[4,8].includes(p.meter[1])&&int(p.length,1,PPQ*8192),'Invalid project time');
+  if(p.transport!==undefined)assert(typeof p.transport?.loop==='boolean'&&int(p.transport.start,0,PPQ*8192-1)&&int(p.transport.end,p.transport.start+1,PPQ*8192),'Invalid transport interval');
   assert(Array.isArray(p.tracks)&&p.tracks.length<=LIMITS.tracks&&Array.isArray(p.assets)&&p.assets.length<=LIMITS.assets&&Array.isArray(p.clips)&&p.clips.length<=LIMITS.clips,'Project capacity exceeded');
   const tracks=unique(p.tracks,'track'),assets=unique(p.assets,'asset');unique(p.clips,'clip');
   let total=0,notes=0;

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {RATE} from './daw-project.js';
 import {compileProject,assignSlots,trackAudible} from './daw-playback.js';
+import {prepareSchedule} from './daw-transport.js';
 class InstrumentRequests {
-  constructor(node){this.node=node;this.pending=new Map();node.port.addEventListener('message',({data:m})=>{if(m.t!=='daw-reply')return;const p=this.pending.get(m.request);if(!p)return;clearTimeout(p.timer);this.pending.delete(m.request);m.ok?p.resolve(m.result):p.reject(Error(m.error));});}
-  request(type,data={}){
+  constructor(node,reply='daw-reply'){this.node=node;this.pending=new Map();node.port.addEventListener('message',({data:m})=>{if(reply&&m.t!==reply)return;const p=this.pending.get(m.request);if(!p)return;clearTimeout(p.timer);this.pending.delete(m.request);m.ok?p.resolve(m.result):p.reject(Error(m.error));});node.port.start();}
+  request(type,data={},transfer=[]){
     const request=crypto.randomUUID();
-    return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(request);reject(Error('The audio host did not respond'));},10000);this.pending.set(request,{resolve,reject,timer});this.node.port.postMessage({t:type,request,...data});});
+    return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(request);reject(Error('The audio host did not respond'));},10000);this.pending.set(request,{resolve,reject,timer});this.node.port.postMessage({t:type,request,...data},transfer);});
   }
 }
 export class DawPlayer {
@@ -13,7 +14,7 @@ export class DawPlayer {
   requests(){const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before using an instrument');if(this.rpc?.node!==node)this.rpc=new InstrumentRequests(node);return this.rpc;}
   async tone(program){return this.requests().request('daw-program',{program});}
   async currentTone(part=0){const state=await this.requests().request('daw-state-request');const patch=state.patches[part];return {patch,type:patch[74]===79&&patch[78]===2?'drumx':patch[0]===4?'super':'analog'};}
-  invalidateBinding(){this.projectId=null;this.slots.clear();this.boundPatches.clear();this.generation++;this.stopSources();this.playing=false;}
+  invalidateBinding(){this.projectId=null;this.planId=null;this.slots.clear();this.boundPatches.clear();this.generation++;this.stopSources();this.playing=false;}
   synchronize(controller,changes){
     const project=controller.snapshot();if(this.projectId!==project.id)return 0;const commands=[];
     for(const change of changes){const id=[...this.slots].find(([,part])=>part===change.part)?.[0],track=project.tracks.find(t=>t.id===id),bound=this.boundPatches.get(id);if(!track?.instrument||!bound)continue;
@@ -27,63 +28,57 @@ export class DawPlayer {
     const {context,node,gain}=this.bridge.getAudio();if(!context||!node||!gain)throw Error('Start audio before playing the DAW');
     if(this.context===context&&this.node===node&&this.bus)return;
     await context.audioWorklet.addModule(new URL('./daw-bus.js',import.meta.url));
+    await context.audioWorklet.addModule(new URL('./daw-media-worklet.js',import.meta.url));
     this.context=context;this.node=node;this.bus=new AudioWorkletNode(context,'waswan-daw-bus',{numberOfInputs:1,outputChannelCount:[2]});this.bus.connect(gain);
     // Ensure the host clock runs before the project bus, including audio-only projects.
     this.clockLink=context.createGain();this.clockLink.gain.value=0;node.connect(this.clockLink,0);this.clockLink.connect(this.bus);
+    this.media=new AudioWorkletNode(context,'waswan-daw-media',{numberOfInputs:1,numberOfOutputs:32,outputChannelCount:Array(32).fill(2)});this.mediaRpc=new InstrumentRequests(this.media,null);this.clockLink.connect(this.media);
   }
-  configureTracks(project,slots){
-    for(const track of this.tracks.values()){if(track.part!==undefined)this.node.disconnect(track.input,track.part+1,0);track.input.disconnect();track.pan.disconnect();track.mute.disconnect();}
+  async disconnectTracks(){
+    for(const track of this.tracks.values()){await track.rpc.request('dispose');if(track.part!==undefined)this.node.disconnect(track.input,track.part+1,0);this.media.disconnect(track.input,track.output,0);track.input.disconnect();track.mix.disconnect();track.meter.disconnect();track.mix.port.close();}
     this.tracks.clear();
-    for(const t of project.tracks){const input=this.context.createGain(),pan=this.context.createStereoPanner(),mute=this.context.createGain(),part=slots.get(t.id);input.connect(pan).connect(mute).connect(this.bus);if(part!==undefined)this.node.connect(input,part+1);this.tracks.set(t.id,{input,pan,mute,part});}
+  }
+  async configureTracks(project,slots,planId){
+    await this.disconnectTracks();
+    for(const [output,t] of project.tracks.entries()){
+      const input=this.context.createGain(),mix=new AudioWorkletNode(this.context,'waswan-daw-track',{numberOfInputs:1,outputChannelCount:[2]}),meter=this.context.createAnalyser(),part=slots.get(t.id);meter.fftSize=256;input.connect(mix).connect(meter).connect(this.bus);if(part!==undefined)this.node.connect(input,part+1);this.media.connect(input,output);
+      const rpc=new InstrumentRequests(mix,null);this.tracks.set(t.id,{input,mix,meter,part,output,rpc});await rpc.request('prepare',{planId,bpm:project.bpm,volume:project.automation.find(l=>l.enabled&&l.trackId===t.id&&l.target==='volume'),pan:project.automation.find(l=>l.enabled&&l.trackId===t.id&&l.target==='pan')});
+    }
     this.updateMix(project);
   }
   updateMix(project,restore=false){
     if(!this.context||!this.bus)return;const now=this.context.currentTime;
     this.lastProject=project;
-    for(const t of project.tracks){const nodes=this.tracks.get(t.id);if(!nodes)continue;const automated=target=>this.playing&&!restore&&project.automation.some(l=>l.enabled&&l.trackId===t.id&&l.target===target&&l.points.length);
-      if(!automated('volume')){nodes.input.gain.cancelScheduledValues(now);nodes.input.gain.setTargetAtTime(t.volume,now,.01);}
-      if(!automated('pan')){nodes.pan.pan.cancelScheduledValues(now);nodes.pan.pan.setTargetAtTime(t.pan,now,.01);}
-      nodes.mute.gain.setTargetAtTime(trackAudible(project,t)?1:0,now,.01);
+    for(const t of project.tracks){const nodes=this.tracks.get(t.id);if(!nodes)continue;
+      for(const [name,value] of [['volume',t.volume],['pan',t.pan],['mute',trackAudible(project,t)?1:0]]){const parameter=nodes.mix.parameters.get(name);parameter.cancelScheduledValues(now);parameter.setTargetAtTime(value,now,.01);}
     }
     this.bus.parameters.get('gain').setTargetAtTime(project.master.volume,now,.01);
   }
-  scheduleAutomation(project,startFrame){
-    const start=startFrame/RATE;
-    for(const lane of project.automation){if(!lane.enabled||!lane.points.length)continue;const nodes=this.tracks.get(lane.trackId),parameter=lane.target==='volume'?nodes.input.gain:nodes.pan.pan;
-      parameter.cancelScheduledValues(start);parameter.setValueAtTime(lane.points[0].value,start);
-      for(const point of lane.points){const at=start+point.tick*60/(project.bpm*960);if(lane.curve==='linear')parameter.linearRampToValueAtTime(point.value,at);else parameter.setValueAtTime(point.value,at);}
-    }
-  }
   async buffers(project,assets,token){
     const needed=new Set(project.clips.filter(c=>c.type==='audio').map(c=>c.assetId));
+    await this.mediaRpc.request('retain',{ids:[...needed]});for(const id of this.decoded.keys())if(!needed.has(id))this.decoded.delete(id);
     for(const id of needed){
       const source=assets.get(id),cached=this.decoded.get(id);if(cached?.source===source)continue;
-      const buffer=await this.context.decodeAudioData(await source.arrayBuffer()),meta=project.assets.find(a=>a.id===id);
+      const meta=project.assets.find(a=>a.id===id),{left,right}=await this.decodeSource(source,meta.frames);
       if(this.generation!==token)throw Error('Playback preparation cancelled');
-      if(buffer.sampleRate!==RATE||buffer.length!==meta.frames||buffer.numberOfChannels!==2)throw Error('Audio source decoded with an unexpected layout');
-      this.decoded.set(id,{source,buffer});
+      await this.mediaRpc.request('asset',{id,left,right},[left.buffer,right.buffer]);this.decoded.set(id,{source});
     }
     for(const id of this.decoded.keys())if(!needed.has(id))this.decoded.delete(id);
   }
-  scheduleAudio(data,startFrame){
-    const start=startFrame/RATE;
-    for(const {clip,track,start:at,seconds} of data.audio){
-      const source=this.context.createBufferSource(),gain=this.context.createGain(),chain=[source,gain],nodes=this.tracks.get(track.id),when=start+at,end=when+seconds;
-      source.buffer=this.decoded.get(clip.assetId).buffer;gain.gain.value=clip.gain;source.connect(gain);let last=gain;
-      if(clip.pan){
-        const split=this.context.createChannelSplitter(2),left=this.context.createGain(),right=this.context.createGain(),merge=this.context.createChannelMerger(2);left.gain.value=clip.pan>0?1-clip.pan:1;right.gain.value=clip.pan<0?1+clip.pan:1;
-        last.connect(split);split.connect(left,0);split.connect(right,1);left.connect(merge,0,0);right.connect(merge,0,1);chain.push(split,left,right,merge);last=merge;
-      }
-      if(clip.fadeIn){const fade=this.context.createGain();fade.gain.setValueAtTime(0,when);fade.gain.linearRampToValueAtTime(1,when+clip.fadeIn/RATE);last.connect(fade);chain.push(fade);last=fade;}
-      if(clip.fadeOut){const fade=this.context.createGain();fade.gain.setValueAtTime(1,when);fade.gain.setValueAtTime(1,end-clip.fadeOut/RATE);fade.gain.linearRampToValueAtTime(0,end);last.connect(fade);chain.push(fade);last=fade;}
-      last.connect(nodes.input);this.sources.push({source,chain});source.onended=()=>{for(const n of chain)n.disconnect();this.sources=this.sources.filter(item=>item.source!==source);};source.start(when,clip.offset/RATE,seconds);
-    }
+  decodeSource(source,frames){
+    return new Promise((resolve,reject)=>{
+      const worker=new Worker(new URL('./daw-media-worker.js',import.meta.url),{type:'module'}),job={worker};
+      const finish=()=>{clearTimeout(timer);worker.terminate();if(this.decodeJob===job)this.decodeJob=null;};
+      const timer=setTimeout(()=>{finish();reject(Error('Audio source preparation timed out'));},30000);job.cancel=()=>{finish();reject(Error('Playback preparation cancelled'));};this.decodeJob=job;
+      worker.onmessage=({data:m})=>{finish();m.ok?resolve({left:m.left,right:m.right}):reject(Error(m.error));};worker.onerror=()=>{finish();reject(Error('Audio source preparation failed'));};worker.postMessage({source,frames});
+    });
   }
-  async start(controller){
+  async start(controller,options={}){
     if(this.starting||this.playing)throw Error('DAW is already preparing or playing');
     if(this.bridge.isStudioBusy?.())throw Error('Stop Studio before starting DAW');
-    const project=controller.snapshot(),revision=controller.revision,slots=assignSlots(project),data=compileProject(project,slots),token=++this.generation;this.starting=true;this.projectId=project.id;
-    this.onState({playing:false,preparing:true,frame:0});
+    const project=controller.snapshot(),revision=controller.revision,slots=assignSlots(project),data=compileProject(project,slots),token=++this.generation,planId=crypto.randomUUID();
+    const looping=!!options.loop,schedule={length:looping?Math.max(data.length,options.loopEnd??data.length):data.length,fromFrame:options.fromFrame??0,loop:looping,loopStart:looping?options.loopStart??0:0,loopEnd:looping?options.loopEnd??data.length:data.length};prepareSchedule({...schedule,events:data.events});this.starting=true;this.projectId=project.id;
+    this.planId=planId;this.position=schedule.fromFrame;this.onState({playing:false,preparing:true,frame:schedule.fromFrame});
     try{
       if(project.master.fx.length||project.tracks.some(t=>t.fx.length))throw Error('Saved effect chains require the upcoming DAW effects phase; project data has been preserved');
       await this.graph();await this.context.resume();await this.buffers(project,controller.assets,token);
@@ -93,19 +88,23 @@ export class DawPlayer {
       await rpc.request('daw-apply',{projectId:project.id,revision,token:state.token,slots:[...slots].map(([id,part])=>({part,...project.tracks.find(t=>t.id===id).instrument}))});
       this.slots=slots;this.boundPatches=new Map([...slots].map(([id])=>[id,[...project.tracks.find(t=>t.id===id).instrument.patch]]));
       if(this.generation!==token)throw Error('Playback preparation cancelled');
-      this.configureTracks(project,slots);
-      const startFrame=Math.ceil((this.context.currentTime*RATE+8192)/128)*128;
-      const pending=rpc.request('daw-start',{projectId:project.id,revision,startFrame,data:{events:data.events,length:data.length,loop:false}});
-      this.scheduleAudio(data,startFrame);this.scheduleAutomation(project,startFrame);await pending;
+      await this.configureTracks(project,slots,planId);
+      await this.mediaRpc.request('prepare',{planId,clips:data.audio.map(({clip,track,start,seconds})=>({assetId:clip.assetId,output:project.tracks.findIndex(t=>t.id===track.id),start:Math.round(start*RATE),end:Math.round(start*RATE)+clip.frames,offset:clip.offset,gain:clip.gain,pan:clip.pan||0,fadeIn:clip.fadeIn,fadeOut:clip.fadeOut}))});
+      await rpc.request('daw-plan-begin',{projectId:project.id,revision,planId,count:data.events.length,data:schedule});
+      for(let offset=0;offset<data.events.length;offset+=1024){if(this.generation!==token)throw Error('Playback preparation cancelled');await rpc.request('daw-plan-append',{planId,offset,events:data.events.slice(offset,offset+1024)});}
       if(this.generation!==token)throw Error('Playback preparation cancelled');
-      this.playing=true;this.startFrame=startFrame;this.length=data.length;return {startFrame,length:data.length};
+      const startFrame=Math.ceil((this.context.currentTime*RATE+8192)/128)*128;
+      this.planId=planId;
+      await rpc.request('daw-start',{projectId:project.id,revision,startFrame,planId});
+      if(this.generation!==token)throw Error('Playback preparation cancelled');
+      this.playing=true;this.startFrame=startFrame;this.length=data.length;this.schedule=schedule;return {startFrame,length:data.length};
     }catch(error){await this.stop();throw error;}finally{this.starting=false;}
   }
-  stopSources(){for(const {source,chain} of this.sources){try{source.stop();}catch{}for(const node of chain)node.disconnect();}this.sources=[];}
-  async stop(hard=false){this.generation++;this.stopSources();this.playing=false;if(this.lastProject)this.updateMix(this.lastProject,true);const node=this.bridge.getAudio().node;if(node&&(this.rpc||this.bus))await this.requests().request('daw-stop',{hard});this.onState({playing:false,preparing:false,frame:0,reason:'user'});}
+  stopSources(){this.decodeJob?.cancel();this.sources=[];}
+  async stop(hard=false){this.generation++;this.stopSources();this.playing=false;if(this.lastProject)this.updateMix(this.lastProject,true);const node=this.bridge.getAudio().node;if(node&&(this.rpc||this.bus))await this.requests().request('daw-stop',{hard});this.onState({playing:false,preparing:false,frame:this.position||0,reason:'user'});}
   receive(m){
-    if(m.t!=='daw-state'||m.projectId!==this.projectId)return;
-    this.playing=m.playing;if(!m.playing){this.stopSources();if(this.lastProject)this.updateMix(this.lastProject,true);}this.onState(m);
+    if(m.t!=='daw-state'||m.projectId!==this.projectId||m.planId!==this.planId)return;
+    this.playing=m.playing;this.position=m.frame;if(!m.playing){this.stopSources();if(this.lastProject)this.updateMix(this.lastProject,true);}this.onState(m);
   }
-  reset(){this.stopSources();this.decoded.clear();this.projectId=null;this.lastProject=null;this.slots.clear();this.boundPatches.clear();for(const track of this.tracks.values()){if(track.part!==undefined)this.node.disconnect(track.input,track.part+1,0);track.input.disconnect();track.pan.disconnect();track.mute.disconnect();}this.tracks.clear();}
+  async reset(){this.stopSources();this.decoded.clear();this.projectId=null;this.lastProject=null;this.position=0;this.slots.clear();this.boundPatches.clear();await this.disconnectTracks();if(this.mediaRpc)await this.mediaRpc.request('clear');}
 }

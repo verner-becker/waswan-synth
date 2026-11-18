@@ -2,13 +2,15 @@
 import {el,action,Panel} from './ui-primitives.js';
 import {ProjectController} from './daw-controller.js';
 import {ProjectFiles,RecoveryAutosave} from './daw-files.js';
-import {emptyProject,makeTrack,uuid,PPQ,RATE} from './daw-project.js';
+import {emptyProject,makeTrack,uuid,PPQ,RATE,validateProject} from './daw-project.js';
 import {DawPlayer} from './daw-player.js';
+import {DawArrangement} from './ui-daw-arrangement.js';
+import {beatFrame,frameBeat,arrangementBeats,musicalPosition,secondsPosition} from './daw-arrangement.js';
 const patchName=patch=>patch?String.fromCharCode(...patch.slice(63,73)).replace(/[^\x20-\x7e]/g,'').trim()||'Saved sound':'Choose an instrument';
 const db=value=>value>0?(20*Math.log10(value)).toFixed(1)+' dB':'−∞ dB';
 export class DawWorkspace {
   constructor(bridge,{toggleKeyboard=()=>false}={}){
-    this.bridge=bridge;this.files=new ProjectFiles();this.rows=new Map();this.programs=[];this.busy=false;this.running=false;this.selected=null;
+    this.bridge=bridge;this.files=new ProjectFiles();this.rows=new Map();this.programs=[];this.busy=false;this.running=false;this.selected=null;this.cursor=0;
     this.player=new DawPlayer(bridge,state=>this.transportState(state));
     this.node=Panel('DAW','Project playback · independent instruments · local files');this.node.classList.add('ww-daw');
     this.status=el('p','ww-daw-status','Start audio, add an instrument track and enter notes.');this.status.setAttribute('role','status');
@@ -21,11 +23,11 @@ export class DawWorkspace {
     this.undo=button('Undo DAW edit',()=>this.controller.command('undo'));this.redo=button('Redo DAW edit',()=>this.controller.command('redo'));
     this.recoverButton=button('Recover DAW copy',()=>this.showRecovery());
     this.toolbar.append(this.newButton,this.openButton,this.saveButton,this.saveAsButton,this.undo,this.redo,this.recoverButton);
-    const transport=el('div','ww-daw-transport');this.play=button('Play DAW',()=>this.player.start(this.controller));this.play.classList.add('ww-primary');
+    const transport=el('div','ww-daw-transport');this.play=button('Play DAW',()=>this.playProject());this.play.classList.add('ww-primary');
     this.stop=action('Stop DAW',()=>{void this.player.stop().catch(error=>this.error(error));});this.position=el('output','ww-daw-position','1.1');
     this.name=this.field('DAW project name','text','Untitled',transport);this.name.onchange=()=>this.edit('project.update',{name:this.name.value});
     this.tempo=this.field('DAW tempo','number',120,transport);Object.assign(this.tempo,{min:40,max:240,step:.1});this.tempo.onchange=()=>this.edit('project.update',{bpm:Number(this.tempo.value)});
-    this.length=this.field('DAW length in beats','number',16,transport);Object.assign(this.length,{min:1,max:8192,step:1});this.length.onchange=()=>this.edit('project.update',{length:Math.round(Number(this.length.value)*PPQ)});
+    this.length=this.field('DAW length in beats','number',16,transport);Object.assign(this.length,{min:1,max:8192,step:1});this.length.onchange=()=>{const length=Math.round(Number(this.length.value)*PPQ),t=this.snapshot.transport;this.edit('project.update',{length,...(t?.end===this.snapshot.length?{transport:{...t,start:t.start<length?t.start:0,end:length}}:{})});};
     this.dirty=el('span','ww-chip','New project');this.recoveryStatus=el('span','ww-muted','Recovery updates after edits');
     transport.prepend(this.play,this.stop,this.position);transport.append(this.dirty,this.recoveryStatus);
     const trackTools=el('div','ww-studio-actions');this.addMidi=button('Add MIDI track',async()=>{
@@ -52,6 +54,7 @@ export class DawWorkspace {
     this.recoveryConfirm=button('Recover selected DAW copy',async()=>{const loaded=await this.files.recover(this.recoveryChoices.value,{accept:()=>this.confirmDiscard(),deferBinding:true});if(loaded){try{await this.adopt(loaded);this.files.forget();this.controller.markUnsaved();this.refresh();this.recoveryDialog.close();}catch(error){await loaded.dispose();throw error;}}});
     this.recoveryDialog.append(el('h2','','Recover a project from this browser'),this.recoveryChoices,this.recoveryConfirm,action('Cancel DAW recovery',()=>this.recoveryDialog.close()));document.body.append(this.recoveryDialog);
     this.attach(new ProjectController());
+    this.layout=new DawArrangement(this,{transport,trackTools,master});this.layout.render();
     this.node.addEventListener('pointerup',()=>this.controller.endCoalescing());
     this.node.addEventListener('keyup',event=>{if(event.target.type==='range')this.controller.endCoalescing();});
     addEventListener('beforeunload',event=>{if(this.controller.dirty){event.preventDefault();event.returnValue='';}});
@@ -59,18 +62,26 @@ export class DawWorkspace {
   }
   field(name,type,value,parent){const label=el('label','',name+' '),input=el('input');input.type=type;input.value=value;input.setAttribute('aria-label',name);label.append(input);parent.append(label);return input;}
   error(error){this.status.textContent=error.name==='AbortError'?'File operation cancelled':error.message;}
-  async run(task){if(this.busy)return;this.busy=true;this.refreshControls();try{await task();}catch(error){this.error(error);}finally{this.busy=false;this.refreshControls();}}
+  async run(task){if(this.busy)return;this.busy=true;this.refreshControls();try{await task();}catch(error){this.error(error);this.layout?.render();}finally{this.busy=false;this.refreshControls();}}
   edit(type,payload){try{const keys=Object.keys(payload.changes||payload),mergeKey=keys.length===1&&['volume','pan'].includes(keys[0])?type+':'+(payload.id||'master')+':'+keys[0]:undefined;this.controller.command(type,payload,{mergeKey});}catch(error){this.error(error);this.refresh();}}
   confirmDiscard(){return !this.controller.dirty||confirm('Discard unsaved DAW changes? Save a project file first to keep them.');}
   attach(controller){
-    this.unsubscribe?.();this.controller=controller;this.snapshot=controller.snapshot();this.selected=this.snapshot.tracks[0]?.id||null;this.selectedClip=null;this.selectedNote=null;
+    this.unsubscribe?.();this.controller=controller;this.snapshot=controller.snapshot();this.cursor=0;this.selected=this.snapshot.tracks[0]?.id||null;this.selectedClip=null;this.selectedNote=null;
     this.unsubscribe=controller.subscribe(event=>{this.refresh(event);this.player.updateMix(this.snapshot);});
     this.auto=new RecoveryAutosave(controller,this.files,{onStatus:s=>{this.recoveryStatus.textContent=s.state==='saved'?'Recovery copy updated':s.state==='saving'?'Updating recovery copy':'Recovery failed: '+s.message;}});this.refresh();
   }
   async adopt(loaded){
-    const next=new ProjectController(loaded.project,loaded.assets);await this.player.stop(true);await this.auto.close();this.player.reset();const old=this.loaded;this.loaded=loaded;this.attach(next);this.status.textContent=loaded.warnings?.join(' ')||'Project ready';if(old)try{await old.dispose();}catch(error){this.status.textContent+=' · Previous import cache cleanup failed: '+error.message;}
+    const next=new ProjectController(loaded.project,loaded.assets);await this.player.stop(true);await this.player.reset();await this.auto.close();const old=this.loaded;this.loaded=loaded;this.attach(next);this.status.textContent=loaded.warnings?.join(' ')||'Project ready';if(old)try{await old.dispose();}catch(error){this.status.textContent+=' · Previous import cache cleanup failed: '+error.message;}
   }
   selectedTrack(){return this.snapshot.tracks.find(t=>t.id===this.selected);}
+  playProject(){
+    const p=this.snapshot,transport=p.transport||{loop:false,start:0,end:p.length},end=beatFrame(arrangementBeats(p),p),loopStart=beatFrame(transport.start/PPQ,p),loopEnd=beatFrame(transport.end/PPQ,p);let fromFrame=this.cursor||0;
+    if(transport.loop&&(fromFrame<loopStart||fromFrame>=loopEnd))fromFrame=loopStart;else if(!transport.loop&&fromFrame>=end)fromFrame=0;
+    return this.player.start(this.controller,{fromFrame,loop:transport.loop,loopStart,loopEnd});
+  }
+  seek(frame){return this.run(async()=>{if(!Number.isSafeInteger(frame)||frame<0)throw Error('Invalid seek position');const resume=this.player.playing;await this.player.capture(this.controller);if(resume)await this.player.stop();this.cursor=Math.min(frame,Math.max(0,beatFrame(arrangementBeats(this.snapshot),this.snapshot)-1));this.paintPosition();if(resume)await this.playProject();});}
+  changeTransport(changes){return this.run(async()=>{const p=this.controller.snapshot(),transport={...(p.transport||{loop:false,start:0,end:p.length}),...changes};validateProject({...p,transport});if(transport.loop&&(beatFrame((transport.end-transport.start)/PPQ,p)<128||beatFrame(transport.end/PPQ,p)>RATE*1200))throw Error('Choose a loop of at least 128 frames within the 20-minute playback range');const resume=this.player.playing;await this.player.capture(this.controller);if(resume)await this.player.stop();this.controller.command('project.update',{transport});if(resume)await this.playProject();});}
+  paintPosition(){this.position.textContent=this.layout?.prefs.ruler==='time'?secondsPosition((this.cursor||0)/RATE):musicalPosition(frameBeat(this.cursor||0,this.snapshot),this.snapshot);this.layout?.position(this.cursor||0);}
   clip(){return this.snapshot.clips.find(c=>c.id===this.selectedClip);}
   noteValues(){return {pitch:Number(this.pitch.value),velocity:Number(this.velocity.value),start:Math.round((Number(this.start.value)-1)*PPQ),duration:Math.round(Number(this.duration.value)*PPQ)};}
   addNoteFromFields(){
@@ -97,7 +108,7 @@ export class DawWorkspace {
       if(document.activeElement!==row.name)row.name.value=t.name;if(document.activeElement!==row.volume)row.volume.value=t.volume;if(document.activeElement!==row.pan)row.pan.value=t.pan;row.volume.title=db(t.volume);row.pan.title=t.pan.toFixed(2);row.mute.setAttribute('aria-pressed',String(t.mute));row.solo.setAttribute('aria-pressed',String(t.solo));
       const label=patchName(t.instrument?.patch);if(row.library!==this.programs||row.sound!==label){row.instrument.replaceChildren(new Option(label,''),...this.programs.map(program=>new Option(program.number+' · '+program.name,String(program.number-1))));row.library=this.programs;row.sound=label;row.instrument.value='';}row.instrument.hidden=t.type!=='midi';
     });
-    if(!event||!['track.update','project.update','master.update'].includes(event.type)&&event.kind!=='saved')this.refreshEditor();this.refreshControls();
+    if(!event||!['track.update','project.update','master.update'].includes(event.type)&&event.kind!=='saved')this.refreshEditor();this.refreshControls();this.layout?.render(event);
   }
   refreshEditor(){
     const track=this.selectedTrack(),clips=this.snapshot.clips.filter(c=>c.trackId===track?.id&&c.type==='midi');if(!clips.some(c=>c.id===this.selectedClip))this.selectedClip=clips[0]?.id||null;
@@ -109,20 +120,21 @@ export class DawWorkspace {
   refreshControls(){
     if(!this.controller)return;const locked=this.busy||this.player.playing,track=this.selectedTrack();
     for(const b of [this.newButton,this.openButton,this.saveButton,this.saveAsButton,this.recoverButton])b.disabled=this.busy;this.undo.disabled=this.busy||!this.controller.canUndo||this.player.playing;this.redo.disabled=this.busy||!this.controller.canRedo||this.player.playing;
-    this.play.disabled=this.busy||this.player.playing||!this.running;this.stop.disabled=!this.player.playing&&!this.player.starting;this.tempo.disabled=locked;this.length.disabled=locked;this.addMidi.disabled=locked;this.master.disabled=this.busy;
+    this.play.disabled=this.busy||this.player.playing||!this.running;this.stop.disabled=!this.player.playing&&!this.player.starting;this.tempo.disabled=locked;this.length.disabled=locked;this.addMidi.disabled=locked||this.snapshot.tracks.length>=32;this.master.disabled=this.busy;
     for(const [id,row] of this.rows){const auto=target=>this.player.playing&&this.snapshot.automation.some(l=>l.enabled&&l.trackId===id&&l.target===target&&l.points.length);row.name.disabled=locked;row.instrument.disabled=locked||!this.running;row.remove.disabled=locked;row.volume.disabled=this.busy||auto('volume');row.pan.disabled=this.busy||auto('pan');row.mute.disabled=this.busy;row.solo.disabled=this.busy;}
     for(const field of [this.clipSelect,this.newClip,this.clipStart,this.notes,this.pitch,this.velocity,this.start,this.duration,this.addNote,this.applyNote,this.deleteNote])field.disabled=locked||track?.type!=='midi';
     this.applyNote.disabled=locked||!this.selectedNote;this.deleteNote.disabled=locked||!this.selectedNote;
     this.clipStart.disabled=locked||!this.selectedClip;
+    this.layout?.controls();
   }
   transportState(state){
-    this.player.playing=state.playing;const beats=(state.frame||0)/RATE*(this.snapshot?.bpm||120)/60,bar=(this.snapshot?.meter?.[0]||4)*4/(this.snapshot?.meter?.[1]||4);this.position.textContent=(Math.floor(beats/bar)+1)+'.'+(Math.floor(beats%bar)+1);
-    if(state.preparing)this.status.textContent='Preparing playback';else if(state.playing)this.status.textContent='Playing project';else if(state.reason)this.status.textContent=state.reason==='ended'?'Playback finished':'Playback stopped · '+state.reason;this.refreshControls();
+    const changed=this.player.playing!==state.playing||this.transportPlaying!==state.playing;this.player.playing=state.playing;this.transportPlaying=state.playing;if(!state.preparing&&Number.isFinite(state.frame))this.cursor=state.frame;this.paintPosition();
+    if(state.preparing)this.status.textContent='Preparing playback';else if(state.playing&&(changed||state.reason==='started'))this.status.textContent='Playing project';else if(!state.playing&&state.reason)this.status.textContent=state.reason==='ended'?'Playback finished':'Playback stopped · '+state.reason;if(changed||state.preparing||state.reason)this.refreshControls();
   }
   async showRecovery(){const copies=await this.files.listRecovery();this.recoveryChoices.replaceChildren(...copies.map(c=>new Option(c.name+' · '+new Date(c.modified).toLocaleString(),c.id)));this.recoveryConfirm.disabled=!copies.length;if(!copies.length)this.recoveryChoices.replaceChildren(new Option('No recovery copies in this browser',''));this.recoveryDialog.showModal();}
   receive(message){
     if(message.t==='ready'){this.player.invalidateBinding();this.running=!!message.audio;this.refreshControls();}
-    if(message.t==='frame'){this.frame=message;if(message.programLibrary){this.programs=message.programLibrary;this.refresh({kind:'saved'});}}
+    if(message.t==='frame'){this.frame=message;if(message.programLibrary){this.programs=message.programLibrary;this.refresh({kind:'saved'});}if(!this.node.hidden)this.layout?.meters();}
     if(message.t==='daw-notice')this.status.textContent=message.message;
     if(message.t==='daw-instruments-changed'&&message.projectId===this.controller.snapshot().id){if(this.player.synchronize(this.controller,message.changes))this.status.textContent='Live instrument edits updated the project';}
     if(message.t==='error'){this.running=false;this.player.playing=false;this.refreshControls();}
