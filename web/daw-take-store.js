@@ -26,6 +26,6 @@ export async function readTake(id,{baseProject=false}={}){
 export async function discardEmptyTake(id){
   if(!safe(id))return;return navigator.locks.request('waswan-daw-take-'+id,{ifAvailable:true},async lock=>{if(!lock)return;const base=await root();let dir;try{dir=await base.getDirectoryHandle(id);}catch{return;}
     let meta;try{meta=await checkpoint(dir,id);}catch{try{if((await(await dir.getFileHandle('audio.wav')).getFile()).size>44)return;}catch{}try{if((await(await dir.getFileHandle('events.jsonl')).getFile()).size)return;}catch{}await base.removeEntry(id,{recursive:true});return;}
-    if(meta.frames||meta.startFrame!==undefined&&(meta.endFrame??meta.lastFrame)>meta.startFrame)return;await base.removeEntry(id,{recursive:true});
+    if(meta.frames||meta.eventBytes||meta.startFrame!==undefined&&(meta.endFrame??meta.lastFrame)>meta.startFrame)return;await base.removeEntry(id,{recursive:true});
   });
 }

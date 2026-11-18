@@ -41,8 +41,8 @@ Uma hipótese que falha só justifica outra tentativa com evidência ou abordage
 | Fase 5 | Concluída como gravação/Monitor: [fechamento](wave-5.md), `feat/daw-wave-5-recording`, fechamento `b6fbc2f` |
 | Fase 6 | Concluída como editores/importação: [fechamento](wave-6.md), `feat/daw-wave-6-editors-import`, fechamento `6ea5dff` |
 | Fase 7 | Concluída com efeitos, automação, presets e exportação WAV/MP3/MIDI/stems. [Fechamento](wave-7.md), `feat/daw-wave-7-mix-export`, fechamento `63c2cda` |
-| Fase 8 | Concluída com janelas, foco e perfis MIDI. [Fechamento](wave-8.md), `feat/daw-wave-8-windows-midi`, pai `63c2cda` |
-| Fase 9 | Próxima: estabilidade prolongada, limpeza e manual |
+| Fase 8 | Concluída com janelas, foco e perfis MIDI. [Fechamento](wave-8.md), `feat/daw-wave-8-windows-midi`, fechamento `40d5009` |
+| Fase 9 | Validação de software concluída com jornadas, recuperação, cargas de 5 e 20 minutos e manual. [Fechamento](wave-9.md), `test/daw-wave-9-stabilization` |
 
 Decisões de trabalho iniciais: host em documento com posse exclusiva por Web Locks; fechar o host interrompe áudio, sem failover automático ou promessa de continuidade. Carga inicial de prova: cinco minutos, três trilhas instrumentais e cinco de áudio; não representa limite suportado certificado. Stems propostos pós-FX/fader/pan da trilha e pré-Master, para validar na fase de exportação. Caso uma dessas escolhas não sustente os requisitos, trazer evidência ao usuário.
 
@@ -52,4 +52,4 @@ Ao retomar: ler este controle, o relatório, AGENTS.md e o pacote; conferir Git 
 
 Fases0–6 fechadas e branches publicadas em sequência. Fase7 preservada como entrega parcial na branch acima; o MVP completo não está concluído. Main continua em `8575f766df9043d53c51265e1fdc68c97cb61189`, sem integração. Upstream continua em `3f751bc2be066414f204cf44e1aa05d9c7467d7f`. Não houve alteração de polifonia nem segunda instância de instrumento.
 
-A retomada posterior fechou a fase 7. A branch da fase 8 parte desse fechamento. As evidências ficam em `.local/validation/daw-mvp-wave-N/`. O manual da DAW faz parte da fase 9.
+A retomada fechou as fases 7–9 em branches encadeadas. As evidências ficam em `.local/validation/daw-mvp-wave-N/`. A matriz física e a decisão de integração seguem para revisão. Consulte o [manual em português](../../MANUAL-WASWAN-SYNTH.pdf).

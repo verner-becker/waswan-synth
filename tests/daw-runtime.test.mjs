@@ -50,6 +50,12 @@ dx.sim_drum_hit(0,0,100);dx.waswan_daw_note(0,38,100);drum.render(512);assert(dr
 assert(dry(drum,0,512).every(v=>v===0));assert(final(drum,512).some(a=>a.some(v=>v!==0)),'Stop cannot erase a current live drum hit in a different lane');
 const full=fixture();stage(full,[0,1,2,3,4,5,6,7]);for(let p=0;p<8;p++)for(let note=36;note<68;note++)assert(full.ex.waswan_daw_note(p,note,90));full.render(1024);assert.equal(own(full).length,256,'eight slots share the same global pool');
 for(let p=0;p<8;p++)full.ex.waswan_daw_note(p,90,90);full.render(1024);assert(own(full).length<=256);for(let p=0;p<8;p++)assert([...dry(full,p,1024)].every(Number.isFinite));full.ex.waswan_daw_stop(1);assert.equal(own(full).length,0);
+const stagedKit=fixture(),kx=stagedKit.ex,kitInput=patches(stagedKit);
+assert.equal(kx.waswan_daw_drum_kits(),5);
+assert.equal(kx.waswan_daw_drum_kit(99),0);
+assert.equal(kx.waswan_daw_drum_kit(0),1);
+assert.equal(kx.waswan_daw_staged_engine(0),2);
+assert.deepEqual(patches(stagedKit),kitInput,'Browsing drum kits does not edit a live part');
 const bounce=fixture(),bx=bounce.ex,preBounce=patches(bounce),priorToken=bx.waswan_daw_token();
 bounce.input({t:'midi',st:176,d1:64,d2:127});
 assert.equal(bx.waswan_daw_export_open(),0,'Queued sustain cannot cross into export');

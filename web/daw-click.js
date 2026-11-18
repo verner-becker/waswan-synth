@@ -2,8 +2,9 @@
 import {audioTransport} from './daw-playback.js';
 import {timelineFrame} from './daw-transport.js';
 class DawClick extends AudioWorkletProcessor {
-  constructor(){super();this.phase=0;this.left=0;}
+  constructor(){super();this.phase=0;this.left=0;this.alive=true;this.port.onmessage=({data:m})=>{if(m.t==='dispose')this.alive=false;};}
   process(inputs,outputs){
+    if(!this.alive)return false;
     const clock=audioTransport,c=clock.click,out=outputs[0];if(!clock.playing||!c){this.left=0;return true;}if(this.planId!==clock.planId){this.planId=clock.planId;this.left=0;}
     const unit=sampleRate*60/c.bpm*4/c.meter[1],first=clock.startFrame-(clock.countInFrames||0),duration=Math.round(sampleRate*.02);
     for(let i=0;i<out[0].length;i++){

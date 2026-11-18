@@ -9,6 +9,7 @@ import {DawMonitor} from './daw-monitor.js';
 import {saveMidi} from './daw-midi-export.js';
 import {DawMix} from './ui-daw-mix.js';
 import {DawExportPanel} from './ui-daw-export.js';
+import {DawAssetRetention} from './daw-asset-retention.js';
 import {DawMidiProfilesPanel,midiPanelContext} from './ui-daw-midi-profiles.js';
 import {dawShortcut,shortcutHelp} from './ui-daw-shortcuts.js';
 import {DawEditors} from './ui-daw-editors.js';
@@ -21,14 +22,14 @@ const patchName=patch=>patch?String.fromCharCode(...patch.slice(63,73)).replace(
 const db=value=>value>0?(20*Math.log10(value)).toFixed(1)+' dB':'−∞ dB';
 export class DawWorkspace {
   constructor(bridge,{toggleKeyboard=()=>false}={}){
-    this.bridge=bridge;this.files=new ProjectFiles();this.rows=new Map();this.programs=[];this.busy=false;this.running=false;this.selected=null;this.cursor=0;
+    this.bridge=bridge;this.files=new ProjectFiles();this.assetRetention=new DawAssetRetention(this);this.rows=new Map();this.programs=[];this.drumKits=[];this.busy=false;this.running=false;this.selected=null;this.cursor=0;
     this.player=new DawPlayer(bridge,state=>this.transportState(state));
     this.node=Panel('DAW','Project playback · independent instruments · local files');this.node.classList.add('ww-daw');
     this.status=el('p','ww-daw-status','Start audio, add an instrument track and enter notes.');this.status.setAttribute('role','status');
     this.toolbar=el('div','ww-studio-actions');
     const button=(name,task)=>action(name,()=>this.run(task));
     this.newButton=button('New DAW project',async()=>{if(!this.confirmDiscard())return;await this.adopt({project:emptyProject(),assets:new Map(),dispose:async()=>{},warnings:[]});this.files.forget();this.refresh();});
-    this.openButton=button('Open DAW project',async()=>{const loaded=await this.files.open({accept:()=>this.confirmDiscard(),deferBinding:true});if(loaded){try{await this.adopt(loaded);if(loaded.warnings.length)this.files.forget();else this.files.adoptBinding(loaded.binding);this.refresh();}catch(error){await loaded.dispose();throw error;}}});
+    this.openButton=button('Open DAW project',async()=>{const loaded=await this.files.open({accept:()=>this.confirmDiscard(),deferBinding:true});if(loaded){await this.adopt(loaded);if(loaded.warnings.length)this.files.forget();else this.files.adoptBinding(loaded.binding);this.refresh();}});
     this.saveButton=button('Save DAW project',()=>this.saveProject());
     this.saveAsButton=button('Save DAW project as',()=>this.saveProject({saveAs:true}));
     this.undo=button('Undo DAW edit',()=>this.controller.command('undo'));this.redo=button('Redo DAW edit',()=>this.controller.command('redo'));
@@ -62,7 +63,7 @@ export class DawWorkspace {
     const master=el('div','ww-daw-master');this.master=this.field('DAW master volume','range',1,master);Object.assign(this.master,{min:0,max:2,step:.01});this.master.oninput=()=>this.edit('master.update',{volume:Number(this.master.value)});this.master.onchange=()=>this.controller.endCoalescing();this.masterValue=el('output','','0.0 dB');master.append(this.masterValue);
     this.node.append(this.status,this.toolbar,transport,trackTools,this.empty,this.trackScroll,editor,master,el('p','ww-muted','External MIDI and microphone recording are available. Direct clip gestures and full FX chains follow in later phases. The Synth keyboard still plays the Synth; selecting this workspace does not change MIDI mappings.'));
     this.recoveryDialog=el('dialog','ww-map-dialog');this.recoveryChoices=el('select');this.recoveryChoices.setAttribute('aria-label','DAW recovery project');
-    this.recoveryConfirm=button('Recover selected DAW copy',async()=>{const loaded=await this.files.recover(this.recoveryChoices.value,{accept:()=>this.confirmDiscard(),deferBinding:true});if(loaded){try{await this.adopt(loaded);this.files.forget();this.controller.markUnsaved();this.refresh();this.recoveryDialog.close();}catch(error){await loaded.dispose();throw error;}}});
+    this.recoveryConfirm=button('Recover selected DAW copy',async()=>{const loaded=await this.files.recover(this.recoveryChoices.value,{accept:()=>this.confirmDiscard(),deferBinding:true});if(loaded){await this.adopt(loaded);this.files.forget();this.controller.markUnsaved();this.refresh();this.recoveryDialog.close();}});
     this.recoveryDialog.append(el('h2','','Recover a project from this browser'),this.recoveryChoices,this.recoveryConfirm,action('Cancel DAW recovery',()=>this.recoveryDialog.close()));document.body.append(this.recoveryDialog);
     this.attach(new ProjectController());
     this.layout=new DawArrangement(this,{transport,trackTools,master});this.layout.render();
@@ -112,16 +113,39 @@ export class DawWorkspace {
   }
   async refreshAudioDevices(){const devices=await navigator.mediaDevices.enumerateDevices();this.audioDevice.replaceChildren(new Option('Default audio input','default'),...devices.filter(d=>d.kind==='audioinput'&&d.deviceId!=='default').map((d,i)=>new Option(d.label||'Audio input '+(i+1),d.deviceId)));this.audioDevice.value=this.recorder.settings.deviceId;if(!this.audioDevice.value)this.audioDevice.value='default';}
   error(error){this.status.textContent=error.name==='AbortError'?'File operation cancelled':error.message;}
-  async run(task){if(this.busy)return;this.busy=true;this.refreshControls();try{await task();}catch(error){this.error(error);this.layout?.render();}finally{this.busy=false;this.refreshControls();}}
+  async run(task){if(this.busy)return;this.busy=true;this.refreshControls();try{await task();}catch(error){this.error(error);this.layout?.render();}finally{this.busy=false;this.refreshControls();this.assetRetention.schedule();}}
   edit(type,payload){if(this.recorder?.busy||this.importer?.busy||this.audition?.busy||this.audioExport?.exporter.busy){this.error(Error('Finish recording before editing the project'));return;}try{const keys=Object.keys(payload.changes||payload),mergeKey=keys.length===1&&['volume','pan'].includes(keys[0])?type+':'+(payload.id||'master')+':'+keys[0]:undefined;this.controller.command(type,payload,{mergeKey});}catch(error){this.error(error);this.refresh();}}
   confirmDiscard(){return !this.controller.dirty||confirm('Discard unsaved DAW changes? Save a project file first to keep them.');}
   attach(controller){
-    this.unsubscribe?.();this.controller=controller;this.snapshot=controller.snapshot();this.cursor=0;this.selected=this.snapshot.tracks[0]?.id||null;this.selectedClip=null;this.selectedNote=null;this.clearClipSelection=false;if(this.clipTools)this.clipTools.selected.clear();
-    this.unsubscribe=controller.subscribe(event=>{this.refresh(event);try{if(!this.player.exporting)this.player.updateMix(this.snapshot);}catch(error){this.error(error);}});
-    this.auto=new RecoveryAutosave(controller,this.files,{onStatus:s=>{this.recoveryStatus.textContent=s.state==='saved'?'Recovery copy updated':s.state==='saving'?'Updating recovery copy':'Recovery failed: '+s.message;}});this.refresh();
+    this.unsubscribe?.();this.controller=controller;this.snapshot=controller.snapshot();this.cursor=0;this.selected=this.snapshot.tracks[0]?.id||null;this.selectedClip=null;this.selectedNote=null;this.clearClipSelection=false;if(this.clipTools){this.clipTools.selected.clear();if(this.clipTools.clipboard?.projectId!==this.snapshot.id)this.clipTools.clipboard=null;}
+    this.unsubscribe=controller.subscribe(event=>{this.assetRetention.schedule();this.refresh(event);try{if(!this.player.exporting)this.player.updateMix(this.snapshot);}catch(error){this.error(error);}});
+    this.auto=new RecoveryAutosave(controller,this.files,{onStatus:s=>{if(s.state!=='saving')this.assetRetention.schedule();this.recoveryStatus.textContent=s.state==='saved'?'Recovery copy updated':s.state==='saving'?'Updating recovery copy':'Recovery failed: '+s.message;}});this.refresh();
   }
-  async adopt(loaded){
-    if(this.recorder?.busy)throw Error('Finish recording before opening another project');await this.audition?.release();this.recorder?.releaseAudio();const next=new ProjectController(loaded.project,loaded.assets);await this.monitor?.disable();await this.player.stop(true);await this.player.reset();await this.auto.close();const old=this.loaded;this.loaded=loaded;this.attach(next);this.status.textContent=loaded.warnings?.join(' ')||'Project ready';if(old)try{await old.dispose();}catch(error){this.status.textContent+=' · Previous import cache cleanup failed: '+error.message;}
+  async adopt(loaded,prepare=()=>{}){
+    let owned=false;
+    try{
+      if(this.recorder?.busy)throw Error('Finish recording before opening another project');
+      const next=new ProjectController(loaded.project,loaded.assets),result=prepare(next);
+      await this.audition?.release();this.recorder?.releaseAudio();
+      await this.monitor?.disable();await this.player.stop(true);await this.player.reset();await this.auto.close();
+      this.assetRetention.hold(loaded.assets,loaded.dispose);owned=true;
+      this.attach(next);
+      this.status.textContent=loaded.warnings?.join(' ')||'Project ready';
+      return result;
+    }catch(error){
+      if(!owned)await loaded.dispose().catch(()=>{});
+      throw error;
+    }
+  }
+  instrumentOptions(label){
+    return [new Option(label,''),...this.programs.map(program=>new Option(program.number+' · '+program.name,String(program.number-1))),
+      ...this.drumKits.map(kit=>new Option('DRUM-X · '+kit.name,'drum:'+kit.kit))];
+  }
+  async selectInstrument(id,value){
+    if(value==='')return;
+    const sound=value.startsWith('drum:')?await this.player.drumKit(Number(value.slice(5))):await this.player.tone(Number(value));
+    if(sound.engine<0)throw Error('This sound is not supported');
+    this.controller.command('track.update',{id,changes:{instrument:{type:sound.engine===2?'drumx':sound.patch[0]===4?'super':'analog',patch:sound.patch}}});
   }
   selectedTrack(){return this.snapshot.tracks.find(t=>t.id===this.selected);}
   playProject(){
@@ -142,7 +166,7 @@ export class DawWorkspace {
   row(track){
     const node=el('div','ww-daw-track');node.dataset.trackId=track.id;const choose=action('Select track',()=>{this.selected=track.id;this.selectedClip=null;this.selectedNote=null;this.refresh();}),name=el('input');name.setAttribute('aria-label','DAW track name');name.onchange=()=>this.edit('track.update',{id:track.id,changes:{name:name.value}});
     const identity=el('div','ww-daw-track-identity');identity.append(choose,name,el('small','ww-muted',track.type==='midi'?'MIDI':'Audio'));
-    const instrument=el('select');instrument.setAttribute('aria-label','DAW instrument preset');instrument.onchange=()=>this.run(async()=>{const sound=await this.player.tone(Number(instrument.value));if(sound.engine<0)throw Error('This sound is not supported');this.controller.command('track.update',{id:track.id,changes:{instrument:{type:sound.engine===2?'drumx':sound.patch[0]===4?'super':'analog',patch:sound.patch}}});});
+    const instrument=el('select');instrument.setAttribute('aria-label','DAW instrument preset');instrument.onchange=()=>this.run(()=>this.selectInstrument(track.id,instrument.value));
     const volume=el('input');volume.type='range';Object.assign(volume,{min:0,max:2,step:.01});volume.setAttribute('aria-label','DAW track volume');volume.oninput=()=>this.edit('track.update',{id:track.id,changes:{volume:Number(volume.value)}});
     const pan=el('input');pan.type='range';Object.assign(pan,{min:-1,max:1,step:.01});pan.setAttribute('aria-label','DAW track pan');pan.oninput=()=>this.edit('track.update',{id:track.id,changes:{pan:Number(pan.value)}});
     volume.onchange=pan.onchange=()=>this.controller.endCoalescing();
@@ -157,7 +181,7 @@ export class DawWorkspace {
     for(const [id,row] of this.rows)if(!p.tracks.some(t=>t.id===id)){row.node.remove();this.rows.delete(id);}
     p.tracks.forEach((t,i)=>{const row=this.rows.get(t.id)||this.row(t);if(this.trackList.children[i]!==row.node)this.trackList.insertBefore(row.node,this.trackList.children[i]||null);row.node.classList.toggle('is-selected',this.selected===t.id);row.choose.setAttribute('aria-pressed',String(this.selected===t.id));
       if(row.name.ownerDocument.activeElement!==row.name)row.name.value=t.name;if(row.volume.ownerDocument.activeElement!==row.volume)row.volume.value=t.volume;if(row.pan.ownerDocument.activeElement!==row.pan)row.pan.value=t.pan;row.volume.title=db(t.volume);row.pan.title=t.pan.toFixed(2);row.mute.setAttribute('aria-pressed',String(t.mute));row.solo.setAttribute('aria-pressed',String(t.solo));
-      const label=patchName(t.instrument?.patch);if(row.library!==this.programs||row.sound!==label){row.instrument.replaceChildren(new Option(label,''),...this.programs.map(program=>new Option(program.number+' · '+program.name,String(program.number-1))));row.library=this.programs;row.sound=label;row.instrument.value='';}row.instrument.hidden=t.type!=='midi';
+      const label=patchName(t.instrument?.patch);if(row.library!==this.programs||row.kits!==this.drumKits||row.sound!==label){row.instrument.replaceChildren(...this.instrumentOptions(label));row.library=this.programs;row.kits=this.drumKits;row.sound=label;row.instrument.value='';}row.instrument.hidden=t.type!=='midi';
     });
     if(!event||!['track.update','project.update','master.update'].includes(event.type)&&event.kind!=='saved')this.refreshEditor();this.refreshControls();this.layout?.render(event);this.clipTools?.refresh();this.editors?.refresh();this.mix?.refresh();void this.monitor?.refresh();
   }
@@ -181,13 +205,17 @@ export class DawWorkspace {
     if(this.inputToggle){this.inputToggle.textContent=this.monitor.enabled?'Disable DAW MIDI input':'Enable DAW MIDI input';this.inputToggle.disabled=fileLocked||this.monitor.preparing||!this.running||track?.type!=='midi'&&!this.monitor.enabled;this.inputMode.disabled=fileLocked||!track;this.inputChannel.disabled=fileLocked;this.inputMode.value=track?.monitor||'off';this.inputStatus.textContent=this.monitor.enabled?(this.monitor.ready?'MIDI → '+(this.monitor.track()?.name||'Synth'):'Preparing input; release held notes before retrying'):'DAW MIDI input is off. The original Synth input is unchanged.';}
   }
   transportState(state){
+    if(!state.playing&&!state.preparing)this.assetRetention.schedule();
     const changed=this.player.playing!==state.playing||this.transportPlaying!==state.playing;this.player.playing=state.playing;this.transportPlaying=state.playing;if(!state.preparing&&Number.isFinite(state.frame))this.cursor=state.frame;this.paintPosition();
     if(this.recorder?.busy&&this.recorder.state!=='preparing'){this.refreshControls();if(!state.playing&&state.reason&&state.reason!=='replaced'&&!this.recorder.stopping)void this.recorder.stop(state.reason==='ended'?'arrangement-end':state.reason);return;}
     if(state.preparing)this.status.textContent='Preparing playback';else if(state.playing&&(changed||state.reason==='started'))this.status.textContent='Playing project';else if(!state.playing&&state.reason)this.status.textContent=state.reason==='ended'?'Playback finished':'Playback stopped · '+state.reason;if(changed||state.preparing||state.reason){this.refreshControls();void this.monitor?.refresh();}
   }
   async showRecovery(){const copies=await this.files.listRecovery();this.recoveryChoices.replaceChildren(...copies.map(c=>new Option(c.name+' · '+new Date(c.modified).toLocaleString(),c.id)));this.recoveryConfirm.disabled=!copies.length;if(!copies.length)this.recoveryChoices.replaceChildren(new Option('No recovery copies in this browser',''));this.recoveryDialog.showModal();}
   receive(message){
-    if(message.t==='ready'){this.audioExport?.exporter.cancel(Error('Instrument restarted during export'));if(this.recorder?.busy)void this.recorder.stop('instrument-reboot');else this.recorder?.releaseAudio();this.monitor?.invalidate();this.player.invalidateBinding();this.running=!!message.audio;this.refreshControls();}
+    if(message.t==='ready'){this.audioExport?.exporter.cancel(Error('Instrument restarted during export'));if(this.recorder?.busy)void this.recorder.stop('instrument-reboot');else this.recorder?.releaseAudio();this.monitor?.invalidate();this.player.invalidateBinding();this.running=!!message.audio;this.refreshControls();if(this.running){
+      const node=this.bridge.getAudio().node;
+      void this.player.drumKits().then(kits=>{if(this.bridge.getAudio().node===node&&this.running){this.drumKits=kits;this.refresh({kind:'saved'});}}).catch(()=>{});
+    }}
     if(message.t==='frame'){this.frame=message;if(message.programLibrary){this.programs=message.programLibrary;this.refresh({kind:'saved'});}if(!this.node.hidden||this.layout?.windows.has('mixer'))this.layout?.meters();else if(this.layout?.windows.has('effects'))this.mix?.meters();}
     if(message.t==='daw-notice')this.status.textContent=message.message;
     if(message.t==='daw-instruments-changed'&&message.projectId===this.controller.snapshot().id){if(this.player.synchronize(this.controller,message.changes))this.status.textContent='Live instrument edits updated the project';}

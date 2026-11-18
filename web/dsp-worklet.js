@@ -37,6 +37,14 @@ class MonitoredOberVave extends OberVave {
      else if(m.t==='daw-program'){
       if(!Number.isInteger(m.program)||m.program<0||m.program>98||!x.waswan_daw_program(0,m.program))throw Error('Invalid instrument program');
       result={patch:Array.from(new Uint8Array(x.memory.buffer,x.waswan_daw_stage_buffer(),80)),engine:x.waswan_daw_staged_engine(0)};
+     }else if(m.t==='daw-drum-catalog'||m.t==='daw-drum-kit'){
+      const count=x.waswan_daw_drum_kits?.()||0;
+      const patch=kit=>{
+       if(!Number.isInteger(kit)||kit<0||kit>=count||!x.waswan_daw_drum_kit(kit))throw Error('Invalid drum kit');
+       return Array.from(new Uint8Array(x.memory.buffer,x.waswan_daw_stage_buffer(),80));
+      };
+      result=m.t==='daw-drum-kit'?{engine:2,patch:patch(m.kit)}:
+       Array.from({length:count},(_,kit)=>({kit,name:String.fromCharCode(...patch(kit).slice(63,73)).replace(/\0/g,'').trim()}));
      }else if(m.t==='daw-apply'){
       if(this.sequence?.active||this.daw?.active||x.waswan_ui_playing())throw Error('Stop the active transport before preparing DAW instruments');
       if(typeof m.projectId!=='string'||!/^[\w-]{1,80}$/.test(m.projectId)||!Number.isSafeInteger(m.revision)||m.revision<0||!Array.isArray(m.slots)||m.slots.length>x.waswan_daw_capacity())throw Error('Invalid instrument transaction');

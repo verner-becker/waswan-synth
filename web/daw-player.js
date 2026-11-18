@@ -5,18 +5,40 @@ import {RATE} from './daw-project.js';
 import {compileProject,assignSlots,trackAudible} from './daw-playback.js';
 import {prepareSchedule} from './daw-transport.js';
 class InstrumentRequests {
-  constructor(node,reply='daw-reply'){this.node=node;this.pending=new Map();node.port.addEventListener('message',({data:m})=>{if(reply&&m.t!==reply)return;const p=this.pending.get(m.request);if(!p)return;clearTimeout(p.timer);this.pending.delete(m.request);m.ok?p.resolve(m.result):p.reject(Error(m.error));});node.port.start();}
+  constructor(node,reply='daw-reply'){
+    this.node=node;this.pending=new Map();
+    this.listen=({data:m})=>{
+      if(reply&&m.t!==reply)return;
+      const p=this.pending.get(m.request);if(!p)return;
+      clearTimeout(p.timer);this.pending.delete(m.request);
+      m.ok?p.resolve(m.result):p.reject(Error(m.error));
+    };
+    node.port.addEventListener('message',this.listen);node.port.start();
+  }
   request(type,data={},transfer=[]){
+    if(this.closed)return Promise.reject(Error('The audio graph changed'));
     const request=crypto.randomUUID();
-    return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(request);reject(Error('The audio host did not respond'));},10000);this.pending.set(request,{resolve,reject,timer});this.node.port.postMessage({t:type,request,...data},transfer);});
+    return new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{this.pending.delete(request);reject(Error('The audio host did not respond'));},10000);
+      this.pending.set(request,{resolve,reject,timer});
+      try{this.node.port.postMessage({t:type,request,...data},transfer);}
+      catch(error){clearTimeout(timer);this.pending.delete(request);reject(error);}
+    });
+  }
+  close(){
+    this.closed=true;this.node.port.removeEventListener('message',this.listen);
+    for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(Error('The audio graph changed'));}
+    this.pending.clear();
   }
 }
 export class DawPlayer {
   constructor(bridge,onState=()=>{}){Object.assign(this,{bridge,onState});this.generation=0;this.exporting=null;this.playing=false;this.starting=false;this.decoded=new Map();this.sources=[];this.tracks=new Map();this.slots=new Map();this.boundPatches=new Map();}
-  requests(){const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before using an instrument');if(this.rpc?.node!==node)this.rpc=new InstrumentRequests(node);return this.rpc;}
+  requests(){const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before using an instrument');if(this.rpc?.node!==node){this.rpc?.close();this.rpc=new InstrumentRequests(node);}return this.rpc;}
   async tone(program){return this.requests().request('daw-program',{program});}
+  async drumKits(){return this.requests().request('daw-drum-catalog');}
+  async drumKit(kit){return this.requests().request('daw-drum-kit',{kit});}
   async currentTone(part=0){const state=await this.requests().request('daw-state-request');const patch=state.patches[part];return {patch,type:patch[74]===79&&patch[78]===2?'drumx':patch[0]===4?'super':'analog'};}
-  invalidateBinding(){this.masterFx?.update([]);for(const t of this.tracks.values())t.effects?.update([]);this.projectId=null;this.planId=null;this.slots.clear();this.boundPatches.clear();this.generation++;this.stopSources();this.playing=false;}
+  invalidateBinding(){this.discardStaleGraph();this.clearEffects();this.projectId=null;this.planId=null;this.slots.clear();this.boundPatches.clear();this.generation++;this.stopSources();this.playing=false;}
   synchronize(controller,changes){
     const project=controller.snapshot();if(this.projectId!==project.id)return 0;const commands=[];
     for(const change of changes){const id=[...this.slots].find(([,part])=>part===change.part)?.[0],track=project.tracks.find(t=>t.id===id),bound=this.boundPatches.get(id);if(!track?.instrument||!bound)continue;
@@ -26,14 +48,42 @@ export class DawPlayer {
     if(commands.length)controller.command('batch',{commands},{mergeKey:'live-timbres:'+project.id});return commands.length;
   }
   async capture(controller){if(this.projectId!==controller.snapshot().id||!this.slots.size||this.bridge.getAudio().context?.state!=='running')return;if(this.node!==this.bridge.getAudio().node){this.invalidateBinding();return;}const state=await this.requests().request('daw-state-request');this.synchronize(controller,state.patches.map((patch,part)=>({part,patch})));}
+  discardStaleGraph(){
+    if(!this.context)return;
+    const current=this.bridge.getAudio();
+    if(current.context===this.context&&current.node===this.node&&current.gain===this.gain)return;
+    this.stopSources();
+    if(this.exporting?.opened){
+      const job=this.exporting;
+      this.node.port.postMessage({t:'daw-export-close',request:crypto.randomUUID(),exportToken:job.token});
+      job.fail(Error('The audio graph changed during export'));
+      this.exporting=null;
+    }
+    if(this.rpc?.node===this.node){this.rpc.close();this.rpc=null;}
+    for(const track of this.tracks.values())this.disposeTrack(track);
+    this.tracks.clear();this.decoded.clear();this.masterFx?.dispose();this.mediaRpc?.close();
+    try{this.node.disconnect(this.clockLink,0,0);}catch{}
+    for(const node of [this.bus,this.media,this.masterMeter,this.click])if(node){
+      node.port.postMessage({t:'dispose'});
+      node.disconnect();node.port.close();
+    }
+    this.clockLink?.disconnect();this.speaker?.disconnect();
+    this.context=this.node=this.gain=this.bus=this.media=this.mediaRpc=this.clockLink=this.speaker=this.click=this.masterFx=this.masterMeter=null;
+    this.masterLevels=this.lastProject=this.projectId=this.planId=this.liveSessionToken=null;
+    this.slots.clear();this.boundPatches.clear();this.playing=false;
+  }
   async graph(){
+    this.discardStaleGraph();
     const {context,node,gain}=this.bridge.getAudio();if(!context||!node||!gain)throw Error('Start audio before playing the DAW');
     if(this.context===context&&this.node===node&&this.bus)return;
     await context.audioWorklet.addModule(new URL('./daw-bus.js',import.meta.url));
     await context.audioWorklet.addModule(new URL('./daw-media-worklet.js',import.meta.url));
     await context.audioWorklet.addModule(new URL('./daw-click.js',import.meta.url));
     await context.audioWorklet.addModule(new URL('./daw-fx-worklet.js',import.meta.url));
-    this.context=context;this.node=node;this.bus=new AudioWorkletNode(context,'waswan-daw-bus',{numberOfInputs:1,outputChannelCount:[2]});this.masterFx=new FxChain(context);this.masterMeter=new AudioWorkletNode(context,'waswan-daw-master-meter',{outputChannelCount:[2]});this.masterMeter.port.onmessage=({data:m})=>{if(!this.exporting)this.masterLevels=m;};this.speaker=context.createGain();this.bus.connect(this.masterFx.input);this.masterFx.output.connect(this.masterMeter).connect(this.speaker).connect(gain);
+    const current=this.bridge.getAudio();
+    if(current.context!==context||current.node!==node||current.gain!==gain)throw Error('The audio output changed while preparing the DAW');
+    if(this.context===context&&this.node===node&&this.bus)return;
+    this.context=context;this.node=node;this.gain=gain;this.bus=new AudioWorkletNode(context,'waswan-daw-bus',{numberOfInputs:1,outputChannelCount:[2]});this.masterFx=new FxChain(context);this.masterMeter=new AudioWorkletNode(context,'waswan-daw-master-meter',{outputChannelCount:[2]});this.masterMeter.port.onmessage=({data:m})=>{if(!this.exporting)this.masterLevels=m;};this.speaker=context.createGain();this.bus.connect(this.masterFx.input);this.masterFx.output.connect(this.masterMeter).connect(this.speaker).connect(gain);
     // Ensure the host clock runs before the project bus, including audio-only projects.
     this.clockLink=context.createGain();this.clockLink.gain.value=0;node.connect(this.clockLink,0);this.clockLink.connect(this.bus);
     this.click=new AudioWorkletNode(context,'waswan-daw-click',{numberOfInputs:1,outputChannelCount:[2]});this.clockLink.connect(this.click);this.click.connect(gain);
@@ -44,7 +94,19 @@ export class DawPlayer {
     this.tracks.clear();
   }
   async disconnectTrack(track){
-    await track.rpc.request('dispose');await track.gateRpc.request('dispose');if(track.part!==undefined){this.node.disconnect(track.input,track.part+1,0);this.node.disconnect(track.gate,track.part+9,1);}this.media.disconnect(track.input,track.output,0);track.input.disconnect();track.gate.disconnect();track.effects.dispose();track.mix.disconnect();track.meter.disconnect();track.mix.port.close();track.gate.port.close();
+    try{await track.rpc.request('dispose');await track.gateRpc.request('dispose');}
+    finally{this.disposeTrack(track);}
+  }
+  disposeTrack(track){
+    if(track.part!==undefined){
+      try{this.node.disconnect(track.input,track.part+1,0);}catch{}
+      try{this.node.disconnect(track.gate,track.part+9,1);}catch{}
+    }
+    if(track.output!==null)try{this.media.disconnect(track.input,track.output,0);}catch{}
+    for(const [node,rpc] of [[track.gate,track.gateRpc],[track.mix,track.rpc]]){
+      node.port.postMessage({t:'dispose'});rpc.close();node.disconnect();node.port.close();
+    }
+    track.input.disconnect();track.effects.dispose();track.meter.disconnect();
   }
   async configureTracks(project,slots,planId){
     for(const [id,track] of this.tracks)if(!project.tracks.some(t=>t.id===id)){await this.disconnectTrack(track);this.tracks.delete(id);}
@@ -75,7 +137,7 @@ export class DawPlayer {
       if(!job.opened)return;
       await this.requests().request('daw-export-close',{exportToken:job.token});
     }finally{
-      this.playing=false;this.clearEffects();this.speaker.gain.value=1;
+      this.playing=false;this.clearEffects();if(this.speaker)this.speaker.gain.value=1;
       this.exporting=null;
       if(job.binding){Object.assign(this,job.binding);if(this.lastProject)this.updateMix(this.lastProject);}
     }
@@ -119,11 +181,12 @@ export class DawPlayer {
     });
   }
   async start(controller,options={}){
+    this.discardStaleGraph();
     if(this.starting||this.playing||(this.exporting&&this.exporting.token!==options.exportToken))throw Error('DAW is already preparing, playing or exporting');
     if(this.bridge.isStudioBusy?.())throw Error('Stop Studio before starting DAW');
     const project=controller.snapshot();validateEffects(project);const revision=controller.revision,slots=assignSlots(project),renderProject=options.excludeClips?{...project,clips:project.clips.filter(c=>!options.excludeClips.has(c.id))}:project,data=compileProject(renderProject,slots,{endFrame:options.exportToken?options.endFrame:undefined}),token=++this.generation,planId=crypto.randomUUID();
     const looping=!!options.loop,length=options.endFrame??(looping?Math.max(data.length,options.loopEnd??data.length):data.length),schedule={length,fromFrame:options.fromFrame??0,loop:looping,loopStart:looping?options.loopStart??0:0,loopEnd:looping?options.loopEnd??length:length},events=data.events.filter(e=>e.frame<length||e.frame===length&&!e.type&&!e.velocity);prepareSchedule({...schedule,events});this.starting=true;this.projectId=project.id;
-    const emit=!options.exportToken,check=()=>{options.signal?.throwIfAborted();if(this.generation!==token)throw Error('Playback preparation cancelled');};
+    const emit=!options.exportToken,check=()=>{options.signal?.throwIfAborted();if(this.generation!==token||this.node!==this.bridge.getAudio().node)throw Error('Playback preparation cancelled');};
     this.planId=planId;this.position=schedule.fromFrame;if(emit)this.onState({playing:false,preparing:true,frame:schedule.fromFrame});
     try{
       await this.graph();await this.context.resume();await this.buffers(project,controller.assets,token);

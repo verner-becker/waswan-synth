@@ -60,7 +60,7 @@ export class ProjectFiles {
     if(!/^[\w-]+\.wsmeta$/.test(name))throw Error('Invalid recovery generation name');
     const file=await(await dir.getFileHandle(name)).getFile(),{envelope,header}=await archiveHeader(file);
     if(file.size!==header.size)throw Error('Invalid recovery manifest');
-    const sources=[],audio=await dir.getDirectoryHandle('audio');
+    const sources=[],sourceNames=[],audio=await dir.getDirectoryHandle('audio');
     for(let i=0;i<envelope.project.assets.length;i++){
       const meta=envelope.project.assets[i],check=envelope.checksums[i],entry=recoveryName(meta,check),source=await(await audio.getFileHandle(entry)).getFile();
       const expected=new Uint8Array(wavHeader(meta.frames)),actual=new Uint8Array(await source.slice(0,44).arrayBuffer());
@@ -70,9 +70,9 @@ export class ProjectFiles {
         if(await sourceChecksum(source)!==check.crc32)throw Error('Recovery source checksum mismatch');
         this.recoveryCache.set(key,{modified:source.lastModified,bytes:source.size});
       }
-      sources.push(source);
+      sources.push(source);sourceNames.push(entry);
     }
-    return {header,sources,project:envelope.project};
+    return {header,sources,sourceNames,project:envelope.project};
   }
   async saveRecovery(controller){
     const document=controller.snapshot(),assets=new Map(controller.assets),blob=await projectBlob(document,assets);
@@ -88,18 +88,30 @@ export class ProjectFiles {
         if(!intact)await write(await audio.getFileHandle(entry,{create:true}),assets.get(meta.id));
       }
       await write(await dir.getFileHandle(name,{create:true}),header);
-      await this.recoveryParts(dir,name);
-      const keep=[name];
+      const committed=await this.recoveryParts(dir,name),retainedAudio=new Set(committed.sourceNames);
+      const keep=[name];let canPrune=true;
       const scanned=[];for await(const [entry,handle] of dir.entries())if(handle.kind==='file'&&entry!==name&&/^[\w-]+\.wsmeta$/.test(entry)){const file=await handle.getFile();scanned.push({entry,modified:file.lastModified});}
       scanned.sort((a,b)=>b.modified-a.modified||b.entry.localeCompare(a.entry));
       const candidates=new Set([...(Array.isArray(previous)?previous:[]),...scanned.map(file=>file.entry)]);
       for(const entry of candidates){
         if(entry===name)continue;
         if(typeof entry!=='string'||!/^[\w-]+\.wsmeta$/.test(entry))continue;
-        try{const loaded=await this.recoveryParts(dir,entry);if(loaded.project.id===document.id){keep.push(entry);break;}}catch{}
+        try{
+          const loaded=await this.recoveryParts(dir,entry);
+          if(loaded.project.id===document.id){keep.push(entry);for(const source of loaded.sourceNames)retainedAudio.add(source);break;}
+        }catch(error){
+          // A browser I/O failure does not establish that an older source is corrupt.
+          if(error instanceof DOMException&&error.name!=='NotFoundError')canPrune=false;
+        }
       }
       await write(index,new Blob([JSON.stringify({version:1,generations:keep})]));
+      if(!canPrune)return {projectId:document.id,generations:keep.length,cleanupPending:true};
       for await(const [entry,handle] of dir.entries())if(handle.kind==='file'&&/^[\w-]+\.wsmeta$/.test(entry)&&!keep.includes(entry))await dir.removeEntry(entry);
+      for await(const [entry,handle] of audio.entries()){
+        if(handle.kind!=='file'||!/^[-\w]{1,80}\.[0-9a-f]{1,8}\.[0-9]+\.wav$/.test(entry)||retainedAudio.has(entry))continue;
+        await audio.removeEntry(entry);
+        this.recoveryCache.delete(document.id+':'+entry);
+      }
       return {projectId:document.id,generations:keep.length};
     });
   }

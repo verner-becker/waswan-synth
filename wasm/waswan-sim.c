@@ -58,6 +58,11 @@ EXPORT uint32_t waswan_daw_stage_buffer(void) {return (uint32_t)(uintptr_t)daw_s
 EXPORT uint32_t waswan_daw_program(uint32_t part,uint32_t program) {
     if(part>=NPART||program>=NPROG)return 0;prog_get(program,&daw_staged[part]);return 1;
 }
+EXPORT uint32_t waswan_daw_drum_kits(void) {return NDRUMKIT;}
+EXPORT uint32_t waswan_daw_drum_kit(uint32_t kit) {
+    if(kit>=NDRUMKIT)return 0;
+    obv_drums_preset(&daw_staged[0],kit);return 1;
+}
 EXPORT uint32_t waswan_daw_patch(uint32_t part,uint32_t byte) {return part<NPART&&byte<PATCH_BYTES?live_p[part].v[byte]:0;}
 static uint32_t daw_patch_valid(const patch_t *patch,uint32_t part) {
     uint32_t engine=obv_patch_engine(patch);

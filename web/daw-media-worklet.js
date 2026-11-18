@@ -8,19 +8,20 @@ function validateLane(lane,min,max){
   let previous=-1;for(const point of lane.points){if(!Number.isSafeInteger(point.tick)||point.tick<0||point.tick>8192*PPQ||point.tick<=previous||!Number.isFinite(point.value)||point.value<min||point.value>max)throw Error('Invalid mixer automation point');previous=point.tick;}
 }
 class DawMedia extends AudioWorkletProcessor {
-  constructor(){super();this.renderer=new PcmRenderer();this.port.onmessage=({data:m})=>{
+  constructor(){super();this.alive=true;this.renderer=new PcmRenderer();this.port.onmessage=({data:m})=>{
     try{
       let result;
       if(m.t==='asset')this.renderer.asset(m.id,m.left,m.right);
       else if(m.t==='prepare')this.renderer.prepare(m.planId,m.clips);
       else if(m.t==='retain')this.renderer.retain(m.ids);
       else if(m.t==='clear')this.renderer.clear();
+      else if(m.t==='dispose'){this.renderer.clear();this.alive=false;}
       else if(m.t==='info'){let frames=0;for(const a of this.renderer.assets.values())frames+=a.left.length;result={sources:this.renderer.assets.size,frames,pcmBytes:frames*8,clips:this.renderer.clips.length};}
       else throw Error('Unknown audio plan command');
       this.port.postMessage({request:m.request,ok:true,result});
     }catch(error){this.port.postMessage({request:m.request,ok:false,error:error.message});}
   };}
-  process(inputs,outputs){this.renderer.render(outputs,audioTransport,currentFrame);return true;}
+  process(inputs,outputs){if(!this.alive)return false;this.renderer.render(outputs,audioTransport,currentFrame);return true;}
 }
 class DawTrack extends AudioWorkletProcessor {
   static get parameterDescriptors(){return [{name:'volume',defaultValue:1,minValue:0,maxValue:2},{name:'pan',defaultValue:0,minValue:-1,maxValue:1},{name:'mute',defaultValue:1,minValue:0,maxValue:1}];}
