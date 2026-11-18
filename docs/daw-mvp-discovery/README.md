@@ -46,6 +46,8 @@ Uma hipótese que falha só justifica outra tentativa com evidência ou abordage
 | Fase 9 | Validação de software concluída com jornadas, recuperação, cargas de 5 e 20 minutos e manual. [Fechamento](wave-9.md), `test/daw-wave-9-stabilization`, fechamento `d558119` |
 | Aceite do MVP | [Quatro lacunas implementadas e roteiro de aceite físico](acceptance.md). Branch `feat/daw-mvp-acceptance` sobre `d558119`. |
 
+Em 18/11/2026, o usuário aprovou a incorporação do MVP à `main` a partir de `21bd5bc` e a limpeza das branches de fase incorporadas. O [plano de evolução de UX](../ux-evolution-plan.md) e o [parecer do Astra](../ux-evolution-astra.md) orientam a série seguinte. O aceite físico continua registrado em [acceptance.md](acceptance.md).
+
 Decisões de trabalho iniciais: host em documento com posse exclusiva por Web Locks; fechar o host interrompe áudio, sem failover automático ou promessa de continuidade. Carga inicial de prova: cinco minutos, três trilhas instrumentais e cinco de áudio; não representa limite suportado certificado. Stems propostos pós-FX/fader/pan da trilha e pré-Master, para validar na fase de exportação. Caso uma dessas escolhas não sustente os requisitos, trazer evidência ao usuário.
 
 Ao retomar: ler este controle, o relatório, AGENTS.md e o pacote; conferir Git e a última evidência. Não interpretar sugestões do assessor nem o backlog como autorização.

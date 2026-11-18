@@ -28,6 +28,10 @@ As ondas 0–5, a revisão de UX do SEQ e o manual foram aprovados e integrados 
 
 Comece por **SEQ → New project → Record MIDI → Stop → Save project**. Consulte o [roteiro de uso](docs/studio-guide.md), o [controle das ondas](docs/studio-waves.md) e a [revisão de UX](docs/studio-seq-ux.md). Validação física/musical e limites documentados continuam distintos dos testes automatizados; não houve atualização de firmware, submódulo ou criação de tag nesta integração.
 
+## WASWAN DAW
+
+A `main` inclui o MVP da DAW aprovado para integração em 18/11/2026. Use **DAW** para montar o Arrangement, editar clipes, gravar MIDI e áudio, mixar e exportar. **Open DAW in new tab** usa o mesmo projeto e a sessão de áudio hospedada no Synth. Consulte o [aceite do MVP](docs/daw-mvp-discovery/acceptance.md), o [parecer do Astra](docs/ux-evolution-astra.md) e o [plano de evolução de UX](docs/ux-evolution-plan.md).
+
 ## Executar no Ubuntu
 
 Pré-requisitos: Git, Python 3, curl, patch e uv para preparar as ferramentas; Node.js para os testes. Chrome/Chromium com Web Audio e Web MIDI para tocar com o teclado.
