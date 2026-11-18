@@ -36,6 +36,15 @@ export class DawArrangement {
       view.append(action('Show '+label,()=>{view.open=false;this.panel(name);}),
         action('Detach '+label,()=>{view.open=false;this.detachPane(name);}));
     }
+    this.dockEditor=action('Dock editor on right',()=>{
+      this.prefs.editorDock=this.prefs.editorDock==='right'?'bottom':'right';
+      this.prefs.bottom=true;
+      this.prefs.maximized=null;
+      view.open=false;
+      this.layout();
+      summary.focus({preventScroll:true});
+    });
+    view.append(this.dockEditor);
     view.append(action('Reset layout',()=>{view.open=false;this.windows.closeAll({forget:true});this.prefs=defaultDawLayout();this.layout();}));
     tools.append(this.browserToggle,trackTools,this.addAudio,this.addClip,this.gridSelect,this.snapToggle,this.zoomOut,this.zoomIn,this.zoomFit,this.zoomValue,this.rulerMode,this.maximize,view);
     this.viewport=el('div','ww-daw-arrangement-scroll');this.viewport.tabIndex=0;this.viewport.setAttribute('aria-label','Arrangement timeline');this.content=el('div','ww-daw-arrangement-content');this.viewport.append(this.content);
@@ -49,10 +58,10 @@ export class DawArrangement {
       this.collapsedTabs.querySelector('button').focus({preventScroll:true});
     },'ww-daw-hide-panel');this.bottomExpand=action('Expand editor',()=>{this.prefs.maximized=this.prefs.maximized==='editor'?null:'editor';this.layout();});this.detach=action('Detach active panel',()=>this.detachPane(this.prefs.panel));tabs.append(this.clipTab,this.mixerTab,this.bottomToggle,this.bottomExpand,this.detach);
     this.clipPane=el('div','ww-daw-clip-pane');this.clipPane.append(this.w.editor);this.mixerPane=el('div','ww-daw-mixer');this.mixerPane.append(this.w.trackScroll,master);this.detachedNotice=el('p','ww-muted ww-daw-detached-notice');this.bottom.append(tabs,this.clipPane,this.mixerPane,this.detachedNotice);
-    this.vSplit=this.splitter('horizontal','bottomHeight',160,800);this.collapsedTabs=el('div','ww-daw-collapsed-tabs');this.collapsedTabs.append(
+    this.vSplit=this.splitter('horizontal','bottomHeight',160,800,'Resize lower panel');this.sideSplit=this.splitter('vertical','editorWidth',380,960,'Resize right editor',-1);this.collapsedTabs=el('div','ww-daw-collapsed-tabs');this.collapsedTabs.append(
       action('Show Clip editor',()=>{this.panel('clip');if(!this.windows.has('clip'))this.clipTab.focus({preventScroll:true});}),
       action('Show Mixer',()=>{this.panel('mixer');if(!this.windows.has('mixer'))this.mixerTab.focus({preventScroll:true});})
-    );this.root.append(this.upper,this.vSplit,this.bottom,this.collapsedTabs);
+    );this.root.append(this.upper,this.vSplit,this.sideSplit,this.bottom,this.collapsedTabs);
     this.buildTransport(transport);
     for(const [node,context] of [[this.viewport,'transport'],[transport,'transport'],[this.browser,'clip'],[this.bottom,null]]){
       const focus=()=>this.w.panelFocus(context||this.prefs.panel);
@@ -83,7 +92,19 @@ export class DawArrangement {
     this.context.setAttribute('aria-atomic','true');
     this.focusHint=el('p','ww-muted ww-daw-focus-hint');
     statusLine.append(this.context,this.w.status,this.focusHint);
-    this.w.node.replaceChildren(top,statusLine,this.root);
+    const compactViews=el('div','ww-daw-compact-views');
+    this.compactArrangement=action('Arrangement view',()=>{
+      this.prefs.maximized='arrangement';
+      this.layout();
+    });
+    this.compactEditor=action('Editor view',()=>{
+      if(this.windows.focus(this.prefs.panel))return;
+      this.prefs.bottom=true;
+      this.prefs.maximized='editor';
+      this.layout();
+    });
+    compactViews.append(this.compactArrangement,this.compactEditor);
+    this.w.node.replaceChildren(top,statusLine,compactViews,this.root);
     this.w.node.addEventListener('focusin',({target})=>{
       this.focusHint.textContent=target.matches(':focus-visible, [role="separator"]')?target.dataset.dawHint||'':'';
     });
@@ -93,19 +114,28 @@ export class DawArrangement {
     this.observer=new ResizeObserver(()=>this.measure());this.observer.observe(this.viewport);this.observer.observe(top);this.observer.observe(statusLine);addEventListener('resize',()=>this.measure());requestAnimationFrame(()=>this.measure());this.layout(false);
   }
   persist(){try{localStorage.setItem('waswan-daw-layout-v1',JSON.stringify(this.prefs));}catch{this.w.status.textContent='Layout could not be saved in this browser';}}
-  splitter(orientation,key,min,max){
-    const node=el('div','ww-daw-splitter');node.tabIndex=0;node.setAttribute('role','separator');node.setAttribute('aria-label',orientation==='horizontal'?'Resize lower panel':'Resize Track inspector');node.setAttribute('aria-orientation',orientation);node.setAttribute('aria-valuemin',min);node.setAttribute('aria-valuemax',max);let drag;
+  splitter(orientation,key,min,max,label='Resize Track inspector',direction=1){
+    const node=el('div','ww-daw-splitter');node.tabIndex=0;node.setAttribute('role','separator');node.setAttribute('aria-label',label);node.setAttribute('aria-orientation',orientation);node.setAttribute('aria-valuemin',min);node.setAttribute('aria-valuemax',max);let drag;
     node.dataset.dawHint=node.title='Arrow keys resize · Home resets the size';
-    node.onpointerdown=e=>{e.preventDefault();node.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,value:this.prefs[key]};};node.onpointermove=e=>{if(!drag)return;this.prefs[key]=Math.max(min,Math.min(max,drag.value+(orientation==='horizontal'?drag.y-e.clientY:e.clientX-drag.x)));this.layout(false);};
+    node.onpointerdown=e=>{e.preventDefault();node.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,value:this.prefs[key]};};node.onpointermove=e=>{if(!drag)return;this.prefs[key]=Math.max(min,Math.min(max,drag.value+direction*(orientation==='horizontal'?drag.y-e.clientY:e.clientX-drag.x)));this.layout(false);};
     for(const event of ['pointerup','pointercancel','lostpointercapture'])node.addEventListener(event,()=>{if(drag){drag=null;this.persist();}});node.ondblclick=()=>{this.prefs[key]=defaultDawLayout()[key];this.layout();};
-    node.onkeydown=e=>{if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home'].includes(e.key))return;e.preventDefault();e.stopPropagation();this.prefs[key]=e.key==='Home'?defaultDawLayout()[key]:Math.max(min,Math.min(max,this.prefs[key]+(['ArrowUp','ArrowRight'].includes(e.key)?20:-20)));this.layout();};return node;
+    node.onkeydown=e=>{if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home'].includes(e.key))return;e.preventDefault();e.stopPropagation();this.prefs[key]=e.key==='Home'?defaultDawLayout()[key]:Math.max(min,Math.min(max,this.prefs[key]+direction*(['ArrowUp','ArrowRight'].includes(e.key)?20:-20)));this.layout();};return node;
   }
   measure(){if(!this.w.node.offsetParent)return;const available=Math.max(320,this.root.ownerDocument.defaultView.innerHeight-this.root.getBoundingClientRect().top-28);this.available=available;this.root.style.height=available+'px';this.applyVisibility();if(this.viewport.clientWidth){this.headWidth=Math.max(224,Math.min(260,this.viewport.clientWidth*.23));this.root.style.setProperty('--daw-header-width',this.headWidth+'px');this.render();}}
   applyVisibility(){
-    const p=this.prefs,max=p.maximized;this.browser.hidden=!p.browser||max==='arrangement';this.hSplit.hidden=this.browser.hidden;this.upper.hidden=max==='editor';this.bottom.hidden=!p.bottom||max==='arrangement';this.vSplit.hidden=this.bottom.hidden||max==='editor';this.collapsedTabs.hidden=!this.bottom.hidden;
+    const p=this.prefs,max=p.maximized,wide=this.w.node.clientWidth>=2100;
+    const side=wide&&p.editorDock==='right'&&p.bottom&&!max;
+    this.dockEditor.hidden=!wide;
+    this.dockEditor.textContent=p.editorDock==='right'?'Dock editor below':'Dock editor on right';
+    this.compactArrangement.setAttribute('aria-pressed',String(max==='arrangement'));
+    this.compactEditor.setAttribute('aria-pressed',String(max==='editor'));
+    this.root.classList.toggle('ww-daw-side-docked',side);
+    this.browser.hidden=!p.browser||max==='arrangement';this.hSplit.hidden=this.browser.hidden;this.upper.hidden=max==='editor';this.bottom.hidden=!p.bottom||max==='arrangement';this.vSplit.hidden=this.bottom.hidden||max==='editor'||side;this.collapsedTabs.hidden=!this.bottom.hidden;
+    this.sideSplit.hidden=!side;
+    this.sideSplit.setAttribute('aria-valuenow',p.editorWidth);
     this.browser.style.width=p.browserWidth+'px';
     const timelineSpace=p.panel==='clip'?207:200;
-    this.bottom.style.flexBasis=Math.max(160,Math.min(p.bottomHeight,(this.available||700)-timelineSpace))+'px';this.bottom.classList.toggle('is-expanded',max==='editor');for(const name of ['clip','mixer','effects','automation']){
+    this.bottom.style.flexBasis=(side?p.editorWidth:Math.max(160,Math.min(p.bottomHeight,(this.available||700)-timelineSpace)))+'px';this.bottom.classList.toggle('is-expanded',max==='editor');for(const name of ['clip','mixer','effects','automation']){
       const pane=this.pane(name);
       if(pane)pane.hidden=!this.windows.has(name)&&p.panel!==name;
     }
@@ -115,6 +145,7 @@ export class DawArrangement {
     this.detach.textContent=detached?'Focus detached panel':'Detach active panel';for(const [name,button] of [['clip',this.clipTab],['mixer',this.mixerTab],['automation',this.autoTab],['effects',this.fxTab]])button?.setAttribute('aria-pressed',String(p.panel===name));this.browserToggle.textContent=p.browser?'Hide Track inspector':'Show Track inspector';this.maximize.textContent=max==='arrangement'?'Restore Arrangement':'Expand Arrangement';this.bottomExpand.textContent=max==='editor'?'Restore editor':'Expand editor';this.hSplit.setAttribute('aria-valuenow',p.browserWidth);this.vSplit.setAttribute('aria-valuenow',p.bottomHeight);
   }
   layout(save=true){this.applyVisibility();if(save)this.persist();this.measure();}
+  focusTarget(){return this.upper.hidden?this.bottomExpand:this.viewport;}
   pane(name){return {clip:this.clipPane,mixer:this.mixerPane,effects:this.fxPane,automation:this.autoPane}[name];}
   panel(name){
     this.prefs.panel=name;this.prefs.bottom=true;this.prefs.maximized=null;

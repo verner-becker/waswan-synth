@@ -2,8 +2,8 @@
 import {el,action} from './ui-primitives.js';
 
 export class DawTab {
-  constructor(workspace,{onMove,focusSynth,onError}){
-    Object.assign(this,{workspace,onMove,focusSynth,onError});
+  constructor(workspace,{onMove,focusSynth,showDaw,onError}){
+    Object.assign(this,{workspace,onMove,focusSynth,showDaw,onError});
     addEventListener('message',event=>this.attach(event));
     addEventListener('pagehide',()=>this.restore(),{once:true});
   }
@@ -32,19 +32,23 @@ export class DawTab {
     if(!target)return;
     clearTimeout(this.deadline);
     const w=this.workspace,node=w.node,placeholder=el('section','ww-panel');
+    const active=node.ownerDocument.activeElement;
+    const focusedControl=node.contains(active)?active:w.layout.focusTarget();
     placeholder.dataset.view='daw';
     placeholder.hidden=node.hidden;
     placeholder.append(el('p','','DAW is open in its own tab.'),action('Focus DAW tab',()=>win.focus()),
-      action('Return DAW here',()=>this.restore()));
+      action('Return DAW here',()=>this.restore({show:true})));
     this.home={placeholder,dialogs:[w.recoveryDialog,w.takeDialog,w.audioExport.dialog]};
     node.replaceWith(placeholder);
     this.onMove(placeholder);
     target.replaceChildren(node);
+    w.setLinked(true);
     node.hidden=false;
     doc.body.append(...this.home.dialogs);
     doc.querySelector('header').append(
+      el('span','ww-chip','Audio host · Synth tab'),
       action('Focus Synth',()=>{this.focusSynth();window.focus();}),
-      action('Return DAW to Synth tab',()=>this.restore())
+      action('Return DAW to Synth tab',()=>this.restore({show:true}))
     );
     win.addEventListener('pagehide',()=>{if(this.win===win)this.restore({close:false});},{once:true});
     win.addEventListener('resize',()=>w.layout.measure());
@@ -53,19 +57,28 @@ export class DawTab {
     win.addEventListener('blur',()=>void w.audition.release());
     focus();
     w.layout.windowChanged();
+    focusedControl.focus({preventScroll:true});
   }
-  restore({close=true}={}){
+  restore({close=true,show=false}={}){
     const win=this.win,home=this.home,w=this.workspace;
     this.win=this.home=this.token=null;
     clearInterval(this.watch);
     clearTimeout(this.deadline);
     if(home){
       const {placeholder,dialogs}=home;
+      const active=w.node.ownerDocument.activeElement;
+      const focusedControl=w.node.contains(active)?active:w.layout.focusTarget();
       for(const dialog of dialogs){if(dialog.open)dialog.close();document.body.append(dialog);}
       w.node.hidden=placeholder.hidden;
       placeholder.replaceWith(w.node);
       this.onMove(w.node);
+      w.setLinked(false);
+      if(show){window.focus();this.showDaw();}
       w.layout.windowChanged();
+      if(!w.node.hidden){
+        const target=focusedControl.getClientRects().length?focusedControl:w.layout.focusTarget();
+        target.focus({preventScroll:true});
+      }
     }
     if(close&&win&&!win.closed)win.close();
   }

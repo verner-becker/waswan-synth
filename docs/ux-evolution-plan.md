@@ -33,6 +33,8 @@ Implementada em `feat/ux-stage-3-recording`, sobre `5b0f19c`. [Fechamento e evid
 
 ## 4. Ultrawide e novas abas
 
+Implementada em `feat/ux-stage-4-daw-windows`, sobre `6686a1f`. [Fechamento e evidências](ux-stage-4.md)
+
 - Liberar a largura da aba DAW e corrigir os tokens de tema na janela destacada. Priorizar Mixer e Piano Roll. Oferecer inspetor ou editor lateral opcional conforme o espaço disponível. Em janelas curtas ou com zoom alto, dar acesso claro à alternância entre Arrangement e editor.
 - Unificar abrir, focar, redimensionar e devolver. Restaurar foco e seleção, identificar a aba hospedeira e esclarecer onde abre o teclado do Synth. Validar contraste, zoom e layout em 2560×1080 e 3440×1440, incluindo monitores físicos quando disponíveis.
 - Validar o retorno durante reprodução e gravação, posse única do áudio, posição, sustain e restauração de layout sem alterar o projeto. Fechar a aba hospedeira encerra a sessão conforme o contrato atual.

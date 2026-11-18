@@ -49,7 +49,10 @@ export class DawWorkspace {
       const t=makeTrack('midi','Instrument '+(this.controller.snapshot().tracks.filter(t=>t.type==='midi').length+1));if(this.running){const sound=await this.player.currentTone(this.frame?.track||0);t.instrument={type:sound.type,patch:sound.patch};}
       this.controller.command('track.create',t);this.selected=t.id;this.refresh();
     });
-    this.keyboard=action('Show Synth keyboard',()=>{const visible=toggleKeyboard();this.keyboard.textContent=visible?'Hide Synth keyboard':'Show Synth keyboard';});trackTools.append(this.addMidi,this.keyboard);
+    this.keyboard=action('Show Synth keyboard',()=>{
+      const visible=toggleKeyboard();
+      if(!this.linked)this.keyboard.textContent=visible?'Hide Synth keyboard':'Show Synth keyboard';
+    });trackTools.append(this.addMidi,this.keyboard);
     this.trackScroll=el('div','ww-daw-track-scroll');this.trackList=el('div','ww-daw-tracks');this.trackScroll.append(this.trackList);
     const editor=Panel('Clip editor');this.editor=editor;
     this.notes=el('select');this.notes.size=5;this.notes.setAttribute('aria-label','DAW notes');this.notes.onchange=()=>{this.selectedNote=this.notes.value;this.inspectNote();};editor.append(this.notes);
@@ -76,6 +79,11 @@ export class DawWorkspace {
     this.node.addEventListener('focusin',()=>this.layout.windows.status());
   }
   get viewWindow(){return this.node.ownerDocument.defaultView;}
+  setLinked(linked){
+    if(linked)this.inlineKeyboardLabel=this.keyboard.textContent;
+    this.linked=linked;
+    this.keyboard.textContent=linked?'Focus Synth keyboard':this.inlineKeyboardLabel;
+  }
   async pick(method,options,source=this.viewWindow){
     const result=await source[method](options);
     return source===window?result:structuredClone(result);

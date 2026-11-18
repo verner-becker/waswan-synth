@@ -26,10 +26,12 @@ export class DawWindows {
     const win=pane.ownerDocument.defaultView.open('','_blank',['popup',...position].join(','));
     if(!win){this.w.error(Error('Allow pop-ups for WASWAN to detach this panel'));return;}
     const doc=win.document,anchor=pane.ownerDocument.createComment('WASWAN '+name+' panel');
+    const restoreFocus=pane.ownerDocument.activeElement;
     pane.before(anchor);
     try{
       doc.documentElement.lang='en';
       doc.title='WASWAN DAW · '+labels[name];
+      doc.body.classList.add('ww-page');
       const css=doc.createElement('link');
       css.rel='stylesheet';
       css.href=new URL('./ui-foundation.css',import.meta.url).href;
@@ -46,7 +48,7 @@ export class DawWindows {
       shell.append(header,pane);
       doc.body.replaceChildren(shell);
       const focus=()=>this.w.panelFocus(name,{detached:true});
-      const view={win,pane,anchor,status,focus};
+      const view={win,pane,anchor,status,focus,restoreFocus};
       this.views.set(name,view);
       doc.addEventListener('keydown',event=>this.w.shortcut(event));
       doc.addEventListener('pointerdown',focus);
@@ -83,7 +85,11 @@ export class DawWindows {
     this.remember(name,view.win);
     view.anchor.replaceWith(view.pane);
     if(!closing&&!view.win.closed)view.win.close();
-    if(refresh)this.onChange();
+    if(refresh){
+      this.onChange();
+      const target=view.restoreFocus?.getClientRects().length?view.restoreFocus:this.w.layout.focusTarget();
+      if(!this.w.node.hidden)target.focus({preventScroll:true});
+    }
   }
   closeAll({forget=false}={}){
     for(const name of this.views.keys())this.attach(name,{refresh:false});
@@ -91,8 +97,13 @@ export class DawWindows {
   }
   status(){
     const w=this.w;
+    const record=w.recorder?.state;
+    const state=record==='count-in'&&!w.recorder.settings.countIn?'Starting':{
+      preparing:'Preparing', 'count-in':'Count-in', recording:'Recording', finalizing:'Finishing'
+    }[record]||(w.player.playing?'Playing':'Stopped');
     for(const {status} of this.views.values()){
-      status.textContent=w.snapshot.name+' · '+(w.recorder?.busy?'Recording':w.player.playing?'Playing':'Stopped')+' · '+w.position.textContent;
+      status.textContent=w.snapshot.name+' · '+state+' · '+w.position.textContent;
+      status.dataset.state=record||'idle';
     }
   }
 }

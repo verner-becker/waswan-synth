@@ -41,13 +41,18 @@ class Foundation {
     this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'),()=>this.dock.querySelector('#keys .key')?.focus());
     this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
     this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{openSettings:()=>{window.focus();this.showSettings(true);},toggleKeyboard:()=>{
+      if(this.dawTab?.connected){
+        window.focus();
+        this.selectWorkspace('perf');
+        this.dock.querySelector('#keys .key')?.focus({preventScroll:true});
+        return true;
+      }
       this.dawKeyboardVisible=!this.dawKeyboardVisible;
       this.dock.hidden=!this.dawKeyboardVisible;
-      if(this.dawTab?.connected&&this.dawKeyboardVisible)window.focus();
       return this.dawKeyboardVisible;
     }});this.addView('daw',this.daw.node);this.settingsPanel.append(this.daw.midiProfiles.panel);bridge.isDawBusy=()=>this.daw.player.playing||this.daw.player.starting||this.daw.recorder.busy||this.daw.recorder.audioTrackId||this.daw.monitor.enabled||this.daw.audition?.busy||this.daw.audioExport?.exporter.busy;bridge.isStudioBusy=()=>!!(this.sequence.playing||this.sequence.starting||this.sequence.rendering||this.sequence.capture||this.studio.recorder.busy||this.studio.recorder.player||this.studio.recorder.playbackPreparing);
     this.dawTab=new DawTab(this.daw,{
-      onMove:node=>this.views.set('daw',node),focusSynth:()=>this.selectWorkspace('perf'),
+      onMove:node=>this.views.set('daw',node),focusSynth:()=>this.selectWorkspace('perf'),showDaw:()=>this.selectWorkspace('daw'),
       onError:message=>{this.notice.textContent=message;}
     });
     const credits=el('div','ww-credits');credits.append(el('span','','Based on SMKSYNTH · OberVave / zvenson and contributors · DRUM-X / JIANT · '));

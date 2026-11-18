@@ -55,6 +55,9 @@ try{
   const tab=await linked(host);
   assert.equal(await tab.evaluate(()=>audit.contexts),0);
   assert(await host.evaluate(()=>audit.workspace===audit.w.node&&audit.project===audit.w.controller&&audit.w.node.ownerDocument!==document));
+  assert(await tab.getByText('Audio host · Synth tab',{exact:true}).isVisible());
+  await button(tab,'Focus Synth keyboard').click();
+  await host.waitForFunction(()=>document.activeElement?.matches('#keys .key'));
   await tab.getByRole('button',{name:'Focus Synth',exact:true}).click();
   assert(await daw(tab).isVisible(),'Changing the host view keeps the tab visible');
   assert(await host.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.note===72)));
@@ -95,12 +98,43 @@ try{
   assert.equal(await host.evaluate(()=>audit.w.snapshot.name),'Shared DAW');
 
   const viewMenu=daw(tab).locator('.ww-daw-view-menu');
+  const layout=daw(tab).locator('.ww-daw-layout');
+  const untouched=await host.evaluate(()=>JSON.stringify(audit.w.snapshot));
+  const widths=[];
+  for(const [width,height] of [[2560,1080],[3440,1440]]){
+    await tab.setViewportSize({width,height});
+    const timeline=await tab.locator('.ww-daw-arrangement-scroll').evaluate(e=>e.clientWidth);
+    assert(timeline>width-160);
+    widths.push({width,height,timeline});
+    await tab.screenshot({path:`${root}/linked-${width}.png`});
+  }
+  await tab.locator('.ww-daw-arrangement-clip').first().click();
+  await viewMenu.locator('summary').click();
+  await button(tab,'Dock editor on right').click();
+  assert(await layout.evaluate(e=>e.classList.contains('ww-daw-side-docked')));
+  const divider=tab.getByRole('separator',{name:'Resize right editor',exact:true});
+  await divider.press('ArrowLeft');
+  assert.equal(await divider.getAttribute('aria-valuenow'),'660');
+  await tab.screenshot({path:`${root}/linked-side-editor.png`});
+  await tab.setViewportSize({width:1366,height:620});
+  await tab.waitForFunction(()=>!document.querySelector('.ww-daw-layout').classList.contains('ww-daw-side-docked'));
+  await button(tab,'Arrangement view').click();
+  assert(await daw(tab).locator('.ww-daw-upper').isVisible());
+  await button(tab,'Editor view').click();
+  assert(await daw(tab).locator('.ww-daw-upper').isHidden());
+  await button(tab,'Restore editor').click();
+  await tab.setViewportSize({width:3440,height:1440});
+  await tab.waitForFunction(()=>document.querySelector('.ww-daw-layout').classList.contains('ww-daw-side-docked'));
+  assert.equal(await divider.getAttribute('aria-valuenow'),'660');
+  assert.equal(await host.evaluate(()=>JSON.stringify(audit.w.snapshot)),untouched);
   await viewMenu.locator('summary').click();
   const popup=tab.waitForEvent('popup');
   await viewMenu.getByRole('button',{name:'Detach Mixer',exact:true}).click();
   const mixer=await popup;
   const trackPeak=mixer.getByLabel('Track peak · Audio 1',{exact:true});
   await trackPeak.waitFor();
+  await mixer.waitForFunction(()=>getComputedStyle(document.body).getPropertyValue('--ww-bg').trim()==='#0a0f12');
+  await mixer.screenshot({path:`${root}/detached-mixer.png`});
   await field(tab,'DAW metronome').check();
   await field(tab,'DAW metronome volume').fill('80');
   await button(tab,'Play DAW').click();
@@ -184,8 +218,14 @@ try{
     });
   },null,{timeout:16000});
   async function take(note){
-    await button(host,'Record DAW').click();
+    const surface=note?await linked(host):host;
+    await button(surface,'Record DAW').click();
     await host.waitForFunction(()=>audit.w.recorder.state==='recording');
+    if(surface!==host){
+      await surface.getByRole('button',{name:'Return DAW to Synth tab',exact:true}).click();
+      assert(await host.evaluate(()=>audit.w.node.ownerDocument===document&&audit.w.recorder.state==='recording'));
+      assert(await host.evaluate(()=>document.activeElement===audit.w.layout.viewport));
+    }
     if(note){
       await host.evaluate(note=>audit.node.port.postMessage({t:'midi',st:144,d1:note,d2:99}),note);
       await host.waitForFunction(note=>audit.frame.polyphony.slots.some(v=>v.gate&&v.note===note),note);
@@ -218,7 +258,7 @@ try{
   await host.close();
   if(!finalTab.isClosed())await finalTab.waitForEvent('close',{timeout:8000});
   assert.deepEqual(errors,[]);
-  const report={result:'PASS',loud,quiet,off,silence,performance,media,linkedFileAndMixer:true,returnDuringPlay:true,hostCloseEndsLinkedTab:true,physicalValidation:false};
+  const report={result:'PASS',loud,quiet,off,silence,performance,media,linkedFileAndMixer:true,widths,sideDockAndShortLayout:true,popupTheme:true,returnDuringPlay:true,returnDuringRecord:true,hostCloseEndsLinkedTab:true,physicalValidation:false};
   fs.writeFileSync(`${root}/browser-mvp-acceptance.json`,JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
 }finally{await browser.close();}
