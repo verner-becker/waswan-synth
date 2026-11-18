@@ -50,6 +50,13 @@ class MonitoredOberVave extends OberVave {
       if(m.t==='daw-live-pedal'){if(![0,1].includes(m.down)||!x.waswan_daw_live_pedal_channel(m.part,channel,m.down))throw Error('Invalid live pedal');}
       if(m.t==='daw-live-expression'){if(!Number.isInteger(m.bend)||m.bend< -8192||m.bend>8191||!Number.isInteger(m.modulation)||m.modulation<0||m.modulation>127||!x.waswan_daw_live_expression_channel(m.part,channel,m.bend,m.modulation))throw Error('Invalid live expression');}
       if(m.t==='daw-live-stop-part'){if(m.allChannels)x.waswan_daw_live_stop(m.part,1);else x.waswan_daw_live_stop_channel(m.part,channel,1);}result={applied:true};
+     }else if(m.t==='daw-preview-open'){
+      if(this.sequence?.active||this.daw?.active||x.waswan_ui_playing()||m.projectId!==this.dawProject?.id||typeof m.token!=='string'||!/^[\w-]{1,80}$/.test(m.token)||!Number.isInteger(m.part)||m.part<0||m.part>=x.waswan_daw_capacity()||!(x.waswan_daw_active_slots()>>m.part&1))throw Error('Piano preview requires a prepared instrument and stopped transport');
+      x.waswan_daw_stop(1);this.dawPreview={token:m.token,part:m.part};audioTransport.previewSession=m.token;result={opened:true};
+     }else if(m.t==='daw-preview-note'){
+      if(this.dawPreview?.token!==m.token||this.daw?.active||!Number.isInteger(m.note)||m.note<0||m.note>127||!Number.isInteger(m.velocity)||m.velocity<0||m.velocity>127||!x.waswan_daw_note(this.dawPreview.part,m.note,m.velocity))throw Error('Stale or unavailable piano preview');result={applied:true};
+     }else if(m.t==='daw-preview-close'){
+      if(this.dawPreview?.token===m.token){x.waswan_daw_stop(1);this.dawPreview=null;audioTransport.previewSession=null;}result={closed:true};
      }else if(m.t==='daw-plan-begin'){
       if(this.sequence?.active||this.daw?.active||x.waswan_ui_playing()||m.projectId!==this.dawProject?.id||m.revision!==this.dawProject?.revision||typeof m.planId!=='string'||!/^[\w-]{1,80}$/.test(m.planId)||!Number.isSafeInteger(m.count)||m.count<0||m.count>131072)throw Error('Invalid playback plan');
       this.dawPending={planId:m.planId,count:m.count,builder:new ScheduleBuilder(m.data,x.waswan_daw_capacity())};result={prepared:0};
@@ -57,7 +64,7 @@ class MonitoredOberVave extends OberVave {
       const pending=this.dawPending;if(!pending||pending.planId!==m.planId||m.offset!==pending.builder.events.length||m.events?.length+pending.builder.events.length>pending.count)throw Error('Stale playback plan');
       pending.builder.append(m.events);result={prepared:pending.builder.events.length};
      }else if(m.t==='daw-start'){
-      if(this.sequence?.active||x.waswan_ui_playing())throw Error('Stop Studio and Legacy before starting DAW');
+      if(this.sequence?.active||this.dawPreview||x.waswan_ui_playing())throw Error('Stop Studio/Legacy and release piano preview before starting DAW');
       if(m.projectId!==this.dawProject?.id||m.revision!==this.dawProject?.revision)throw Error('Project changed during playback preparation');
       const countIn=m.countInFrames??0;if(!Number.isSafeInteger(countIn)||countIn<0||countIn>sampleRate*72||countIn&&!m.recordToken)throw Error('Invalid count-in');
       if(m.recordToken!==undefined&&(typeof m.recordToken!=='string'||!/^[\w-]{1,80}$/.test(m.recordToken)))throw Error('Invalid recording token');
@@ -66,16 +73,16 @@ class MonitoredOberVave extends OberVave {
       const pending=this.dawPending;if(!pending||pending.planId!==m.planId||pending.builder.events.length!==pending.count)throw Error('Playback plan is incomplete');const prepared=pending.builder.finish();this.dawPending=null;
       this.daw??=new DawClock((part,note,velocity)=>!!this.engine?.ex.waswan_daw_note(part,note,velocity),()=>this.engine?.ex.waswan_daw_stop(0),state=>{audioTransport.playing=state.playing;if(state.startFrame!==undefined)audioTransport.startFrame=state.startFrame;if(!state.playing){audioTransport.recording=false;this.engine?.ex.waswan_daw_transport_guard?.(0);}this.port.postMessage({t:'daw-state',projectId:this.dawProject?.id,planId:this.dawPlanId,...state});},x.waswan_daw_capacity(),(part,bend,mod)=>!!this.engine?.ex.waswan_daw_expression(part,bend,mod));
       this.dawPlanId=m.planId;this.daw.startPrepared(prepared,m.startFrame);Object.assign(audioTransport,{...prepared,events:undefined,initial:undefined,repeated:undefined,planId:m.planId,startFrame:m.startFrame,playing:true,countInFrames:countIn,click,recording:!!m.recordToken,recordToken:m.recordToken});x.waswan_daw_transport_guard(1);result={startFrame:m.startFrame};
-     }else if(m.t==='daw-stop'){this.daw?.stop();this.dawPending=null;audioTransport.playing=false;audioTransport.recording=false;audioTransport.planId=null;x.waswan_daw_transport_guard(0);x.waswan_daw_stop(m.hard?1:0);result={stopped:true,frame:currentFrame};}
+     }else if(m.t==='daw-stop'){this.dawPreview=null;audioTransport.previewSession=null;this.daw?.stop();this.dawPending=null;audioTransport.playing=false;audioTransport.recording=false;audioTransport.planId=null;x.waswan_daw_transport_guard(0);x.waswan_daw_stop(m.hard?1:0);result={stopped:true,frame:currentFrame};}
      else throw Error('Unknown DAW command');
      this.port.postMessage({t:'daw-reply',request:m.request,ok:true,result});
     }catch(error){if(['daw-plan-begin','daw-plan-append','daw-start'].includes(m.t))this.dawPending=null;this.port.postMessage({t:'daw-reply',request:m.request,ok:false,error:error.message});}
     return;
    }
-   if((this.daw?.active||this.dawLiveSession)&&m.t==='btn'&&[16,17].includes(m.b)){if(m.down)this.port.postMessage({t:'daw-notice',message:'Stop DAW and disable its inputs before using the Legacy transport'});return;}
+   if((this.daw?.active||this.dawLiveSession||this.dawPreview)&&m.t==='btn'&&[16,17].includes(m.b)){if(m.down)this.port.postMessage({t:'daw-notice',message:'Stop DAW and disable its inputs before using the Legacy transport'});return;}
    if(m.t==='studio-sequence-start'){
     try{
-     if(this.daw?.active||this.dawLiveSession)throw Error('Stop DAW and disable its inputs before starting Studio');
+     if(this.daw?.active||this.dawLiveSession||this.dawPreview)throw Error('Stop DAW and disable its inputs before starting Studio');
      if(!this.engine?.ex.waswan_studio_note)throw Error('Rebuild the simulator to enable Studio MIDI playback');
      this.sequence??=new StudioClock((part,note,velocity)=>{
       const applied=!!this.engine?.ex.waswan_studio_note(part,note,velocity);
@@ -90,7 +97,7 @@ class MonitoredOberVave extends OberVave {
    }
    if(m.t==='studio-sequence-stop'){this.sequence?.stop();return;}
    if(m.t==='studio-context-apply'){
-    try{if(this.sequence?.active||this.daw?.active||this.dawLiveSession)throw Error('Stop DAW, disable its inputs and stop Studio MIDI before applying tones');this.engine.restoreStudioContext(m.context,m.token);this.port.postMessage({t:'studio-context-applied',request:m.request,ok:true});}
+    try{if(this.sequence?.active||this.daw?.active||this.dawLiveSession||this.dawPreview)throw Error('Stop DAW, disable its inputs and stop Studio MIDI before applying tones');this.engine.restoreStudioContext(m.context,m.token);this.port.postMessage({t:'studio-context-applied',request:m.request,ok:true});}
     catch(error){this.port.postMessage({t:'studio-context-applied',request:m.request,ok:false,error:error.message});}return;
    }
    if(m.t==='studio-context'){
@@ -110,7 +117,7 @@ class MonitoredOberVave extends OberVave {
     else if(m.action==='start'){if(this.session)this.publish(true,'replaced');this.session=m.session;this.enabled=true;this.reset();}
     else if(m.action==='enable'){if(this.session)this.publish(true,'disabled');this.enabled=!!m.enabled;this.reset();}
    }else {
-    if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');this.daw?.stop('instrument-reboot');this.dawProject=null;this.dawObserved=null;this.dawPending=null;this.dawLiveSession=null;audioTransport.playing=false;audioTransport.recording=false;audioTransport.planId=null;audioTransport.liveSession=null;if(this.session)this.publish(true,'reboot');}
+    if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');this.daw?.stop('instrument-reboot');this.dawProject=null;this.dawObserved=null;this.dawPending=null;this.dawLiveSession=null;this.dawPreview=null;audioTransport.previewSession=null;audioTransport.playing=false;audioTransport.recording=false;audioTransport.planId=null;audioTransport.liveSession=null;if(this.session)this.publish(true,'reboot');}
     if(this.studioEvents&&COMMANDS.has(m.t))this.studioEvents.postMessage({t:'command',frame:currentFrame,command:m});
     original(e);
     if(m.t==='reboot'&&this.dawOutputs)this.dawParts=this.engine?.ex.waswan_daw_taps?.(1)||0;

@@ -37,7 +37,8 @@ Uma hipótese que falha só justifica outra tentativa com evidência ou abordage
 | Fase 2 | Concluída como domínio/persistência: [fechamento](wave-2.md), `feat/daw-wave-2-project`, fechamento `29efef6` |
 | Fase 3 | Concluída como fatia instrumental: [fechamento](wave-3.md), `feat/daw-wave-3-instruments`, `b61eea6` |
 | Fase 4 | Concluída como Arrangement/transporte: [fechamento](wave-4.md), `feat/daw-wave-4-arrangement`, `aa6f21f` |
-| Fase 5 | Concluída como gravação/Monitor: [fechamento](wave-5.md), `feat/daw-wave-5-recording`, pai `aa6f21f` |
+| Fase 5 | Concluída como gravação/Monitor: [fechamento](wave-5.md), `feat/daw-wave-5-recording`, fechamento `b6fbc2f` |
+| Fase 6 | Concluída como editores/importação: [fechamento](wave-6.md), `feat/daw-wave-6-editors-import`, pai `b6fbc2f` |
 
 Decisões de trabalho iniciais: host em documento com posse exclusiva por Web Locks; fechar o host interrompe áudio, sem failover automático ou promessa de continuidade. Carga inicial de prova: cinco minutos, três trilhas instrumentais e cinco de áudio; não representa limite suportado certificado. Stems propostos pós-FX/fader/pan da trilha e pré-Master, para validar na fase de exportação. Caso uma dessas escolhas não sustente os requisitos, trazer evidência ao usuário.
 

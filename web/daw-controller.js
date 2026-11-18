@@ -5,7 +5,7 @@ const fail=(code,message)=>{const error=Error(message);error.code=code;throw err
 const find=(items,id,label)=>items.find(item=>item.id===id)||fail('NOT_FOUND',`${label} not found`);
 const fields=(target,changes,allowed)=>{for(const key of Object.keys(changes))if(!allowed.includes(key))fail('INVALID_COMMAND',`Cannot change ${key}`);Object.assign(target,clone(changes));};
 function apply(p,type,data){
-  if(type==='batch'){if(!Array.isArray(data.commands)||data.commands.length>512)fail('INVALID_COMMAND','Invalid transaction');for(const c of data.commands){if(c.type==='batch')fail('INVALID_COMMAND','Nested transactions are not supported');apply(p,c.type,c.payload);}return;}
+  if(type==='batch'){if(!Array.isArray(data.commands)||data.commands.length>2048)fail('INVALID_COMMAND','Invalid transaction');for(const c of data.commands){if(c.type==='batch')fail('INVALID_COMMAND','Nested transactions are not supported');apply(p,c.type,c.payload);}return;}
   if(type==='project.update')return fields(p,data,['name','bpm','meter','length','transport']);
   if(type==='track.create'){const t={...makeTrack(data.type,data.name),...clone(data)};p.tracks.push(t);return;}
   if(type==='track.update')return fields(find(p.tracks,data.id,'Track'),data.changes,['name','icon','color','volume','pan','mute','solo','monitor','arm','instrument','fx']);
@@ -19,7 +19,7 @@ function apply(p,type,data){
   if(type==='asset.add'){p.assets.push(clone(data));return;}
   if(type==='asset.remove'){find(p.assets,data.id,'Source');if(p.clips.some(c=>c.assetId===data.id))fail('SOURCE_IN_USE','Audio source is still used by a clip');p.assets=p.assets.filter(a=>a.id!==data.id);return;}
   if(type==='clip.add'){p.clips.push(clone(data));return;}
-  if(type==='clip.update')return fields(find(p.clips,data.id,'Clip'),data.changes,['name','trackId','position','offset','frames','gain','pan','fadeIn','fadeOut','length','loopLength','loop','notes','midiEvents']);
+  if(type==='clip.update')return fields(find(p.clips,data.id,'Clip'),data.changes,['name','trackId','position','offset','frames','gain','pan','fadeIn','fadeOut','length','loopLength','loop','notes','midiEvents','offsetTicks','envelope']);
   if(type==='clip.remove'){find(p.clips,data.id,'Clip');p.clips=p.clips.filter(c=>c.id!==data.id);return;}
   if(type==='clip.duplicate'){const c=find(p.clips,data.id,'Clip');p.clips.push({...clone(c),id:uuid(),position:clone(data.position||c.position)});return;}
   if(type==='note.add'){const c=find(p.clips,data.clipId,'Clip');if(c.type!=='midi')fail('INVALID_COMMAND','Select a MIDI clip');c.notes.push(clone(data.note));return;}

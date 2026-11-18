@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {RATE,PPQ,clipSeconds,clipDuration,validateProject} from './daw-project.js';
+import {midiWindow} from './daw-clip-window.js';
 import {prepareSchedule,timelineFrame,eventPriority} from './daw-transport.js';
 // Shared only inside one AudioWorkletGlobalScope. The main-thread import has its
 // own copy and cannot change the audio gate through UI state.
@@ -25,16 +26,9 @@ export function compileProject(project,slots=assignSlots(project)){
     // require restarting clocks, sources or the instrument.
     if(clip.type==='audio'){audio.push({clip,track,start,seconds});continue;}
     const part=slots.get(track.id);if(part===undefined&&(clip.notes.length||clip.midiEvents?.length))throw Error('Choose an instrument for '+track.name);if(part===undefined||!clip.notes.length&&!clip.midiEvents?.length)continue;
-    const count=clip.loop?Math.ceil(clip.length/clip.loopLength):1;
-    for(let repeat=0;repeat<count;repeat++){
-     for(const n of clip.notes){
-      const tick=repeat*clip.loopLength+n.start;if(tick>=clip.length)continue;
-      const on=Math.round((start+tick*60/(project.bpm*PPQ))*RATE),off=Math.round((start+(tick+Math.min(n.duration,clip.length-tick))*60/(project.bpm*PPQ))*RATE);
-      events.push({frame:on,part,note:n.pitch,velocity:n.velocity},{frame:Math.max(on+1,off),part,note:n.pitch,velocity:0});
-      if(events.length>131072)throw Error('Playback event budget exceeded; reduce clip repetitions');
-     }
-     for(const event of clip.midiEvents||[]){const tick=repeat*clip.loopLength+event.tick;if(tick>=clip.length)continue;events.push({frame:Math.round((start+tick*60/(project.bpm*PPQ))*RATE),part,type:event.type,value:event.value});if(events.length>131072)throw Error('Playback event budget exceeded; reduce clip repetitions');}
-    }
+    const view=midiWindow(clip,131072-events.length);
+    for(const n of view.notes){const on=Math.round((start+n.start*60/(project.bpm*PPQ))*RATE),off=Math.round((start+(n.start+n.duration)*60/(project.bpm*PPQ))*RATE);events.push({frame:on,part,note:n.pitch,velocity:n.velocity},{frame:Math.max(on+1,off),part,note:n.pitch,velocity:0});}
+    for(const e of view.events)events.push({frame:Math.round((start+e.tick*60/(project.bpm*PPQ))*RATE),part,type:e.type,value:e.value});
   }
   const length=Math.ceil(duration*RATE);if(length<1||length>RATE*1200)throw Error('Playback supports at most 20 minutes');
   events.sort((a,b)=>a.frame-b.frame||eventPriority(a)-eventPriority(b));

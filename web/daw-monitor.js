@@ -5,7 +5,7 @@ const samePatch=(a,b)=>a?.length===b?.length&&a.every((v,i)=>v===b[i]);
 export class DawMonitor {
   constructor(workspace){
     this.w=workspace;this.enabled=false;this.ready=false;this.channel=null;
-    this.router=new DawMidiRouter({controller:workspace.bridge.midi,target:()=>this.target(),command:(type,data)=>this.command(type,data),protect:()=>workspace.player.playing||workspace.player.starting,onRelease:()=>workspace.recorder?.inputReleased(),onChange:()=>this.inputChanged()});workspace.bridge.midi.dawRouter=this.router;
+    this.router=new DawMidiRouter({controller:workspace.bridge.midi,target:()=>this.target(),command:(type,data)=>this.command(type,data),protect:()=>workspace.player.playing||workspace.player.starting||workspace.audition?.busy,onRelease:()=>workspace.recorder?.inputReleased(),onChange:()=>this.inputChanged()});workspace.bridge.midi.dawRouter=this.router;
   }
   track(){const recording=this.w.recorder;return recording?.busy&&recording.track?.type==='midi'?this.w.snapshot.tracks.find(t=>t.id===recording.track.id):this.w.selectedTrack();}
   allowed(track){return track?.monitor==='in'||track?.monitor==='auto'&&(!this.w.player.playing||this.w.recorder?.busy&&this.w.recorder?.track?.id===track.id);}
@@ -23,7 +23,7 @@ export class DawMonitor {
   }
   async refresh(){
     if(!this.enabled)return;if(this.preparing){this.pending=true;return;}
-    const project=this.w.controller.snapshot();this.updateMix();if(this.w.player.playing||this.w.player.starting)return;
+    const project=this.w.controller.snapshot();this.updateMix();if(this.w.player.playing||this.w.player.starting||this.w.audition?.busy)return;
     let needed;try{needed=this.needsPreparation(project);}catch(error){this.ready=false;this.w.error(error);return;}if(!needed){this.ready=true;return;}
     this.preparing=true;this.ready=false;
     try{

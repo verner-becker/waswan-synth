@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {RATE,PPQ,LIMITS,emptyProject,makeTrack,validateProject,uuid} from './daw-project.js';
 import {readProject as readStudio,wavHeader} from './studio-format.js';
-export const MAGIC='WASWAN-DAW-3\n';
+export const MAGIC='WASWAN-DAW-4\n';
+export const LEGACY_DAW_MAGIC='WASWAN-DAW-3\n';
+function migrateDaw3(project){if(project?.version!==3)throw Error('DAW signature/version mismatch');const p=structuredClone(project);p.version=4;for(const c of p.clips||[]){if(c.type==='midi'&&c.loopLength>c.length)throw Error('Invalid DAW v3 MIDI body length');delete c.offsetTicks;delete c.envelope;if(c.position){delete c.position.frameOffset;delete c.position.subTick;}}return validateProject(p);}
 const MAX_FILE=LIMITS.json+LIMITS.totalFrames*4+LIMITS.assets*44+MAGIC.length+4;
 const immutableChecksums=new WeakMap();
 const table=Uint32Array.from({length:256},(_,i)=>{for(let k=0;k<8;k++)i=(i&1)?0xedb88320^(i>>>1):i>>>1;return i>>>0;});
@@ -25,10 +27,10 @@ async function inspect(blob,copy=false){
 export const sourceChecksum=async blob=>(await inspect(blob)).crc;
 export async function archiveHeader(file){
   const prefix=MAGIC.length+4;
-  if(file.size<prefix||await file.slice(0,MAGIC.length).text()!==MAGIC)throw Error('Invalid archive signature');
+  const signature=await file.slice(0,MAGIC.length).text();if(file.size<prefix||![MAGIC,LEGACY_DAW_MAGIC].includes(signature))throw Error('Invalid archive signature');
   const n=new DataView(await file.slice(MAGIC.length,prefix).arrayBuffer()).getUint32(0,true);
   if(n<1||n>LIMITS.json||prefix+n>file.size)throw Error('Invalid project metadata length');
-  const envelope=JSON.parse(await file.slice(prefix,prefix+n).text()),p=validateProject(envelope.project);
+  const envelope=JSON.parse(await file.slice(prefix,prefix+n).text());envelope.project=signature===LEGACY_DAW_MAGIC?migrateDaw3(envelope.project):validateProject(envelope.project);const p=envelope.project;
   if(!Array.isArray(envelope.checksums)||envelope.checksums.length!==p.assets.length)throw Error('Invalid source integrity table');
   for(let i=0;i<p.assets.length;i++){const check=envelope.checksums[i],meta=p.assets[i];if(check?.id!==meta.id||check.bytes!==meta.bytes||!Number.isSafeInteger(check.crc32)||check.crc32<0||check.crc32>0xffffffff)throw Error('Invalid source integrity table');}
   return {envelope,header:file.slice(0,prefix+n)};
@@ -47,7 +49,7 @@ export async function projectBlob(project,assets){
 }
 export async function readProject(file,{copyAssets=true,assetStore}={}){
   if(!(file instanceof Blob)||file.size<20||file.size>MAX_FILE)throw Error('Project file exceeds supported limits');
-  if(await file.slice(0,MAGIC.length).text()!==MAGIC)return migrateStudio(await readStudio(file),assetStore);
+  const signature=await file.slice(0,MAGIC.length).text();if(![MAGIC,LEGACY_DAW_MAGIC].includes(signature))return migrateStudio(await readStudio(file),assetStore);
   const {envelope,header}=await archiveHeader(file),p=envelope.project;
   let at=header.size;const assets=new Map();
   for(let i=0;i<p.assets.length;i++){
@@ -62,10 +64,10 @@ export async function readProject(file,{copyAssets=true,assetStore}={}){
     assets.set(meta.id,stable);at+=meta.bytes;
   }
   if(at!==file.size)throw Error('Unexpected project data');
-  return {project:p,assets,warnings:[],dispose:assetStore?()=>assetStore.dispose():async()=>{}};
+  return {project:p,assets,warnings:signature===LEGACY_DAW_MAGIC?['DAW v3 migrated to v4; use Save As to keep the original file.']:[],dispose:assetStore?()=>assetStore.dispose():async()=>{}};
 }
 export async function fileToken(file){
-  if(await file.slice(0,MAGIC.length).text()===MAGIC){
+  if([MAGIC,LEGACY_DAW_MAGIC].includes(await file.slice(0,MAGIC.length).text())){
     const prefix=MAGIC.length+4;if(file.size<prefix)throw Error('Truncated project');
     const n=new DataView(await file.slice(MAGIC.length,prefix).arrayBuffer()).getUint32(0,true);
     if(n<1||n>LIMITS.json||prefix+n>file.size)throw Error('Invalid project metadata');
@@ -76,7 +78,7 @@ export async function fileToken(file){
 }
 export async function migrateStudio(take,assetStore){
   const old=take.project,s=old.sequence,p=emptyProject(),assets=new Map(),parts=[];
-  p.name=old.name||'Imported Studio project';p.bpm=s?.bpm||120;p.meter=s?.meter||[4,4];p.length=s?.length||Math.max(PPQ*16,Math.ceil(old.frames/RATE*p.bpm*PPQ/60));
+  p.name=old.name||'Imported Studio project';p.bpm=s?.bpm||120;p.meter=s?.meter||[4,4];p.length=s?.length||Math.max(PPQ*16,Math.ceil(old.frames/RATE*p.bpm*PPQ/60));p.transport={loop:!!s?.loop,start:0,end:p.length};
   const context=old.sequenceContext||old.context;
   for(let part=0;part<4;part++){
     const t=makeTrack('midi','Part '+'ABCD'[part]);t.id='studio-part-'+part;

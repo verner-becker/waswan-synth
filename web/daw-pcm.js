@@ -13,7 +13,7 @@ export class PcmRenderer {
   prepare(planId,clips){
     if(typeof planId!=='string'||!/^[\w-]{1,80}$/.test(planId)||!Array.isArray(clips)||clips.length>512)throw Error('Invalid audio plan');
     for(const c of clips){const a=this.assets.get(c.assetId),duration=c.end-c.start;
-      if(!a||!integer(c.output,0,31)||!integer(c.start,0,RATE*1200)||!integer(c.end,c.start+1,RATE*1200)||!integer(c.offset,0,a.left.length-duration)||!Number.isFinite(c.gain)||c.gain<0||c.gain>4||!Number.isFinite(c.pan)||Math.abs(c.pan)>1||!integer(c.fadeIn,0,duration)||!integer(c.fadeOut,0,duration))throw Error('Invalid audio clip plan');
+      if(!a||!integer(c.output,0,31)||!integer(c.start,0,RATE*1200)||!integer(c.end,c.start+1,RATE*1200)||!integer(c.offset,0,a.left.length-duration)||!Number.isFinite(c.gain)||c.gain<0||c.gain>4||!Number.isFinite(c.pan)||Math.abs(c.pan)>1||!integer(c.fadeIn,0,c.envelope?.frames??duration)||!integer(c.fadeOut,0,c.envelope?.frames??duration)||c.envelope!=null&&(!integer(c.envelope.offset,-RATE*1200,RATE*1200)||!integer(c.envelope.frames,1,RATE*1200)))throw Error('Invalid audio clip plan');
     }
     this.clips=clips;this.planId=planId;
   }
@@ -29,7 +29,7 @@ export class PcmRenderer {
       const asset=this.assets.get(c.assetId),left=c.pan>0?1-c.pan:1,right=c.pan<0?1+c.pan:1;
       for(let i=0;i<n;i++){
         const at=this.positions[i];if(at<c.start||at>=c.end)continue;const relative=at-c.start,index=c.offset+relative;
-        const fade=(c.fadeIn?Math.min(1,relative/c.fadeIn):1)*(c.fadeOut?Math.min(1,(c.end-at)/c.fadeOut):1),gain=c.gain*fade;
+        const envelopeAt=(c.envelope?.offset||0)+relative,envelopeFrames=c.envelope?.frames||c.end-c.start,fade=(c.fadeIn?Math.max(0,Math.min(1,envelopeAt/c.fadeIn)):1)*(c.fadeOut?Math.max(0,Math.min(1,(envelopeFrames-envelopeAt)/c.fadeOut)):1),gain=c.gain*fade;
         out[0][i]+=asset.left[index]*gain*left;out[1][i]+=asset.right[index]*gain*right;
       }
     }

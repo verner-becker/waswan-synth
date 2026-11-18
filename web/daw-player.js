@@ -108,7 +108,7 @@ export class DawPlayer {
       this.slots=slots;this.boundPatches=new Map([...slots].map(([id])=>[id,[...project.tracks.find(t=>t.id===id).instrument.patch]]));
       if(this.generation!==token)throw Error('Playback preparation cancelled');
       await this.configureTracks(project,slots,planId);
-      await this.mediaRpc.request('prepare',{planId,clips:data.audio.map(({clip,track,start,seconds})=>({assetId:clip.assetId,output:project.tracks.findIndex(t=>t.id===track.id),start:Math.round(start*RATE),end:Math.round(start*RATE)+clip.frames,offset:clip.offset,gain:clip.gain,pan:clip.pan||0,fadeIn:clip.fadeIn,fadeOut:clip.fadeOut}))});
+      await this.mediaRpc.request('prepare',{planId,clips:data.audio.map(({clip,track,start,seconds})=>({assetId:clip.assetId,output:project.tracks.findIndex(t=>t.id===track.id),start:Math.round(start*RATE),end:Math.round(start*RATE)+clip.frames,offset:clip.offset,gain:clip.gain,pan:clip.pan||0,fadeIn:clip.fadeIn,fadeOut:clip.fadeOut,envelope:clip.envelope}))});
       await rpc.request('daw-plan-begin',{projectId:project.id,revision,planId,count:events.length,data:schedule});
       for(let offset=0;offset<events.length;offset+=1024){if(this.generation!==token)throw Error('Playback preparation cancelled');await rpc.request('daw-plan-append',{planId,offset,events:events.slice(offset,offset+1024)});}
       if(this.generation!==token)throw Error('Playback preparation cancelled');

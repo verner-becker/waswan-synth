@@ -9,7 +9,7 @@ const id=s=>typeof s==='string'&&/^[\w-]{1,80}$/.test(s);
 const text=(s,n)=>typeof s==='string'&&s.length>0&&s.length<=n;
 const assert=(ok,message)=>{if(!ok)throw Error(message);};
 const unique=(items,label)=>{const ids=new Set();for(const item of items){assert(id(item?.id)&&!ids.has(item.id),`Invalid or duplicate ${label} ID`);ids.add(item.id);}return ids;};
-export function emptyProject(){return {format:'waswan-daw-project',version:3,id:uuid(),name:'Untitled',sampleRate:RATE,ppq:PPQ,bpm:120,meter:[4,4],length:PPQ*16,transport:{loop:false,start:0,end:PPQ*16},tracks:[],clips:[],assets:[],markers:[],automation:[],master:{volume:1,fx:[]}};}
+export function emptyProject(){return {format:'waswan-daw-project',version:4,id:uuid(),name:'Untitled',sampleRate:RATE,ppq:PPQ,bpm:120,meter:[4,4],length:PPQ*16,transport:{loop:false,start:0,end:PPQ*16},tracks:[],clips:[],assets:[],markers:[],automation:[],master:{volume:1,fx:[]}};}
 export function validateFx(effects){
   assert(Array.isArray(effects)&&effects.length<=16,'FX chain limit: 16');unique(effects,'effect');
   for(const e of effects){
@@ -18,7 +18,7 @@ export function validateFx(effects){
   }
 }
 export function validateProject(p){
-  assert(p?.format==='waswan-daw-project'&&p.version===3&&id(p.id)&&text(p.name,120)&&p.sampleRate===RATE&&p.ppq===PPQ,'Invalid DAW project');
+  assert(p?.format==='waswan-daw-project'&&p.version===4&&id(p.id)&&text(p.name,120)&&p.sampleRate===RATE&&p.ppq===PPQ,'Invalid DAW project');
   assert(number(p.bpm,40,240)&&Array.isArray(p.meter)&&p.meter.length===2&&int(p.meter[0],1,12)&&[4,8].includes(p.meter[1])&&int(p.length,1,PPQ*8192),'Invalid project time');
   if(p.transport!==undefined)assert(typeof p.transport?.loop==='boolean'&&int(p.transport.start,0,PPQ*8192-1)&&int(p.transport.end,p.transport.start+1,PPQ*8192),'Invalid transport interval');
   assert(Array.isArray(p.tracks)&&p.tracks.length<=LIMITS.tracks&&Array.isArray(p.assets)&&p.assets.length<=LIMITS.assets&&Array.isArray(p.clips)&&p.clips.length<=LIMITS.clips,'Project capacity exceeded');
@@ -36,12 +36,14 @@ export function validateProject(p){
   for(const c of p.clips){
     const track=p.tracks.find(t=>t.id===c.trackId);
     assert(tracks.has(c.trackId)&&c.type===track.type&&text(c.name,120)&&['ticks','seconds'].includes(c.position?.unit)&&number(c.position.value,0,c.position.unit==='ticks'?PPQ*8192:1200),'Invalid clip position or track');
+    if(c.position.subTick!==undefined)assert(c.type==='audio'&&c.position.unit==='ticks'&&number(c.position.subTick,-.500001,.500001)&&c.position.value+c.position.subTick>=0,'Invalid sub-tick audio anchor');
     if(c.position.unit==='ticks')assert(Number.isSafeInteger(c.position.value),'Musical clip positions use whole ticks');
     if(c.type==='audio'){
       const a=p.assets.find(a=>a.id===c.assetId);
-      assert(assets.has(c.assetId)&&int(c.offset,0,a.frames-1)&&int(c.frames,1,a.frames-c.offset)&&number(c.gain,0,4)&&number(c.pan??0,-1,1)&&int(c.fadeIn,0,c.frames)&&int(c.fadeOut,0,c.frames),'Invalid audio clip');
+      assert(assets.has(c.assetId)&&int(c.offset,0,a.frames-1)&&int(c.frames,1,a.frames-c.offset)&&number(c.gain,0,4)&&number(c.pan??0,-1,1)&&int(c.fadeIn,0,c.envelope?.frames??c.frames)&&int(c.fadeOut,0,c.envelope?.frames??c.frames),'Invalid audio clip');
+      if(c.envelope!=null)assert(int(c.envelope?.offset,-LIMITS.sourceFrames,LIMITS.sourceFrames)&&int(c.envelope?.frames,1,LIMITS.sourceFrames),'Invalid audio envelope');
     }else{
-      assert(int(c.length,1,PPQ*8192)&&int(c.loopLength,1,c.length)&&typeof c.loop==='boolean'&&Array.isArray(c.notes),'Invalid MIDI clip');unique(c.notes,'note');
+      assert(int(c.length,1,PPQ*8192)&&int(c.loopLength,1,PPQ*8192)&&typeof c.loop==='boolean'&&Array.isArray(c.notes),'Invalid MIDI clip');if(c.offsetTicks!==undefined)assert(int(c.offsetTicks,0,PPQ*8192),'Invalid MIDI source offset');unique(c.notes,'note');
       notes+=c.notes.length;
       for(const n of c.notes)assert(int(n.pitch,0,127)&&int(n.velocity,1,127)&&int(n.start,0,c.loopLength-1)&&int(n.duration,1,c.loopLength-n.start),'Invalid MIDI note');
       for(const n of c.notes)if(n.channel!==undefined)assert(int(n.channel,0,15),'Invalid MIDI note channel');
@@ -67,5 +69,5 @@ export function validateProject(p){
 export function makeTrack(type,name=type==='midi'?'Instrument':'Audio'){
   return {id:uuid(),type,name,icon:type==='midi'?'keyboard':'audio',color:type==='midi'?'#8b6ce0':'#3699bb',volume:1,pan:0,mute:false,solo:false,arm:false,monitor:'auto',instrument:null,fx:[]};
 }
-export const clipSeconds=(clip,bpm)=>clip.position.unit==='seconds'?clip.position.value:clip.position.value*60/(bpm*PPQ);
+export const clipSeconds=(clip,bpm)=>clip.position.unit==='seconds'?clip.position.value:(clip.position.value+(clip.position.subTick||0))*60/(bpm*PPQ);
 export const clipDuration=(clip,bpm)=>clip.type==='audio'?clip.frames/RATE:clip.length*60/(bpm*PPQ);

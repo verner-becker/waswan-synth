@@ -21,9 +21,12 @@ for(const version of [1,2]){
  if(version===1){old.sequence.clips=[{id:'empty name clip',name:'',part:2,start:0,length:15360}];old.sequence.notes[0].clip='empty name clip';}
  if(version===2){old.assets[0].name='';}
  const migrated=await readProject(studioBlob(old,audio,assets));
- assert.equal(migrated.project.version,3);assert.deepEqual(migrated.project.legacy.studio,old);assert(migrated.warnings.length);
+ assert.equal(migrated.project.version,4);assert.deepEqual(migrated.project.legacy.studio,old);assert(migrated.warnings.length);
  const note=migrated.project.clips.find(c=>c.type==='midi').notes[0];assert.equal(note.pitch,60);assert.equal(note.velocity,91);assert.equal(note.start,120);
  const migratedAgain=await readProject(await projectBlob(migrated.project,migrated.assets));assert.deepEqual(migratedAgain.project,migrated.project);
  for(const [id,bytes] of migrated.assets)assert.deepEqual(await migratedAgain.assets.get(id).arrayBuffer(),await bytes.arrayBuffer());
 }
 console.log('PASS DAW archive: byte-identical sources, checksums, truncation, extra data, missing assets, v1/v2 migration and source IDs without aliasing');
+
+// New window/envelope semantics must be rejected by old-signature readers.
+const oldDaw=emptyProject();oldDaw.version=3;const envelope=new TextEncoder().encode(JSON.stringify({writeId:'legacy-v3',project:oldDaw,checksums:[]})),size=new ArrayBuffer(4);new DataView(size).setUint32(0,envelope.length,true);const legacy=await readProject(new Blob(['WASWAN-DAW-3\n',size,envelope]));assert.equal(legacy.project.version,4);assert(legacy.warnings.some(w=>w.includes('v3')));assert.equal(await(await projectBlob(legacy.project,new Map())).slice(0,13).text(),'WASWAN-DAW-4\n');
