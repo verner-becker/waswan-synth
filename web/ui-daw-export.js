@@ -69,6 +69,7 @@ export class DawExportPanel {
     this.progress.hidden=true;
     this.cancel.textContent='Cancel audio export';
     this.describe();
+    this.dialog.ownerDocument.defaultView.focus();
     this.dialog.showModal();
   }
   abort(){

@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import assert from 'node:assert/strict';
+import {ContextMidiProfiles,CONTEXT_MIDI_KEY} from '../web/daw-context-midi.js';
+
+const data=new Map(),storage={getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)};
+const keyboard={id:'smk-A',name:'SMK-37 Pro',manufacturer:'M-VAVE'};
+const renewed={...keyboard,id:'smk-B'},duplicate={...keyboard,id:'smk-C'};
+const other={id:'minilab',name:'MiniLab 3',manufacturer:'Arturia'};
+let value=.5,scope='track-1',triggers=0;
+const seen=[];
+const dispatch=target=>({scope,value,trigger:target.startsWith('transport:'),apply:next=>{
+  if(next===undefined){triggers++;return;}
+  value=next;seen.push([target,next]);return value;
+}});
+const profile=new ContextMidiProfiles(storage,dispatch);
+profile.configure({enabled:true});
+profile.selectDevice(keyboard,[keyboard,other]);
+profile.create('My SMK');
+profile.learn('synth:0','absolute');
+const cc=(n,v,ch=0)=>profile.handle([176|ch,n,v]);
+assert.equal(profile.handle([144,60,100]),false);
+assert.equal(cc(123,127),false);
+assert.equal(cc(64,127),false,'Sustain remains available to the musical input during learning');
+assert(cc(48,10));assert.deepEqual(seen,[]);
+assert(cc(48,20));assert.deepEqual(seen,[],'Initial value away from cutoff must not jump');
+assert(cc(48,90));assert.deepEqual(seen.shift(),['synth:0',90/127]);
+profile.setContext('mixer',{automatic:true});
+profile.learn('track:volume','absolute');assert(cc(48,10));
+value=.75;assert(cc(48,40));assert.equal(seen.length,0);
+assert(cc(48,110));assert.deepEqual(seen.shift(),['track:volume',110/127]);
+scope='track-2';value=.2;assert(cc(48,107));assert.equal(seen.length,0,'Changing tracks requires a new pickup');
+assert(cc(48,20));assert.equal(seen.at(-1)[0],'track:volume');
+profile.setContext('transport',{automatic:true});
+profile.learn('transport:play','absolute');assert(cc(48,0));
+assert(cc(48,127));assert(cc(48,127));assert(cc(48,0));assert(cc(48,64));assert.equal(triggers,2);
+const source=profile.active.id;
+profile.selectDevice(other,[keyboard,other]);assert.equal(profile.active,null);
+profile.create('Other keyboard',source);assert.deepEqual(profile.active.bindings,profile.profiles[0].bindings);
+profile.remove('transport:play');assert.equal(profile.profiles[0].bindings.transport.length,1);
+const reload=new ContextMidiProfiles(storage,dispatch);
+assert(data.has(CONTEXT_MIDI_KEY));assert(reload.enabled);
+reload.selectDevice(renewed,[renewed,other]);assert.equal(reload.active?.id,source,'Unique identity can recover after USB port ID changes');
+reload.selectDevice(renewed,[renewed,duplicate,other]);assert.equal(reload.active,null,'Ambiguous device requires association');
+reload.associate(source);assert.equal(reload.active?.device.id,'smk-B');
+reload.setContext('mixer');
+reload.configure({follow:false});
+reload.setContext('performance',{automatic:true});
+assert.equal(reload.context,'mixer','Pinned context lasts through focus changes');
+reload.configure({enabled:false});
+assert.equal(reload.handle([176,48,100]),false,'Disabled profile leaves the existing MIDI route in charge');
+console.log('PASS controller profiles: context reuse, soft takeover, clone, replug, ambiguity, association and transport edge');
+
+const {MidiInputController}=await import('../.local/www/simulator/midi.js');
+const input=(identity,open)=>({...identity,state:'connected',open,async close(){}});
+const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
+const makeMidi=ports=>{
+  const midi=new MidiInputController({navigator:{},secureContext:true,send:()=>{},isRunning:()=>false});
+  midi.access={inputs:new Map(ports.map(p=>[p.id,p]))};
+  midi.contextProfiles=new ContextMidiProfiles(storage,dispatch);
+  midi.contextProfiles.configure({enabled:true});
+  return midi;
+};
+let wantedCalls=0,otherCalls=0;
+const failing=input(renewed,async()=>{wantedCalls++;throw Error('Port busy');});
+const only=makeMidi([failing]);
+only.refresh();await tick();only.refresh();await tick();
+assert.equal(wantedCalls,1,'A known port with an open error is tried only once per connected topology');
+const known=input(renewed,async()=>{}),backup=input(other,async()=>{otherCalls++;});
+const both=makeMidi([known,backup]);
+await both.select(known.id);
+known.state='disconnected';both.refresh();await tick();
+assert.equal(both.input,null);assert.equal(otherCalls,0,'Disconnect does not switch to another familiar controller');
+known.state='connected';both.refresh();await tick();
+assert.equal(both.input,known);
+console.log('PASS contextual MIDI input lifecycle: error has no retry loop, reconnect keeps controller identity');

@@ -1,0 +1,19 @@
+# DAW fase 8 · janelas, foco e perfis MIDI
+
+A branch `feat/daw-wave-8-windows-midi` parte do fechamento da fase 7 em `63c2cdab7ee7185d10c040c6f77a57f2c372593f`. Entrega os painéis destacados, os atalhos da DAW e os perfis locais por dispositivo e contexto.
+
+## Comportamento
+
+**View panels** permite mostrar, destacar e recuperar Mixer, Clip editor, Effects e Automation. Cada janela move o painel vivo para uma janela Chrome com o mesmo projeto, transporte e histórico. Fechar o popup ou usar **Return panel to DAW** devolve o painel ao layout original. Reset Layout reintegra os painéis e volta aos tamanhos padrão. O navegador conserva tamanho e posição quando disponíveis. O host cria o AudioContext e mantém a posse por Web Locks. Fechar o host encerra a sessão de áudio e seus painéis.
+
+Espaço, Ctrl/Cmd+S, Undo/Redo, Delete, L, M e ? funcionam na DAW e nos painéis destacados. Cada editor conserva suas teclas próprias. Campos editáveis recebem suas teclas sem disparar atalhos globais. Stop pode encerrar a gravação pelo popup. O teclado de computador do Synth fica no seu próprio contexto. A perda de foco libera teclas virtuais da página. Notas MIDI e sustain continuam sendo processados enquanto a janela dona do áudio estiver oculta. O fechamento do Piano Roll libera a pré-escuta pela sua própria sessão.
+
+**MIDI controller profiles**, no Browser, habilita mapas locais opcionais. Performance, Instrument e Envelope controlam parâmetros existentes do Synth pela mesma lógica de pickup no host. Mixer controla Volume/Pan da trilha selecionada e volume Master da DAW. Transport permite mapear Play/Stop, Record, Loop e Click com acionamento pela borda do botão. Aprender um controle não manda um valor musical. Sustain e Channel Mode seguem para o roteamento MIDI. O perfil pode seguir o foco ou ficar fixo. Escolher outro contexto, parte ou trilha rearma a captura do valor. Movimentos relativos são processados pelo motor ou pelo controlador de projeto, conforme o destino.
+
+Os mapas podem ser clonados para outro controlador. A identificação usa fabricante, nome e ID da porta. Um reaparecimento único com ID diferente recupera o mapa. Identidade ambígua pede associação manual e não escolhe outra porta no meio de uma tomada. Uma falha de abertura não entra em repetição. O perfil tradicional permanece disponível e não muda ao desativar os perfis contextuais. Os perfis e o layout são locais ao Chrome.
+
+## Verificação
+
+**51 suítes Node e oito suítes Chrome passaram**. Incluem o teste novo de Context MIDI e o cenário de janelas, além de posse exclusiva, gravação, monitor, edição, exportação e UI Foundation v1/v2. Evidências em `.local/validation/daw-mvp-wave-8/`. O teste Chrome abriu um Mixer real em popup durante uma gravação MIDI com sustain, simulou o host oculto e gravou as notas 74 e 75 sem panic ou novo AudioContext. Validou alteração de volume, preservação de texto enquanto chegava controle MIDI, Undo e Save pelo popup, atalho fora de campo, retorno do Piano Roll, Reset Layout sem alterar a composição, pickup de cutoff/volume, três movimentos relativos na mesma rajada e recarga do mapa com novo ID de porta. O teste Node cobre ambiguidade, clonagem e ausência de repetição com porta que falha. A verificação usou interfaces sintéticas e um seletor de arquivo de teste. Hardware, geometria de monitores físicos e diálogos nativos permanecem para validação local.
+
+O assessment somente leitura com Astra 6.2 high identificou a escuta MIDI do host oculto, a exclusão de CC64 do Learn contextual, o encerramento da pré-escuta, tentativas de abertura de uma porta, rajadas de encoder, retorno de foco, preservação de campos em edição e atualização do medidor de Effects. Os problemas foram corrigidos no branch. A fase 9 prossegue com estabilidade, armazenamento, jornadas integradas e manual.

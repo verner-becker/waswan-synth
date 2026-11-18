@@ -40,8 +40,9 @@ Uma hipótese que falha só justifica outra tentativa com evidência ou abordage
 | Fase 4 | Concluída como Arrangement/transporte: [fechamento](wave-4.md), `feat/daw-wave-4-arrangement`, `aa6f21f` |
 | Fase 5 | Concluída como gravação/Monitor: [fechamento](wave-5.md), `feat/daw-wave-5-recording`, fechamento `b6fbc2f` |
 | Fase 6 | Concluída como editores/importação: [fechamento](wave-6.md), `feat/daw-wave-6-editors-import`, fechamento `6ea5dff` |
-| Fase 7 | Concluída com efeitos, automação, presets e exportação WAV/MP3/MIDI/stems. [Fechamento](wave-7.md), `feat/daw-wave-7-mix-export`, pai `6ea5dff` |
-| Fases 8–9 | Pendentes: janelas/foco/perfis, estabilidade prolongada, limpeza e manual |
+| Fase 7 | Concluída com efeitos, automação, presets e exportação WAV/MP3/MIDI/stems. [Fechamento](wave-7.md), `feat/daw-wave-7-mix-export`, fechamento `63c2cda` |
+| Fase 8 | Concluída com janelas, foco e perfis MIDI. [Fechamento](wave-8.md), `feat/daw-wave-8-windows-midi`, pai `63c2cda` |
+| Fase 9 | Próxima: estabilidade prolongada, limpeza e manual |
 
 Decisões de trabalho iniciais: host em documento com posse exclusiva por Web Locks; fechar o host interrompe áudio, sem failover automático ou promessa de continuidade. Carga inicial de prova: cinco minutos, três trilhas instrumentais e cinco de áudio; não representa limite suportado certificado. Stems propostos pós-FX/fader/pan da trilha e pré-Master, para validar na fase de exportação. Caso uma dessas escolhas não sustente os requisitos, trazer evidência ao usuário.
 

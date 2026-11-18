@@ -85,6 +85,10 @@ class MonitoredOberVave extends OberVave {
       const pending=this.dawPending;if(!pending||pending.planId!==m.planId||pending.builder.events.length!==pending.count)throw Error('Playback plan is incomplete');const prepared=pending.builder.finish();this.dawPending=null;
       this.daw??=new DawClock((part,note,velocity)=>!!this.engine?.ex.waswan_daw_note(part,note,velocity),()=>this.engine?.ex.waswan_daw_stop(0),state=>{audioTransport.playing=state.playing;if(state.startFrame!==undefined)audioTransport.startFrame=state.startFrame;if(!state.playing){if(state.reason!=='ended')audioTransport.exportPlan=null;audioTransport.recording=false;this.engine?.ex.waswan_daw_transport_guard?.(0);}this.port.postMessage({t:'daw-state',projectId:this.dawProject?.id,planId:this.dawPlanId,...state});},x.waswan_daw_capacity(),(part,bend,mod)=>!!this.engine?.ex.waswan_daw_expression(part,bend,mod));
       this.dawPlanId=m.planId;this.daw.startPrepared(prepared,m.startFrame);Object.assign(audioTransport,{...prepared,events:undefined,initial:undefined,repeated:undefined,planId:m.planId,startFrame:m.startFrame,playing:true,countInFrames:countIn,click,recording:!!m.recordToken,recordToken:m.recordToken,exportPlan:m.exportToken?m.planId:null,exportEnd:m.startFrame+prepared.length-prepared.fromFrame+(m.tailFrames||0)});x.waswan_daw_transport_guard(1);result={startFrame:m.startFrame};
+     }else if(m.t==='daw-click'){
+      if(typeof m.enabled!=='boolean')throw Error('Invalid metronome setting');
+      if(audioTransport.playing&&audioTransport.click)audioTransport.click.enabled=m.enabled;
+      result={enabled:m.enabled};
      }else if(m.t==='daw-stop'){this.dawPreview=null;audioTransport.previewSession=null;this.daw?.stop();this.dawPending=null;audioTransport.playing=false;audioTransport.recording=false;audioTransport.planId=null;audioTransport.exportPlan=null;x.waswan_daw_transport_guard(0);x.waswan_daw_stop(m.hard?1:0);result={stopped:true,frame:currentFrame};}
      else throw Error('Unknown DAW command');
      this.port.postMessage({t:'daw-reply',request:m.request,ok:true,result});

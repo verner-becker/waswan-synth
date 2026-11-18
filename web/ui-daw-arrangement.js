@@ -3,13 +3,14 @@ import {el,action,Panel} from './ui-primitives.js';
 import {PPQ,RATE,makeTrack,uuid} from './daw-project.js';
 import {trackIcon} from './daw-icons.js';
 import {saveTrackPreset,loadTrackPreset} from './daw-track-preset.js';
+import {DawWindows} from './ui-daw-windows.js';
 import {clipBeat,clipBeats,arrangementBeats,frameBeat,beatFrame,musicalPosition,secondsPosition,snapBeat,defaultDawLayout,readDawLayout} from './daw-arrangement.js';
 const icons=['keyboard','piano','bass','guitar','acoustic','organ','drums','percussion','voice','backing','strings','fx','mic','audio','generic'];
 const shortSound=patch=>patch?String.fromCharCode(...patch.slice(63,73)).replace(/[^\x20-\x7e]/g,'').trim():'Choose a sound';
 const control=(name,type,parent)=>{const label=el('label','',name),input=el('input');input.type=type;input.setAttribute('aria-label',name);label.append(input);parent.append(label);return input;};
 export class DawArrangement {
   constructor(workspace,{transport,trackTools,master}){
-    this.w=workspace;this.prefs=readDawLayout(localStorage);this.savedLayout=!!localStorage.getItem('waswan-daw-layout-v1');this.rows=new Map();this.clips=new Map();this.peaks=new Map();this.peakQueue=[];this.grid=.25;this.snap=true;this.meterSamples=new Float32Array(256);
+    this.w=workspace;this.windows=new DawWindows(workspace,()=>this.windowChanged());this.prefs=readDawLayout(localStorage);this.savedLayout=!!localStorage.getItem('waswan-daw-layout-v1');this.rows=new Map();this.clips=new Map();this.peaks=new Map();this.peakQueue=[];this.grid=.25;this.snap=true;this.meterSamples=new Float32Array(256);
     this.root=el('div','ww-daw-layout');this.upper=el('div','ww-daw-upper');this.browser=Panel('Browser','Selected track');this.browser.classList.add('ww-daw-browser');this.buildBrowser();
     this.timeline=el('section','ww-daw-arrangement');this.timeline.setAttribute('aria-label','Arrangement');const tools=el('div','ww-daw-arrangement-tools');
     this.browserToggle=action('Show Browser',()=>{if(this.prefs.maximized==='arrangement'){this.prefs.maximized=null;this.prefs.browser=true;}else this.prefs.browser=!this.prefs.browser;this.layout();});this.zoomOut=action('−',()=>this.zoom(this.prefs.zoom/1.25));this.zoomOut.setAttribute('aria-label','Zoom out Arrangement');this.zoomIn=action('+',()=>this.zoom(this.prefs.zoom*1.25));this.zoomIn.setAttribute('aria-label','Zoom in Arrangement');this.zoomFit=action('Fit',()=>this.fit());this.zoomFit.setAttribute('aria-label','Fit Arrangement to content');this.zoomValue=el('output','ww-muted');
@@ -19,15 +20,27 @@ export class DawArrangement {
     this.addAudio=action('Add audio track',()=>this.w.run(()=>{const t=makeTrack('audio','Audio '+(this.w.snapshot.tracks.filter(t=>t.type==='audio').length+1));this.w.controller.command('track.create',t);this.w.selected=t.id;this.w.refresh();}));
     this.addClip=action('Add clip at cursor',()=>this.addMidiClip(this.w.selected,frameBeat(this.w.cursor||0,this.w.snapshot)));
     this.maximize=action('Expand Arrangement',()=>{this.prefs.maximized=this.prefs.maximized==='arrangement'?null:'arrangement';this.layout();});
-    const view=el('details','ww-daw-view-menu'),summary=el('summary','','View panels');view.append(summary,action('Show Clip editor',()=>{view.open=false;this.panel('clip');}),action('Show Mixer',()=>{view.open=false;this.panel('mixer');}),action('Reset layout',()=>{view.open=false;this.prefs=defaultDawLayout();if(this.available<500)this.prefs.bottom=false;this.layout();}));
+    const view=el('details','ww-daw-view-menu'),summary=el('summary','','View panels');
+    view.append(summary);
+    for(const name of ['clip','mixer','effects','automation']){
+      const label=this.windows.label(name);
+      view.append(action('Show '+label,()=>{view.open=false;this.panel(name);}),
+        action('Detach '+label,()=>{view.open=false;this.detachPane(name);}));
+    }
+    view.append(action('Reset layout',()=>{view.open=false;this.windows.closeAll({forget:true});this.prefs=defaultDawLayout();if(this.available<500)this.prefs.bottom=false;this.layout();}));
     tools.append(this.browserToggle,trackTools,this.addAudio,this.addClip,this.gridSelect,this.snapToggle,this.zoomOut,this.zoomIn,this.zoomFit,this.zoomValue,this.rulerMode,this.maximize,view);
     this.viewport=el('div','ww-daw-arrangement-scroll');this.viewport.tabIndex=0;this.viewport.setAttribute('aria-label','Arrangement timeline');this.content=el('div','ww-daw-arrangement-content');this.viewport.append(this.content);
     const rulerRow=el('div','ww-daw-ruler-row');this.corner=el('div','ww-daw-track-corner','TRACKS');this.ruler=el('div','ww-daw-ruler');this.ruler.setAttribute('aria-label','Arrangement ruler — click to seek, drag to select interval');this.ruler.title='Click to seek · drag to select the loop/export interval';this.labels=el('div','ww-daw-ruler-labels');this.markers=el('div','ww-daw-markers');this.range=el('div','ww-daw-range');this.ruler.append(this.range,this.labels,this.markers);rulerRow.append(this.corner,this.ruler);this.body=el('div','ww-daw-arrangement-rows');this.playhead=el('div','ww-daw-playhead');this.content.append(rulerRow,this.body,this.playhead);this.timeline.append(tools,this.viewport);
     this.hSplit=this.splitter('vertical','browserWidth',160,480);this.upper.append(this.browser,this.hSplit,this.timeline);
-    this.bottom=el('section','ww-daw-bottom');const tabs=el('div','ww-daw-panel-tabs');this.clipTab=action('Clip editor',()=>this.panel('clip'));this.mixerTab=action('Mixer',()=>this.panel('mixer'));this.bottomToggle=action('Hide editor',()=>{this.prefs.bottom=!this.prefs.bottom;this.layout();});this.bottomExpand=action('Expand editor',()=>{this.prefs.maximized=this.prefs.maximized==='editor'?null:'editor';this.layout();});tabs.append(this.clipTab,this.mixerTab,this.bottomToggle,this.bottomExpand);
-    this.clipPane=el('div','ww-daw-clip-pane');this.clipPane.append(this.w.editor);this.mixerPane=el('div','ww-daw-mixer');this.mixerPane.append(this.w.trackScroll,master);this.bottom.append(tabs,this.clipPane,this.mixerPane);
+    this.bottom=el('section','ww-daw-bottom');const tabs=el('div','ww-daw-panel-tabs');this.clipTab=action('Clip editor',()=>this.panel('clip'));this.mixerTab=action('Mixer',()=>this.panel('mixer'));this.bottomToggle=action('Hide editor',()=>{this.prefs.bottom=!this.prefs.bottom;this.layout();});this.bottomExpand=action('Expand editor',()=>{this.prefs.maximized=this.prefs.maximized==='editor'?null:'editor';this.layout();});this.detach=action('Detach active panel',()=>this.detachPane(this.prefs.panel));tabs.append(this.clipTab,this.mixerTab,this.bottomToggle,this.bottomExpand,this.detach);
+    this.clipPane=el('div','ww-daw-clip-pane');this.clipPane.append(this.w.editor);this.mixerPane=el('div','ww-daw-mixer');this.mixerPane.append(this.w.trackScroll,master);this.detachedNotice=el('p','ww-muted ww-daw-detached-notice');this.bottom.append(tabs,this.clipPane,this.mixerPane,this.detachedNotice);
     this.vSplit=this.splitter('horizontal','bottomHeight',160,800);this.collapsedTabs=el('div','ww-daw-collapsed-tabs');this.collapsedTabs.append(action('Show Clip editor',()=>this.panel('clip')),action('Show Mixer',()=>this.panel('mixer')));this.root.append(this.upper,this.vSplit,this.bottom,this.collapsedTabs);
     this.buildTransport(transport);
+    for(const [node,context] of [[this.viewport,'transport'],[transport,'transport'],[this.browser,'clip'],[this.bottom,null]]){
+      const focus=()=>this.w.panelFocus(context||this.prefs.panel);
+      node.addEventListener('focusin',focus);
+      node.addEventListener('pointerdown',focus);
+    }
     for(const [button,text] of [[this.w.newButton,'New'],[this.w.openButton,'Open'],[this.w.saveButton,'Save'],[this.w.saveAsButton,'Save as…'],[this.w.undo,'Undo'],[this.w.redo,'Redo'],[this.w.recoverButton,'Recover'],[this.w.play,'Play'],[this.w.stop,'Stop']]){button.setAttribute('aria-label',button.textContent);button.textContent=text;}
     const heading=this.w.node.firstElementChild;heading.lastElementChild.textContent='Arrangement';this.w.editor.querySelector('.ww-section-header .ww-muted').textContent='Piano Roll · source content · exact note values';
     this.empty=el('p','ww-daw-empty-arrangement','Add a track to begin. Double-click a MIDI lane to create a clip.');this.content.append(this.empty);
@@ -47,10 +60,26 @@ export class DawArrangement {
   measure(){if(!this.w.node.offsetParent)return;const available=Math.max(320,innerHeight-this.root.getBoundingClientRect().top-28);if(!this.measured&&!this.savedLayout&&available<500)this.prefs.bottom=false;this.measured=true;this.available=available;this.root.style.height=available+'px';this.applyVisibility();if(this.viewport.clientWidth){this.headWidth=Math.max(196,Math.min(260,this.viewport.clientWidth*.23));this.root.style.setProperty('--daw-header-width',this.headWidth+'px');this.render();}}
   applyVisibility(){
     const p=this.prefs,max=p.maximized;this.browser.hidden=!p.browser||max==='arrangement';this.hSplit.hidden=this.browser.hidden;this.upper.hidden=max==='editor';this.bottom.hidden=!p.bottom||max==='arrangement';this.vSplit.hidden=this.bottom.hidden||max==='editor';this.collapsedTabs.hidden=!this.bottom.hidden;
-    this.browser.style.width=p.browserWidth+'px';this.bottom.style.flexBasis=Math.max(160,Math.min(p.bottomHeight,(this.available||700)-200))+'px';this.bottom.classList.toggle('is-expanded',max==='editor');if(this.fxPane)this.fxPane.hidden=p.panel!=='effects';if(this.autoPane)this.autoPane.hidden=p.panel!=='automation';this.clipPane.hidden=p.panel!=='clip';this.mixerPane.hidden=p.panel!=='mixer';this.clipTab.setAttribute('aria-pressed',String(p.panel==='clip'));this.mixerTab.setAttribute('aria-pressed',String(p.panel==='mixer'));this.browserToggle.textContent=p.browser?'Hide Browser':'Show Browser';this.maximize.textContent=max==='arrangement'?'Restore Arrangement':'Expand Arrangement';this.bottomExpand.textContent=max==='editor'?'Restore editor':'Expand editor';this.hSplit.setAttribute('aria-valuenow',p.browserWidth);this.vSplit.setAttribute('aria-valuenow',p.bottomHeight);
+    this.browser.style.width=p.browserWidth+'px';this.bottom.style.flexBasis=Math.max(160,Math.min(p.bottomHeight,(this.available||700)-200))+'px';this.bottom.classList.toggle('is-expanded',max==='editor');for(const name of ['clip','mixer','effects','automation']){
+      const pane=this.pane(name);
+      if(pane)pane.hidden=!this.windows.has(name)&&p.panel!==name;
+    }
+    const detached=this.windows.has(p.panel);
+    this.detachedNotice.hidden=!detached;
+    this.detachedNotice.textContent=detached?this.windows.label(p.panel)+' is open in another window.':'';
+    this.detach.textContent=detached?'Focus detached panel':'Detach active panel';this.clipTab.setAttribute('aria-pressed',String(p.panel==='clip'));this.mixerTab.setAttribute('aria-pressed',String(p.panel==='mixer'));this.browserToggle.textContent=p.browser?'Hide Browser':'Show Browser';this.maximize.textContent=max==='arrangement'?'Restore Arrangement':'Expand Arrangement';this.bottomExpand.textContent=max==='editor'?'Restore editor':'Expand editor';this.hSplit.setAttribute('aria-valuenow',p.browserWidth);this.vSplit.setAttribute('aria-valuenow',p.bottomHeight);
   }
   layout(save=true){this.applyVisibility();if(save)this.persist();this.measure();}
-  panel(name){this.prefs.panel=name;this.prefs.bottom=true;this.prefs.maximized=null;this.layout();}
+  pane(name){return {clip:this.clipPane,mixer:this.mixerPane,effects:this.fxPane,automation:this.autoPane}[name];}
+  panel(name){
+    this.prefs.panel=name;this.prefs.bottom=true;this.prefs.maximized=null;
+    this.layout();this.w.panelFocus(name);this.windows.focus(name);
+  }
+  detachPane(name){
+    this.prefs.panel=name;this.prefs.bottom=true;this.prefs.maximized=null;
+    this.windows.open(name,this.pane(name));this.layout();
+  }
+  windowChanged(){this.layout(false);this.w.editors?.paint();this.w.mix?.paint();this.windows.status();}
   zoom(value,anchor){const old=this.prefs.zoom,next=Math.max(.01,Math.min(512,value)),x=anchor??(this.viewport.clientWidth+(this.headWidth||246))/2,beat=(this.viewport.scrollLeft+x-(this.headWidth||246))/old;this.prefs.zoom=next;this.render();this.viewport.scrollLeft=beat*next-x+(this.headWidth||246);this.persist();}
   fit(){const beats=arrangementBeats(this.w.snapshot)+4;this.zoom((this.viewport.clientWidth-(this.headWidth||246))/beats);this.viewport.scrollLeft=0;}
   buildTransport(parent){
@@ -109,7 +138,8 @@ export class DawArrangement {
   }
   showRange(start,end){this.range.style.left=start/PPQ*this.prefs.zoom+'px';this.range.style.width=(end-start)/PPQ*this.prefs.zoom+'px';}
   timelineKey(event){
-    if(['INPUT','SELECT','TEXTAREA','BUTTON'].includes(event.target.tagName))return;if(event.code==='Space'){event.preventDefault();event.stopPropagation();this.w.player.playing?void this.w.player.stop():void this.w.run(()=>this.w.playProject());}else if(event.key==='Home'){event.preventDefault();event.stopPropagation();void this.w.seek(0);}else if(event.key.toLowerCase()==='l'&&!event.ctrlKey&&!event.metaKey){event.preventDefault();event.stopPropagation();void this.w.changeTransport({loop:!this.transport().loop});}
+    if(event.key!=='Home'||event.target.closest('input, select, textarea, button'))return;
+    event.preventDefault();event.stopPropagation();void this.w.seek(0);
   }
   render(event){
     if(!this.w.snapshot)return;const p=this.w.snapshot,zoom=this.prefs.zoom,width=Math.max(this.viewport.clientWidth,(this.headWidth||246)+(arrangementBeats(p)+4)*zoom),beats=(width-(this.headWidth||246))/zoom,locked=this.locked();this.content.style.width=width+'px';this.empty.hidden=!!p.tracks.length;let gridPixels=zoom*this.grid;while(gridPixels<8)gridPixels*=2;this.root.style.setProperty('--daw-grid-px',gridPixels+'px');this.zoomValue.textContent=(zoom<2?zoom.toFixed(2):Math.round(zoom))+' px/beat';this.zoomIn.disabled=zoom>=512;this.zoomOut.disabled=zoom<=.01;

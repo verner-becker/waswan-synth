@@ -42,6 +42,8 @@ class Foundation {
     const lame=el('a','','LAME / lamejs'),source=el('a','','source & license');lame.href='https://lame.sourceforge.net/';source.href='./vendor/lamejs/index.html';credits.append(el('span','',' · MP3: '),lame,el('span','',' · '),source);this.shell.append(credits);
     const previous=this.bridge.midi.profile.onChange;
     this.bridge.midi.profile.onChange=()=>{previous();this.updateBadges();this.updateLearnState();this.updateAssignments();};
+    addEventListener('focus',()=>this.focusMidiContext());
+    this.shell.addEventListener('focusin',event=>{if(!event.target.closest('.ww-daw'))this.focusMidiContext();});
     this.updateAssignments();this.selectWorkspace(new URLSearchParams(location.search).get('workspace')==='daw'?'daw':'perf');this.animate=()=>{this.drawAudio();this.animation=requestAnimationFrame(this.animate);};this.animate();
   }
   buildHeader() {
@@ -181,10 +183,16 @@ class Foundation {
   }
   setControl(id,value) {const f=this.frame;if(!this.running||!f?.instrument)return;this.bridge.send({t:'ui-control',source:'ui',id,value,scope:f.instrument.scope});}
   hardware(b) {if(!this.running)return;this.bridge.send({t:'btn',b,down:true});setTimeout(()=>this.bridge.send({t:'btn',b,down:false}),90);}
+  focusMidiContext(){
+    const id=this.workspace;
+    this.daw?.midiProfiles.focus(id==='daw'?this.daw.hostMidiContext||'transport':id==='env'?'envelope':
+      ['tones','osc','filter','mod'].includes(id)?'instrument':id==='seq'?'transport':'performance');
+  }
   selectWorkspace(id) {
     if(id==='seq')queueMicrotask(()=>this.sequence?.draw());
     if(!this.views.has(id))return;
-    this.workspace=id;this.legacy=false;this.legacyHost.hidden=true;this.main.hidden=false;
+    this.workspace=id;this.legacy=false;
+    this.focusMidiContext();this.legacyHost.hidden=true;this.main.hidden=false;
     this.shell.dataset.activeWorkspace=id;
     if(this.dock)this.dock.hidden=id==='daw'&&!this.dawKeyboardVisible;
     for(const [key,node] of this.views)node.hidden=key!==id;

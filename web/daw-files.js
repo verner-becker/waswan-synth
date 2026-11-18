@@ -28,11 +28,11 @@ export class ProjectFiles {
       loaded.binding={handle,token};if(!deferBinding)this.adoptBinding(loaded.binding);return loaded;
     }catch(error){await assetStore?.dispose().catch(()=>{});throw error;}finally{this.busy=false;}
   }
-  async save(controller,{saveAs=false}={}){
+  async save(controller,{saveAs=false,savePicker=this.savePicker}={}){
     if(this.busy)throw Error('Finish the current file operation');this.busy=true;
     try{
       const document=controller.snapshot(),assets=new Map(controller.assets),revision=controller.revision;
-      const handle=saveAs||!this.handle?await this.savePicker({types:[type],suggestedName:document.name.replace(/[\\/:*?"<>|]/g,'-')+'.wsproj'}):this.handle;
+      const handle=saveAs||!this.handle?await savePicker({types:[type],suggestedName:document.name.replace(/[\\/:*?"<>|]/g,'-')+'.wsproj'}):this.handle;
       const expected=handle===this.handle?this.token:await fileToken(await handle.getFile());
       if(handle.requestPermission&&await handle.requestPermission({mode:'readwrite'})!=='granted')throw Error('Project write permission was denied');
       const blob=await projectBlob(document,assets),nextToken=await fileToken(blob);

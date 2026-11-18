@@ -225,3 +225,13 @@
 .ww-daw-clip-inspector label{flex:none}.ww-daw-clip-inspector input[type=range]{width:160px}.ww-daw-clip-inspector>output{min-width:65px;font-size:12px}
 
 .ww-daw-mix-tools{padding:12px;overflow:auto;flex:1;min-height:0}.ww-daw-mix-tools>select,.ww-daw-mix-tools>button{margin:4px}.ww-daw-fx-row{padding:10px;margin:10px 0;border:1px solid #435e6b;border-radius:6px;display:flex;align-items:center;flex-wrap:wrap;gap:10px}.ww-daw-fx-row>.ww-daw-piano-tools{width:100%}.ww-daw-fx-row label{font-size:11px}.ww-daw-fx-row input{width:100px}.ww-daw-master-readout{display:block;padding:8px;color:#b6e2da}.ww-daw-master-readout[data-clipped=true]{color:#ff9ca9}.ww-daw-automation-canvas{display:block;width:100%;height:220px;border:1px solid #4f6e80;touch-action:none}
+
+.ww-daw-detached{display:flex;flex-direction:column;height:100dvh;min-height:0;overflow:hidden;padding:0}
+.ww-daw-detached>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--ww-panel);border-bottom:1px solid var(--ww-border)}
+.ww-daw-detached>header h1{font-size:16px;margin:0}
+.ww-daw-detached>header output{font-size:12px;color:var(--ww-muted)}
+.ww-daw-detached>section,.ww-daw-detached>div{flex:1;min-height:0;overflow:auto}
+.ww-daw-detached-notice{padding:8px 12px}
+.ww-daw-midi-profiles{display:grid;gap:6px}
+.ww-daw-midi-profiles label{display:grid;gap:4px;margin:6px 0}
+.ww-daw-midi-profiles li{margin:4px 0}

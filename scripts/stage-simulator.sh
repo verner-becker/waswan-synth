@@ -51,6 +51,19 @@ failure_anchor = "if(context)await context.close();}}"
 assert s.count(failure_anchor) == 1
 s = s.replace(failure_anchor, "updateFoundation({t:'audio-start-error',message:e.message});try{if(context&&context.state!=='closed')await context.close();await audioOwner.release();context=null;node=null;worker=null;}catch(cleanupError){updateFoundation({t:'audio-start-error',message:'Audio shutdown failed. Close this tab before starting another session.'});}}}")
 s = "import {mountFoundation,updateFoundation} from './ui-foundation.js';\n" + s
+# Losing keyboard focus releases browser-held keys only. A connected MIDI device
+# must still send its own note-offs when the Mixer is brought to the foreground.
+focus_anchor = "function releaseAll(){midi.release();"
+assert s.count(focus_anchor) == 1
+s = s.replace(focus_anchor, "function releaseAll(){midi.release();releaseBrowserKeys();}\nfunction releaseBrowserKeys(){")
+s = s.replace("window.addEventListener('blur',releaseAll)", "window.addEventListener('blur',releaseBrowserKeys)")
+s = s.replace("if(document.hidden)releaseAll()", "if(document.hidden)releaseBrowserKeys()")
+midi_focus_anchor = "isListening:()=>!document.hidden"
+assert s.count(midi_focus_anchor) == 1
+s = s.replace(midi_focus_anchor, "isListening:()=>audioOwner.owned")
+key_anchor = "if(typing(e)||e.repeat||!on)return;"
+assert s.count(key_anchor) == 1
+s = s.replace(key_anchor, "if(typing(e)||e.defaultPrevented||e.repeat||!on)return;const shell=document.querySelector('.ww-shell');if(shell?.dataset.activeWorkspace==='daw'&&!e.target.closest?.('.ww-dock')&&!document.querySelector('.ww-legacy-toggle[aria-pressed=true]'))return;")
 # One shared instrument instance: the shell receives snapshots and delegates commands.
 s += "\nmountFoundation({send,midi,isRunning:()=>on,getAudio:()=>({context,node,gain,muted})});\n"
 
