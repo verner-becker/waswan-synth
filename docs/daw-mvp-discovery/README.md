@@ -33,8 +33,9 @@ Uma hipótese que falha só justifica outra tentativa com evidência ou abordage
 | Inspeção do código/manual e baseline dirigido | Registrados no relatório; alcance e limites explícitos |
 | Assessment Sol 6.1 xhigh | Consultado nesta sessão; síntese no relatório |
 | Plano e decisões de arquitetura | Ordem aprovada; decisões rotineiras dentro do escopo delegadas |
-| Fase 1 | Concluída como provas limitadas; [fechamento](wave-1.md). Branch `feat/daw-wave-1-session`, pai `1ca4830` |
-| Fase 2 | Próxima: domínio, assets, arquivos e Undo/Redo |
+| Fase 1 | Concluída como provas limitadas; [fechamento](wave-1.md). Branch `feat/daw-wave-1-session`, fechamento `54b88a8` |
+| Fase 2 | Concluída como domínio/persistência: [fechamento](wave-2.md), `feat/daw-wave-2-project`, pai `54b88a8` |
+| Fase 3 | Próxima: prova runtime e primeira fatia musical integrada |
 
 Decisões de trabalho iniciais: host em documento com posse exclusiva por Web Locks; fechar o host interrompe áudio, sem failover automático ou promessa de continuidade. Carga inicial de prova: cinco minutos, três trilhas instrumentais e cinco de áudio; não representa limite suportado certificado. Stems propostos pós-FX/fader/pan da trilha e pré-Master, para validar na fase de exportação. Caso uma dessas escolhas não sustente os requisitos, trazer evidência ao usuário.
 
