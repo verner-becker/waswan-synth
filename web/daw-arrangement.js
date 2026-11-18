@@ -15,7 +15,7 @@ export const defaultDawLayout=()=>({version:1,zoom:60,browser:false,browserWidth
 export function readDawLayout(storage){
   const result=defaultDawLayout();try{const p=JSON.parse(storage.getItem('waswan-daw-layout-v1'));if(p?.version!==1)return result;
     for(const [key,min,max] of [['zoom',.01,512],['browserWidth',160,480],['bottomHeight',160,800],['trackHeight',56,180]])if(Number.isFinite(p[key]))result[key]=Math.max(min,Math.min(max,p[key]));
-    for(const key of ['browser','bottom'])if(typeof p[key]==='boolean')result[key]=p[key];if(['clip','mixer'].includes(p.panel))result.panel=p.panel;if(['music','time'].includes(p.ruler))result.ruler=p.ruler;
+    for(const key of ['browser','bottom'])if(typeof p[key]==='boolean')result[key]=p[key];if(['clip','mixer','automation','effects'].includes(p.panel))result.panel=p.panel;if(['music','time'].includes(p.ruler))result.ruler=p.ruler;
     if(Array.isArray(p.folded))result.folded=p.folded.filter(id=>typeof id==='string'&&id.length<=80).slice(0,256);
   }catch{}return result;
 }

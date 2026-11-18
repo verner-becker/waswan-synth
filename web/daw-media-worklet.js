@@ -34,7 +34,7 @@ class DawTrack extends AudioWorkletProcessor {
     for(let i=0;i<out[0].length;i++){
       const at=active?timelineFrame(audioTransport,currentFrame+i):-1,tick=at*PPQ*this.bpm/(RATE*60);
       const baseVolume=parameters.volume.length===1?parameters.volume[0]:parameters.volume[i],basePan=parameters.pan.length===1?parameters.pan[0]:parameters.pan[i],mute=parameters.mute.length===1?parameters.mute[0]:parameters.mute[i];
-      const volume=at<0?baseVolume:automationAt(this.volume,tick,baseVolume),pan=at<0?basePan:automationAt(this.pan,tick,basePan),l=input?.[0]?.[i]||0,r=input?.[1]?.[i]||0,gain=volume*mute;
+      const volume=at<0?baseVolume:automationAt(this.volume,tick,baseVolume),pan=at<0?basePan:automationAt(this.pan,tick,basePan),l=input?.[0]?.[i]??0,r=input?.[1]?.[i]??0,gain=volume*mute;
       // Inline to avoid allocating a pair for every sample.
       if(pan<=0){const x=(pan+1)*Math.PI/2;out[0][i]=(l+r*Math.cos(x))*gain;out[1][i]=r*Math.sin(x)*gain;}
       else{const x=pan*Math.PI/2;out[0][i]=l*Math.cos(x)*gain;out[1][i]=(r+l*Math.sin(x))*gain;}

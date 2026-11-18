@@ -2,7 +2,7 @@
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const root='.local/validation/daw-mvp-wave-5';fs.mkdirSync(root,{recursive:true});const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
+const root=process.env.DAW_VALIDATION_ROOT||'.local/validation/daw-mvp-wave-5';fs.mkdirSync(root,{recursive:true});const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
 try{
  const page=await browser.newPage({viewport:{width:1560,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
  await page.addInitScript(()=>{window.audit={contexts:0,sent:[]};audit.source={id:'test-input',name:'Test keyboard',state:'connected',async open(){},async close(){}};audit.access={inputs:new Map([[audit.source.id,audit.source]])};navigator.requestMIDIAccess=async()=>audit.access;const AC=AudioContext;window.AudioContext=class extends AC{constructor(...a){super(...a);audit.context=this;audit.contexts++;}};const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...a){super(...a);if(a[1]!=='obervave-smk37')return;audit.node=this;const post=this.port.postMessage.bind(this.port);this.port.postMessage=(m,...rest)=>{audit.sent.push(m.t);post(m,...rest);};this.port.addEventListener('message',({data:m})=>{if(m.t==='frame')audit.frame=m;if(m.t==='daw-state')audit.state=m;});}};window.showOpenFilePicker=async()=>[audit.handle];});
