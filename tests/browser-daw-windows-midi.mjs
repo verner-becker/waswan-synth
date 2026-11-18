@@ -61,10 +61,8 @@ try{
     DawMix.prototype.refresh=function(...args){audit.w=this.w;return refresh.apply(this,args);};
   });
   await button('Add MIDI track').click();
-  if(!await button('Add DAW note').isVisible()){
-    await menu.locator('summary').click();
-    await menu.getByRole('button',{name:'Show Clip editor',exact:true}).click();
-  }
+  await button('Show Clip editor').click();
+  await daw.getByText('Exact note values',{exact:true}).click();
   await button('Add DAW note').click();
   await button('Show Browser').click();
   await profile.locator('summary').click();

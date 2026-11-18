@@ -11,7 +11,7 @@ export function musicalPosition(beat,project){
 }
 export function secondsPosition(seconds){const minutes=Math.floor(seconds/60);return `${minutes}:${(seconds%60).toFixed(2).padStart(5,'0')}`;}
 export const snapBeat=(beat,grid,snap)=>Math.max(0,snap?Math.round(beat/grid)*grid:Math.round(beat*PPQ)/PPQ);
-export const defaultDawLayout=()=>({version:1,zoom:60,browser:false,browserWidth:220,bottom:true,bottomHeight:260,panel:'clip',ruler:'music',trackHeight:88,folded:[],maximized:null});
+export const defaultDawLayout=()=>({version:1,zoom:60,browser:false,browserWidth:220,bottom:false,bottomHeight:330,panel:'clip',ruler:'music',trackHeight:92,folded:[],maximized:null});
 export function readDawLayout(storage){
   const result=defaultDawLayout();try{const p=JSON.parse(storage.getItem('waswan-daw-layout-v1'));if(p?.version!==1)return result;
     for(const [key,min,max] of [['zoom',.01,512],['browserWidth',160,480],['bottomHeight',160,800],['trackHeight',56,180]])if(Number.isFinite(p[key]))result[key]=Math.max(min,Math.min(max,p[key]));

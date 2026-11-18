@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {clickDawFile} from './daw-browser-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -85,10 +86,10 @@ try{
     audit.file=await audit.root.getFileHandle('song.wsproj',{create:true});
   });
   await button('Disable DAW MIDI input').click();
-  await button('Save DAW project').click();
+  await clickDawFile(daw,'Save DAW project');
   await page.waitForFunction(()=>!audit.w.controller.dirty);
   const saved=await page.evaluate(()=>JSON.stringify(audit.w.snapshot));
-  await button('Open DAW project').click();
+  await clickDawFile(daw,'Open DAW project');
   await page.waitForFunction(()=>!audit.w.busy);
   assert.equal(await page.evaluate(()=>JSON.stringify(audit.w.snapshot)),saved);
 

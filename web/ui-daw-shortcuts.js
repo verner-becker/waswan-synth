@@ -2,7 +2,12 @@
 const shortcuts=[
   ['Space','Play or stop'],['Ctrl / Cmd + S','Save project'],
   ['Ctrl / Cmd + Z','Undo'],['Ctrl / Cmd + Shift + Z','Redo'],
-  ['Delete','Delete selected clips or notes'],['L','Toggle loop'],['M','Toggle metronome'],['?','Show shortcuts']
+  ['Delete','Delete selected clips or notes'],['L','Toggle loop'],['M','Toggle metronome'],['?','Show shortcuts'],
+  ['Home on the timeline','Return to start'],
+  ['Arrow keys in Piano Roll','Move or transpose selected notes. Shift changes duration or octave. Alt + ↑/↓ changes velocity.'],
+  ['Shift + drag in Piano Roll','Select notes in a rectangle. Click a piano key to audition.'],
+  ['Arrow keys on a divider','Resize the panel. Home restores its default size.'],
+  ['Alt + ↑/↓ on a track handle','Move the track up or down']
 ];
 export function shortcutHelp(doc){
   const dialog=doc.createElement('dialog');

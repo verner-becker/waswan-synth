@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {clickDawFile} from './daw-browser-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,7 +19,7 @@ try{
   if(full)p.master.fx=[effect('eq'),effect('limiter')];
   const dir=await navigator.storage.getDirectory();audit.handle=await dir.getFileHandle('playback-load.wsproj',{create:true});const writer=await audit.handle.createWritable();await writer.write(await projectBlob(p,assets));await writer.close();const start=DawPlayer.prototype.start;DawPlayer.prototype.start=function(controller,...rest){audit.player=this;audit.controller=controller;return start.call(this,controller,...rest);};
  },full);
- const daw=page.locator('.ww-daw'),button=name=>daw.getByRole('button',{name,exact:true});await button('Open DAW project').click();await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-track').length===8,null,{timeout:120000});const before=Date.now();await button('Play DAW').click();await page.waitForFunction(()=>audit.player?.playing,null,{timeout:120000});const coldPlayMs=Date.now()-before;
+ const daw=page.locator('.ww-daw'),button=name=>daw.getByRole('button',{name,exact:true});await clickDawFile(daw,'Open DAW project');await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-track').length===8,null,{timeout:120000});const before=Date.now();await button('Play DAW').click();await page.waitForFunction(()=>audit.player?.playing,null,{timeout:120000});const coldPlayMs=Date.now()-before;
  await page.waitForTimeout(1500);
  let durationReport={fullDurationRun:false};
  if(full){

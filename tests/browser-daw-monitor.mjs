@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {clickDawFile} from './daw-browser-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,7 +14,7 @@ try{
   for(let i=0;i<2;i++){const t=makeTrack('midi',['Piano','Bass'][i]);t.monitor='in';t.instrument={type:'analog',patch:[...sound.patch]};p.tracks.push(t);p.clips.push({id:uuid(),type:'midi',trackId:t.id,name:t.name+' clip',position:{unit:'ticks',value:0},length:p.length,loopLength:p.length,loop:false,notes:[{id:uuid(),pitch:48+i*7,velocity:70,start:0,duration:p.length}]});}const dir=await navigator.storage.getDirectory();audit.handle=await dir.getFileHandle('monitor.wsproj',{create:true});const writer=await audit.handle.createWritable();await writer.write(await projectBlob(p,new Map()));await writer.close();
  });
  const daw=page.locator('.ww-daw'),button=name=>daw.getByRole('button',{name,exact:true}),midi=async(data)=>page.evaluate(data=>audit.source.onmidimessage({data,timeStamp:performance.now()}),data);
- await button('Open DAW project').click();await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-arrangement-row').length===2);await page.evaluate(()=>{audit.sent=[];});
+ await clickDawFile(daw,'Open DAW project');await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-arrangement-row').length===2);await page.evaluate(()=>{audit.sent=[];});
  await button('Enable DAW MIDI input').click();await page.waitForFunction(()=>audit.monitor?.enabled);await page.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.active||v.sequenced||v.monitorChannel!==null));assert(!await page.evaluate(()=>audit.sent.includes('panic')),'switching input does not panic the global instrument');
  await page.evaluate(()=>{audit.raw=audit.context.createAnalyser();audit.node.connect(audit.raw,0);audit.mix=audit.context.createAnalyser();audit.player.bus.connect(audit.mix);audit.gates=[...audit.player.tracks.values()].map(t=>t.gate);});
  await midi([144,60,100]);await midi([159,60,80]);await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.part===4&&v.monitorChannel===0)&&audit.frame.polyphony.slots.some(v=>v.gate&&v.part===4&&v.monitorChannel===15));await page.waitForTimeout(150);const energy=await page.evaluate(()=>{const read=a=>{const d=new Float32Array(a.fftSize);a.getFloatTimeDomainData(d);return Math.max(...d.map(Math.abs));};return {raw:read(audit.raw),live:read(audit.mix)};});assert.equal(energy.raw,0);assert(energy.live>.001);

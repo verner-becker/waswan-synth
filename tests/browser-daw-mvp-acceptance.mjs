@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {clickDawFile} from './daw-browser-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -59,8 +60,10 @@ try{
   assert(await host.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.note===72)));
   await host.evaluate(()=>audit.node.port.postMessage({t:'midi',st:128,d1:72,d2:0}));
   await host.waitForFunction(()=>!audit.frame.polyphony.slots.some(v=>v.gate&&v.note===72));
+  await button(tab,'File').click();
   await field(tab,'DAW project name').fill('Shared DAW');
   await field(tab,'DAW project name').press('Tab');
+  await tab.keyboard.press('Escape');
   assert.equal(await host.evaluate(()=>audit.w.snapshot.name),'Shared DAW');
 
   const initialTrack=await host.evaluate(()=>audit.w.selected);
@@ -85,9 +88,9 @@ try{
     const fs=await navigator.storage.getDirectory(),project=await fs.getFileHandle('linked.wsproj',{create:true});
     showSaveFilePicker=async()=>project;showOpenFilePicker=async()=>[project];
   });
-  await button(tab,'Save DAW project').click();
+  await clickDawFile(tab.locator('.ww-daw'),'Save DAW project');
   await host.waitForFunction(()=>!audit.w.busy&&!audit.w.controller.dirty);
-  await button(tab,'Open DAW project').click();
+  await clickDawFile(tab.locator('.ww-daw'),'Open DAW project');
   await host.waitForFunction(()=>!audit.w.busy&&audit.w.controller!==audit.project);
   assert.equal(await host.evaluate(()=>audit.w.snapshot.name),'Shared DAW');
 

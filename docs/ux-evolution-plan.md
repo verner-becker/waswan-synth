@@ -6,7 +6,7 @@ Em 18/11/2026, o usuário autorizou registrar este plano, integrar o MVP à `mai
 
 ## 1. Synth e navegação principal
 
-Implementada para revisão na branch `feat/ux-stage-1-synth-shell`. [Fechamento e evidências](ux-stage-1.md).
+Aprovada pelo usuário em 18/11/2026 na branch `feat/ux-stage-1-synth-shell`. [Fechamento e evidências](ux-stage-1.md)
 
 - Organizar a navegação em **Synth** e **DAW**, com **Performance** e **TONES** dentro do Synth. Manter SEQ, Studio e a interface SMK acessíveis pela navegação secundária durante a migração. Retirar as telas planejadas da primeira linha. Manter os grupos implementados de osciladores, filtro, envelopes, modulação e efeitos compartilhados acessíveis em TONES.
 - Usar **Settings** como entrada única para conexão MIDI, atribuições, sessão e diagnósticos. Identificar os mixers pelo alvo, partes do Synth ou projeto DAW. Oferecer uma opção explícita para usar teclado e pads no MIDI Setup.
@@ -14,6 +14,8 @@ Implementada para revisão na branch `feat/ux-stage-1-synth-shell`. [Fechamento 
 - Validar o fluxo Start audio → teclado visível e tocável → TONES → Save ou Save as, em Full HD com zoom de 100% e 125%. Confirmar atribuição explícita, soft takeover e notas mantidas ao navegar.
 
 ## 2. Arrangement e edição de clipes
+
+Implementada para revisão na branch `feat/ux-stage-2-arrangement`, sobre a etapa 1 aprovada em `645d0b4`. [Fechamento e evidências](ux-stage-2.md)
 
 - Enxugar o topo, manter transporte, posição e BPM visíveis e juntar operações de projeto em **Arquivo**. Atualizar a mensagem de acordo com o estado do áudio e da seleção. Levar marcadores à régua. Usar o editor inferior sob demanda, com grade ou waveform antes dos campos avançados.
 - Ampliar os alvos M/S/R, distinguir volume e pan visualmente e aplicar a iconografia com nomes e dicas no foco. Preservar operação dos divisores por setas e atalhos por contexto. Oferecer edição por teclado para pontos de automação e preservar edição numérica, unidades e Undo.

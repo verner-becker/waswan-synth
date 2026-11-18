@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {clickDawFile} from './daw-browser-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -15,14 +16,15 @@ try{
  await page.goto('http://localhost:8737/simulator/?workspace=daw');const daw=page.locator('[data-view="daw"]'),button=name=>daw.getByRole('button',{name,exact:true}),field=name=>daw.getByLabel(name,{exact:true});
  assert(await daw.isVisible());assert(await page.locator('.ww-dock').isHidden());
  await page.getByRole('button',{name:'Start audio',exact:true}).click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
- await field('DAW project name').fill('Roundtrip composition');await field('DAW project name').press('Tab');
+ await button('File').click();await field('DAW project name').fill('Roundtrip composition');await field('DAW project name').press('Tab');await page.keyboard.press('Escape');
  for(let i=0;i<3;i++){
-  await daw.getByRole('button',{name:'Mixer',exact:true}).click();
+  await button(i?'Mixer':'Show Mixer').click();
   await button('Add MIDI track').click();await page.waitForFunction(n=>document.querySelectorAll('.ww-daw-track').length===n,i+1);
   const row=daw.locator('.ww-daw-track').nth(i);await row.getByLabel('DAW track name').fill(['Piano','Bass','Lead'][i]);await row.getByLabel('DAW track name').press('Tab');
   await row.getByLabel('DAW instrument preset').selectOption(String([68,6,2][i]));await page.waitForFunction(()=>!document.querySelector('.ww-daw [aria-label="DAW note pitch"]').disabled);
   await row.getByRole('button',{name:'Select track',exact:true}).click();
   await daw.getByRole('button',{name:'Clip editor',exact:true}).click();
+  if(!await field('DAW note pitch').isVisible())await daw.getByText('Exact note values',{exact:true}).click();
   await field('DAW note pitch').fill(String([60,48,67][i]));await field('DAW note start beat').fill('1');await field('DAW note duration beats').fill('16');await button('Add DAW note').click();
   await page.waitForFunction(()=>document.querySelector('[aria-label="DAW notes"]').options.length===1);
  }
@@ -37,9 +39,9 @@ try{
  await page.screenshot({path:`${root}/daw-foundation.png`,fullPage:true});
  await button('Stop DAW').click();await page.waitForFunction(()=>!audit.daw.playing&&audit.frame.polyphony.slots.filter(v=>v.gate&&v.part>=4).length===0);
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===72)));
- await button('Save DAW project').click();await page.waitForFunction(()=>document.querySelector('.ww-daw-status').textContent.includes('Project saved'));
+ await clickDawFile(daw,'Save DAW project');await page.waitForFunction(()=>document.querySelector('.ww-daw-status').textContent.includes('Project saved'));
  const saved=await page.evaluate(async()=>{const {readProject}=await import('/simulator/daw-format.js');const loaded=await readProject(await audit.savedHandle.getFile());return loaded.project;});assert.equal(saved.tracks.length,3);assert.equal(saved.clips.length,3);assert(saved.clips.every(c=>c.notes.length===1));assert(saved.tracks.every(t=>t.instrument.patch.length===80));
- await button('New DAW project').click();await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-track').length===0);await button('Open DAW project').click();await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-track').length===3);
+ await clickDawFile(daw,'New DAW project');await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-track').length===0);await clickDawFile(daw,'Open DAW project');await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-track').length===3);
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===72)),'opening project does not release the live Synth note');
  await button('Play DAW').click();await page.waitForFunction(()=>audit.daw.playing&&audit.frame.polyphony.slots.filter(v=>v.gate&&v.part>=4).length>=3);await page.waitForTimeout(250);
  const reopenedEnergy=await page.evaluate(()=>{const b=new Float32Array(audit.mix.fftSize);audit.mix.getFloatTimeDomainData(b);return Math.max(...b.map(Math.abs));});assert(reopenedEnergy>.001);

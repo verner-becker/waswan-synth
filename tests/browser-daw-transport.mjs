@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {clickDawFile} from './daw-browser-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -18,7 +19,7 @@ try{
   const dir=await navigator.storage.getDirectory();audit.handle=await dir.getFileHandle('transport.wsproj',{create:true});const writer=await audit.handle.createWritable();await writer.write(await projectBlob(p,new Map([[sourceId,blob]])));await writer.close();audit.audioId=audio.id;
   const start=DawPlayer.prototype.start;DawPlayer.prototype.start=function(controller,options={}){audit.player=this;audit.controller=controller;return start.call(this,controller,{...options,...(audit.nextOptions||{fromFrame:389,loop:true,loopStart:143,loopEnd:1004})});};
  });
- const daw=page.locator('.ww-daw'),button=name=>daw.getByRole('button',{name,exact:true});await button('Open DAW project').click();await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-track').length===2);await button('Play DAW').click();await page.waitForFunction(()=>audit.state?.playing&&audit.frame.polyphony.slots.some(v=>v.gate&&v.part===4));
+ const daw=page.locator('.ww-daw'),button=name=>daw.getByRole('button',{name,exact:true});await clickDawFile(daw,'Open DAW project');await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-track').length===2);await button('Play DAW').click();await page.waitForFunction(()=>audit.state?.playing&&audit.frame.polyphony.slots.some(v=>v.gate&&v.part===4));
  const report=await page.evaluate(async()=>{
   const source=`import {audioTransport} from 'http://localhost:8737/simulator/daw-playback.js';import {timelineFrame} from 'http://localhost:8737/simulator/daw-transport.js';
   class Audit extends AudioWorkletProcessor{constructor(){super();this.samples=0;this.maxError=0;this.cycles=0;this.last=-1;this.port.onmessage=()=>this.port.postMessage({samples:this.samples,maxError:this.maxError,cycles:this.cycles});}process(inputs,outputs){const input=inputs[0];for(let i=0;i<128;i++){const at=timelineFrame(audioTransport,currentFrame+i);if(at<0)continue;if(at<this.last)this.cycles++;this.last=at;const volume=.5+.5*Math.min(1,at*1920/44100/960),fade=Math.min(1,at/1000);const left=.5*.5*volume*fade,right=.25*.5*volume*fade;this.maxError=Math.max(this.maxError,Math.abs((input[0]?.[i]||0)-left),Math.abs((input[1]?.[i]||0)-right));this.samples++;}return true;}}registerProcessor('waswan-transport-audit',Audit);`;

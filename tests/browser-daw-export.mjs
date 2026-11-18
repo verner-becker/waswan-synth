@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {clickDawFile} from './daw-browser-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -72,7 +73,7 @@ try{
   });
 
   const daw=page.locator('.ww-daw'),dialog=page.getByRole('dialog',{name:'Export DAW audio'});
-  await daw.getByRole('button',{name:'Export audio…',exact:true}).click();
+  await clickDawFile(daw,'Export audio…');
   await dialog.getByLabel('Tail',{exact:false}).selectOption('0');
   await dialog.getByRole('button',{name:'Choose destination and export…'}).click();
   await dialog.waitFor({state:'hidden',timeout:13000}).catch(async error=>{
