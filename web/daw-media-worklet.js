@@ -31,8 +31,11 @@ class DawTrack extends AudioWorkletProcessor {
   process(inputs,outputs,parameters){
     if(!this.alive)return false;
     const out=outputs[0],input=inputs[0],active=audioTransport.playing&&this.planId===audioTransport.planId;
+    const exporting=audioTransport.exportPlan===this.planId&&currentFrame<audioTransport.exportEnd;
     for(let i=0;i<out[0].length;i++){
-      const at=active?timelineFrame(audioTransport,currentFrame+i):-1,tick=at*PPQ*this.bpm/(RATE*60);
+      let at=active?timelineFrame(audioTransport,currentFrame+i):-1;
+      if(exporting&&at<0&&currentFrame+i>=audioTransport.startFrame)at=audioTransport.length-1;
+      const tick=at*PPQ*this.bpm/(RATE*60);
       const baseVolume=parameters.volume.length===1?parameters.volume[0]:parameters.volume[i],basePan=parameters.pan.length===1?parameters.pan[0]:parameters.pan[i],mute=parameters.mute.length===1?parameters.mute[0]:parameters.mute[i];
       const volume=at<0?baseVolume:automationAt(this.volume,tick,baseVolume),pan=at<0?basePan:automationAt(this.pan,tick,basePan),l=input?.[0]?.[i]??0,r=input?.[1]?.[i]??0,gain=volume*mute;
       // Inline to avoid allocating a pair for every sample.
@@ -46,8 +49,11 @@ class DawSourceGate extends AudioWorkletProcessor {
   static get parameterDescriptors(){return [{name:'live',defaultValue:0,minValue:0,maxValue:1}];}
   constructor(){super();this.gain=0;this.alive=true;this.port.onmessage=({data:m})=>{if(m.t==='prepare')this.planId=m.planId;else if(m.t==='live-session')this.liveSession=m.token;else if(m.t==='preview-session')this.previewSession=m.token;else if(m.t==='dispose')this.alive=false;this.port.postMessage({request:m.request,ok:true});};}
   process(inputs,outputs,parameters){
-    if(!this.alive)return false;const out=outputs[0],play=inputs[0],live=inputs[1],n=out[0].length,target=audioTransport.playing&&audioTransport.planId===this.planId&&currentFrame>=audioTransport.startFrame||this.previewSession&&this.previewSession===audioTransport.previewSession?1:0,from=this.gain,liveSession=this.liveSession&&this.liveSession===audioTransport.liveSession;
-    for(let c=0;c<2;c++)for(let i=0;i<n;i++){const value=parameters.live.length===1?parameters.live[0]:parameters.live[i];out[c][i]=(play?.[c]?.[i]||0)*(from+(target-from)*(i+1)/n)+(live?.[c]?.[i]||0)*(liveSession?value:0);}
+    if(!this.alive)return false;const out=outputs[0],play=inputs[0],live=inputs[1],n=out[0].length;
+    const exporting=audioTransport.exportPlan===this.planId&&currentFrame<audioTransport.exportEnd;
+    const target=((exporting||audioTransport.playing&&audioTransport.planId===this.planId)&&currentFrame>=audioTransport.startFrame||this.previewSession&&this.previewSession===audioTransport.previewSession)?1:0;
+    const from=exporting?target:this.gain,liveSession=this.liveSession&&this.liveSession===audioTransport.liveSession;
+    for(let c=0;c<2;c++)for(let i=0;i<n;i++){const value=parameters.live.length===1?parameters.live[0]:parameters.live[i];out[c][i]=(play?.[c]?.[i]??0)*(from+(target-from)*(i+1)/n)+(live?.[c]?.[i]??0)*(liveSession?value:0);}
     this.gain=target;return true;
   }
 }

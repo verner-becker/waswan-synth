@@ -12,7 +12,7 @@ class InstrumentRequests {
   }
 }
 export class DawPlayer {
-  constructor(bridge,onState=()=>{}){Object.assign(this,{bridge,onState});this.generation=0;this.playing=false;this.starting=false;this.decoded=new Map();this.sources=[];this.tracks=new Map();this.slots=new Map();this.boundPatches=new Map();}
+  constructor(bridge,onState=()=>{}){Object.assign(this,{bridge,onState});this.generation=0;this.exporting=null;this.playing=false;this.starting=false;this.decoded=new Map();this.sources=[];this.tracks=new Map();this.slots=new Map();this.boundPatches=new Map();}
   requests(){const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before using an instrument');if(this.rpc?.node!==node)this.rpc=new InstrumentRequests(node);return this.rpc;}
   async tone(program){return this.requests().request('daw-program',{program});}
   async currentTone(part=0){const state=await this.requests().request('daw-state-request');const patch=state.patches[part];return {patch,type:patch[74]===79&&patch[78]===2?'drumx':patch[0]===4?'super':'analog'};}
@@ -33,7 +33,7 @@ export class DawPlayer {
     await context.audioWorklet.addModule(new URL('./daw-media-worklet.js',import.meta.url));
     await context.audioWorklet.addModule(new URL('./daw-click.js',import.meta.url));
     await context.audioWorklet.addModule(new URL('./daw-fx-worklet.js',import.meta.url));
-    this.context=context;this.node=node;this.bus=new AudioWorkletNode(context,'waswan-daw-bus',{numberOfInputs:1,outputChannelCount:[2]});this.masterFx=new FxChain(context);this.masterMeter=new AudioWorkletNode(context,'waswan-daw-master-meter',{outputChannelCount:[2]});this.masterMeter.port.onmessage=({data:m})=>{this.masterLevels=m;};this.bus.connect(this.masterFx.input);this.masterFx.output.connect(this.masterMeter).connect(gain);
+    this.context=context;this.node=node;this.bus=new AudioWorkletNode(context,'waswan-daw-bus',{numberOfInputs:1,outputChannelCount:[2]});this.masterFx=new FxChain(context);this.masterMeter=new AudioWorkletNode(context,'waswan-daw-master-meter',{outputChannelCount:[2]});this.masterMeter.port.onmessage=({data:m})=>{if(!this.exporting)this.masterLevels=m;};this.speaker=context.createGain();this.bus.connect(this.masterFx.input);this.masterFx.output.connect(this.masterMeter).connect(this.speaker).connect(gain);
     // Ensure the host clock runs before the project bus, including audio-only projects.
     this.clockLink=context.createGain();this.clockLink.gain.value=0;node.connect(this.clockLink,0);this.clockLink.connect(this.bus);
     this.click=new AudioWorkletNode(context,'waswan-daw-click',{numberOfInputs:1,outputChannelCount:[2]});this.clockLink.connect(this.click);this.click.connect(gain);
@@ -58,7 +58,30 @@ export class DawPlayer {
     }
     this.updateMix(project);await this.masterFx.ready();for(const t of this.tracks.values())await t.effects.ready();
   }
+  clearEffects(){this.masterFx?.update([]);for(const track of this.tracks.values())track.effects.update([]);}
+  async beginExport(job){
+    if(this.exporting||this.starting||this.playing||this.liveSessionToken||this.bridge.isStudioBusy?.())throw Error('Stop playback and turn off DAW inputs before exporting');
+    this.exporting=job;
+    try{
+      await this.graph();await this.context.resume();job.signal.throwIfAborted();
+      await this.requests().request('daw-export-open',{exportToken:job.token});job.opened=true;
+      job.binding={projectId:this.projectId,planId:this.planId,slots:this.slots,boundPatches:this.boundPatches,lastProject:this.lastProject,position:this.position};
+      this.speaker.gain.value=0;this.clearEffects();
+    }catch(error){if(!job.opened)this.exporting=null;throw error;}
+  }
+  async endExport(job){
+    if(this.exporting!==job)return;
+    try{
+      if(!job.opened)return;
+      await this.requests().request('daw-export-close',{exportToken:job.token});
+    }finally{
+      this.playing=false;this.clearEffects();this.speaker.gain.value=1;
+      this.exporting=null;
+      if(job.binding){Object.assign(this,job.binding);if(this.lastProject)this.updateMix(this.lastProject);}
+    }
+  }
   async prepareLive(controller){
+    if(this.exporting)throw Error('Wait for audio export to finish');
     const project=controller.snapshot(),slots=assignSlots(project);validateEffects(project);await this.graph();await this.context.resume();
     if(this.playing||this.starting){if(this.projectId!==project.id)throw Error('Stop playback before changing the input project');return;}
     await this.requests().request('daw-stop',{hard:true});const state=await this.requests().request('daw-state-request');this.synchronize(controller,state.patches.map((patch,part)=>({part,patch})));
@@ -96,35 +119,45 @@ export class DawPlayer {
     });
   }
   async start(controller,options={}){
-    if(this.starting||this.playing)throw Error('DAW is already preparing or playing');
+    if(this.starting||this.playing||(this.exporting&&this.exporting.token!==options.exportToken))throw Error('DAW is already preparing, playing or exporting');
     if(this.bridge.isStudioBusy?.())throw Error('Stop Studio before starting DAW');
-    const project=controller.snapshot();validateEffects(project);const revision=controller.revision,slots=assignSlots(project),renderProject=options.excludeClips?{...project,clips:project.clips.filter(c=>!options.excludeClips.has(c.id))}:project,data=compileProject(renderProject,slots),token=++this.generation,planId=crypto.randomUUID();
+    const project=controller.snapshot();validateEffects(project);const revision=controller.revision,slots=assignSlots(project),renderProject=options.excludeClips?{...project,clips:project.clips.filter(c=>!options.excludeClips.has(c.id))}:project,data=compileProject(renderProject,slots,{endFrame:options.exportToken?options.endFrame:undefined}),token=++this.generation,planId=crypto.randomUUID();
     const looping=!!options.loop,length=options.endFrame??(looping?Math.max(data.length,options.loopEnd??data.length):data.length),schedule={length,fromFrame:options.fromFrame??0,loop:looping,loopStart:looping?options.loopStart??0:0,loopEnd:looping?options.loopEnd??length:length},events=data.events.filter(e=>e.frame<length||e.frame===length&&!e.type&&!e.velocity);prepareSchedule({...schedule,events});this.starting=true;this.projectId=project.id;
-    this.planId=planId;this.position=schedule.fromFrame;this.onState({playing:false,preparing:true,frame:schedule.fromFrame});
+    const emit=!options.exportToken,check=()=>{options.signal?.throwIfAborted();if(this.generation!==token)throw Error('Playback preparation cancelled');};
+    this.planId=planId;this.position=schedule.fromFrame;if(emit)this.onState({playing:false,preparing:true,frame:schedule.fromFrame});
     try{
       await this.graph();await this.context.resume();await this.buffers(project,controller.assets,token);
-      if(this.generation!==token||controller.revision!==revision)throw Error('Project changed during playback preparation');
-      const rpc=this.requests();await rpc.request('daw-stop',{hard:true});const state=await rpc.request('daw-state-request');
-      this.synchronize(controller,state.patches.map((patch,part)=>({part,patch})));if(controller.revision!==revision)throw Error('Project or live instrument changed during preparation; press Play again');
-      await rpc.request('daw-apply',{projectId:project.id,revision,token:state.token,slots:[...slots].map(([id,part])=>({part,...project.tracks.find(t=>t.id===id).instrument}))});
+      check();if(controller.revision!==revision)throw Error('Project changed during playback preparation');
+      const rpc=this.requests();
+      const request=(type,data)=>rpc.request(type,{...data,exportToken:options.exportToken});
+      await request('daw-stop',{hard:true});const state=await request('daw-state-request');
+      if(emit)this.synchronize(controller,state.patches.map((patch,part)=>({part,patch})));if(controller.revision!==revision)throw Error('Project or live instrument changed during preparation; press Play again');
+      await request('daw-apply',{projectId:project.id,revision,token:state.token,slots:[...slots].map(([id,part])=>({part,...project.tracks.find(t=>t.id===id).instrument}))});
       this.slots=slots;this.boundPatches=new Map([...slots].map(([id])=>[id,[...project.tracks.find(t=>t.id===id).instrument.patch]]));
-      if(this.generation!==token)throw Error('Playback preparation cancelled');
+      check();
       await this.configureTracks(project,slots,planId);
-      await this.mediaRpc.request('prepare',{planId,clips:data.audio.map(({clip,track,start,seconds})=>({assetId:clip.assetId,output:project.tracks.findIndex(t=>t.id===track.id),start:Math.round(start*RATE),end:Math.round(start*RATE)+clip.frames,offset:clip.offset,gain:clip.gain,pan:clip.pan||0,fadeIn:clip.fadeIn,fadeOut:clip.fadeOut,envelope:clip.envelope}))});
-      await rpc.request('daw-plan-begin',{projectId:project.id,revision,planId,count:events.length,data:schedule});
-      for(let offset=0;offset<events.length;offset+=1024){if(this.generation!==token)throw Error('Playback preparation cancelled');await rpc.request('daw-plan-append',{planId,offset,events:events.slice(offset,offset+1024)});}
-      if(this.generation!==token)throw Error('Playback preparation cancelled');
+      const clips=data.audio.map(({clip,track,start})=>{
+        const first=Math.round(start*RATE),end=first+clip.frames;
+        return {assetId:clip.assetId,output:project.tracks.findIndex(t=>t.id===track.id),start:first,
+          end:options.exportToken?Math.min(end,length):end,offset:clip.offset,gain:clip.gain,pan:clip.pan||0,
+          fadeIn:clip.fadeIn,fadeOut:clip.fadeOut,envelope:clip.envelope??(options.exportToken&&end>length?{offset:0,frames:clip.frames}:undefined)};
+      });
+      await this.mediaRpc.request('prepare',{planId,clips});
+      await request('daw-plan-begin',{projectId:project.id,revision,planId,count:events.length,data:schedule});
+      for(let offset=0;offset<events.length;offset+=1024){check();await request('daw-plan-append',{planId,offset,events:events.slice(offset,offset+1024)});}
+      check();
       const startFrame=Math.ceil((this.context.currentTime*RATE+8192+(options.countInFrames||0))/128)*128;
-      this.masterMeter.port.postMessage({t:'reset'});this.planId=planId;await options.beforeStart?.({startFrame});if(this.generation!==token)throw Error('Playback preparation cancelled');
-      await rpc.request('daw-start',{projectId:project.id,revision,startFrame,planId,countInFrames:options.countInFrames||0,recordToken:options.recordToken,click:{...(options.click||this.clickSettings||{enabled:false,level:.25}),bpm:project.bpm,meter:project.meter}});
-      if(this.generation!==token)throw Error('Playback preparation cancelled');
+      this.masterMeter.port.postMessage({t:'reset'});this.planId=planId;await options.beforeStart?.({startFrame});check();
+      await request('daw-start',{projectId:project.id,revision,startFrame,planId,countInFrames:options.countInFrames||0,recordToken:options.recordToken,tailFrames:options.tailFrames,click:{...(options.click||this.clickSettings||{enabled:false,level:.25}),bpm:project.bpm,meter:project.meter}});
+      check();
       this.playing=true;this.startFrame=startFrame;this.length=length;this.schedule=schedule;return {startFrame,length};
-    }catch(error){await this.stop();throw error;}finally{this.starting=false;}
+    }catch(error){if(emit)await this.stop();throw error;}finally{this.starting=false;}
   }
   stopSources(){this.decodeJob?.cancel();this.sources=[];}
   async stop(hard=false){this.generation++;this.stopSources();this.playing=false;if(this.lastProject)this.updateMix(this.lastProject,true);const node=this.bridge.getAudio().node,result=node&&(this.rpc||this.bus)?await this.requests().request('daw-stop',{hard}):{};this.onState({playing:false,preparing:false,frame:this.position||0,reason:'user'});return result;}
   receive(m){
     if(m.t!=='daw-state'||m.projectId!==this.projectId||m.planId!==this.planId)return;
+    if(this.exporting){if(!m.playing&&m.reason!=='ended'&&m.reason!=='export-closed')this.exporting.fail(Error('Export playback stopped: '+m.reason));return;}
     this.playing=m.playing;this.position=m.frame;if(!m.playing){this.stopSources();if(this.lastProject)this.updateMix(this.lastProject,true);}this.onState(m);
   }
   async reset(){this.stopSources();this.decoded.clear();this.projectId=null;this.lastProject=null;this.position=0;this.slots.clear();this.boundPatches.clear();await this.disconnectTracks();this.masterFx?.update([]);if(this.mediaRpc)await this.mediaRpc.request('clear');}

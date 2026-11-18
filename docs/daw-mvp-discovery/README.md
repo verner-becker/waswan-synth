@@ -14,9 +14,10 @@ Esta série DAW é distinta das ondas Studio 0–5 já integradas. O histórico 
 
 - Analisar, trazer considerações e discutir como organizar antes de implementar. O pacote também exige aprovação humana após o diagnóstico.
 - Uma branch por fase, empilhada sobre o fechamento da anterior. A primeira parte da main atualizada; as seguintes herdam seus commits. Isto substitui, para esta série, iniciar cada fase novamente da main.
-- Pode consultar um assessor **GPT-6.1 Sol, extra high (`xhigh`)** para dúvidas e revisão do planejamento. Assessment consultivo; o agente principal continua responsável pelas decisões e verificações.
+- Para dúvidas e revisão técnica, o usuário atualizou a preferência para **GPT-6.2 Astra, high** na retomada de 18/11/2026. A sessão da madrugada usou GPT-6.1 Sol xhigh. O assessment é consultivo. O agente principal implementa e verifica.
 - Se entrar em loop sem solução, interromper a frente bloqueada, preservar trabalho e evidências e trazer o problema ao usuário. Não insistir indefinidamente nem trocar a arquitetura silenciosamente.
 - Após a apresentação do diagnóstico, o usuário autorizou: “proceda fase a fase, vou dormir”, até 18/11/2026 às 07:30 America/Sao_Paulo (10:30 UTC). Pode parar diante de bloqueio ou decisão que deva caber ao usuário. Sua eventual visita durante a madrugada não é dependência de execução.
+- O usuário autorizou retomar o desenvolvimento em 18/11/2026, mantendo a sequência de fases e branches.
 - A autorização cobre as fases propostas e adaptações de host/DSP necessárias ao MVP, preservando uma instância, upstream e pool global de 256. Não integrar na main nem ampliar polifonia. Multi-instância, redução dos requisitos e continuidade transparente ao fechar o host não foram decididas; parar a dependência se forem necessárias.
 
 ## Protocolo de execução proposto
@@ -39,7 +40,7 @@ Uma hipótese que falha só justifica outra tentativa com evidência ou abordage
 | Fase 4 | Concluída como Arrangement/transporte: [fechamento](wave-4.md), `feat/daw-wave-4-arrangement`, `aa6f21f` |
 | Fase 5 | Concluída como gravação/Monitor: [fechamento](wave-5.md), `feat/daw-wave-5-recording`, fechamento `b6fbc2f` |
 | Fase 6 | Concluída como editores/importação: [fechamento](wave-6.md), `feat/daw-wave-6-editors-import`, fechamento `6ea5dff` |
-| Fase 7 | **Parcial**: FX, automação Volume/Pan e exportação MIDI implementados; WAV/MP3/stems pendentes. [Entrega e retomada](wave-7.md), `feat/daw-wave-7-mix-export`, pai `6ea5dff` |
+| Fase 7 | Concluída com efeitos, automação, presets e exportação WAV/MP3/MIDI/stems. [Fechamento](wave-7.md), `feat/daw-wave-7-mix-export`, pai `6ea5dff` |
 | Fases 8–9 | Pendentes: janelas/foco/perfis, estabilidade prolongada, limpeza e manual |
 
 Decisões de trabalho iniciais: host em documento com posse exclusiva por Web Locks; fechar o host interrompe áudio, sem failover automático ou promessa de continuidade. Carga inicial de prova: cinco minutos, três trilhas instrumentais e cinco de áudio; não representa limite suportado certificado. Stems propostos pós-FX/fader/pan da trilha e pré-Master, para validar na fase de exportação. Caso uma dessas escolhas não sustente os requisitos, trazer evidência ao usuário.
@@ -50,4 +51,4 @@ Ao retomar: ler este controle, o relatório, AGENTS.md e o pacote; conferir Git 
 
 Fases0–6 fechadas e branches publicadas em sequência. Fase7 preservada como entrega parcial na branch acima; o MVP completo não está concluído. Main continua em `8575f766df9043d53c51265e1fdc68c97cb61189`, sem integração. Upstream continua em `3f751bc2be066414f204cf44e1aa05d9c7467d7f`. Não houve alteração de polifonia nem segunda instância de instrumento.
 
-Retomar **na fase7**, pelo handoff, antes de abrir a8: implementar exportação de áudio com render/cancelamento/limites/caudas e fidelidade ao mix; validar mix/range/trilha/stems WAV/MP3 e só então fechar a fase. A branch8 deve nascer do futuro fechamento integral da7. Evidências locais de cada fase ficam em `.local/validation/daw-mvp-wave-N/` (ignoradas pelo Git); testes e registros de resultados estão versionados. O PDF oficial permanece o da main; manual DAW atualizado faz parte da fase9.
+A retomada posterior fechou a fase 7. A branch da fase 8 parte desse fechamento. As evidências ficam em `.local/validation/daw-mvp-wave-N/`. O manual da DAW faz parte da fase 9.

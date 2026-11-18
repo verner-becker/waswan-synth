@@ -18,7 +18,7 @@ export function assignSlots(project,capacity=8){
   for(const track of midi.filter(t=>t.instrument.type!=='drumx')){const part=order.find(p=>!used.has(p));slots.set(track.id,part);used.add(part);}
   return slots;
 }
-export function compileProject(project,slots=assignSlots(project)){
+export function compileProject(project,slots=assignSlots(project),{endFrame}={}){
   validateProject(project);const events=[],audio=[],base=project.length*60/(project.bpm*PPQ);let duration=base;
   for(const clip of project.clips){
     const track=project.tracks.find(t=>t.id===clip.trackId),start=clipSeconds(clip,project.bpm),seconds=clipDuration(clip,project.bpm);duration=Math.max(duration,start+seconds);
@@ -26,11 +26,14 @@ export function compileProject(project,slots=assignSlots(project)){
     // require restarting clocks, sources or the instrument.
     if(clip.type==='audio'){audio.push({clip,track,start,seconds});continue;}
     const part=slots.get(track.id);if(part===undefined&&(clip.notes.length||clip.midiEvents?.length))throw Error('Choose an instrument for '+track.name);if(part===undefined||!clip.notes.length&&!clip.midiEvents?.length)continue;
-    const view=midiWindow(clip,131072-events.length);
+    const length=endFrame===undefined?clip.length:
+      Math.min(clip.length,Math.ceil((endFrame/RATE-start)*project.bpm*PPQ/60));
+    if(length<=0)continue;
+    const view=midiWindow({...clip,length},131072-events.length);
     for(const n of view.notes){const on=Math.round((start+n.start*60/(project.bpm*PPQ))*RATE),off=Math.round((start+(n.start+n.duration)*60/(project.bpm*PPQ))*RATE);events.push({frame:on,part,note:n.pitch,velocity:n.velocity},{frame:Math.max(on+1,off),part,note:n.pitch,velocity:0});}
     for(const e of view.events)events.push({frame:Math.round((start+e.tick*60/(project.bpm*PPQ))*RATE),part,type:e.type,value:e.value});
   }
-  const length=Math.ceil(duration*RATE);if(length<1||length>RATE*1200)throw Error('Playback supports at most 20 minutes');
+  const length=endFrame??Math.ceil(duration*RATE);if(length<1||length>RATE*1200)throw Error('Playback supports at most 20 minutes');
   events.sort((a,b)=>a.frame-b.frame||eventPriority(a)-eventPriority(b));
   const density=new Map();for(const e of events){const block=Math.floor(e.frame/128),count=(density.get(block)||0)+1;if(count>512)throw Error('DAW event density exceeds the audio budget');density.set(block,count);}
   return {events,audio,length,duration:length,loop:false,slots};

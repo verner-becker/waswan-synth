@@ -22,7 +22,18 @@ class MonitoredOberVave extends OberVave {
      if(typeof m.request!=='string'||!/^[\w-]{1,80}$/.test(m.request))throw Error('Invalid DAW request ID');
      const x=this.engine?.ex;if(!x?.waswan_daw_capacity?.())throw Error('Rebuild the 256-voice simulator to enable the DAW runtime');
      let result;
-     if(m.t==='daw-state-request')result={capacity:x.waswan_daw_capacity(),token:x.waswan_daw_token()>>>0,slots:x.waswan_daw_active_slots?.()||0,liveHeld:Array.from({length:x.waswan_daw_capacity()},(_,p)=>x.waswan_daw_live_held?.(p)||0),patches:Array.from({length:x.waswan_daw_capacity()},(_,p)=>Array.from({length:80},(_,i)=>x.waswan_daw_patch(p,i)))};
+     if((this.dawExport||m.exportToken)&&m.t!=='daw-export-open'&&
+       (m.exportToken!==this.dawExport?.token||!['daw-export-close','daw-state-request','daw-apply','daw-plan-begin','daw-plan-append','daw-start','daw-stop'].includes(m.t)))throw Error('Audio export has exclusive use of the instrument');
+     if(m.t==='daw-export-open'){
+      if(typeof m.exportToken!=='string'||!/^[\w-]{1,80}$/.test(m.exportToken)||this.dawExport||this.sequence?.active||this.daw?.active||this.dawLiveSession||this.dawPreview||!x.waswan_daw_export_open())throw Error('Stop other transports and inputs, release keys and sustain, and let the instrument fall silent before exporting');
+      this.dawExport={token:m.exportToken,project:this.dawProject,observed:this.dawObserved,observedToken:this.dawObservedToken,outputs:this.dawOutputs,parts:this.dawParts};
+      audioTransport.exportToken=m.exportToken;result={opened:true};
+     }else if(m.t==='daw-export-close'){
+      this.daw?.stop('export-closed');this.dawPending=null;
+      Object.assign(audioTransport,{playing:false,recording:false,planId:null,exportToken:null,exportPlan:null});
+      x.waswan_daw_export_close();const previous=this.dawExport;this.dawExport=null;
+      this.dawProject=previous.project;this.dawObserved=previous.observed;this.dawObservedToken=previous.observedToken;this.dawOutputs=previous.outputs;this.dawParts=previous.parts;result={closed:true};
+     }else if(m.t==='daw-state-request')result={capacity:x.waswan_daw_capacity(),token:x.waswan_daw_token()>>>0,slots:x.waswan_daw_active_slots?.()||0,liveHeld:Array.from({length:x.waswan_daw_capacity()},(_,p)=>x.waswan_daw_live_held?.(p)||0),patches:Array.from({length:x.waswan_daw_capacity()},(_,p)=>Array.from({length:80},(_,i)=>x.waswan_daw_patch(p,i)))};
      else if(m.t==='daw-program'){
       if(!Number.isInteger(m.program)||m.program<0||m.program>98||!x.waswan_daw_program(0,m.program))throw Error('Invalid instrument program');
       result={patch:Array.from(new Uint8Array(x.memory.buffer,x.waswan_daw_stage_buffer(),80)),engine:x.waswan_daw_staged_engine(0)};
@@ -67,18 +78,21 @@ class MonitoredOberVave extends OberVave {
       if(this.sequence?.active||this.dawPreview||x.waswan_ui_playing())throw Error('Stop Studio/Legacy and release piano preview before starting DAW');
       if(m.projectId!==this.dawProject?.id||m.revision!==this.dawProject?.revision)throw Error('Project changed during playback preparation');
       const countIn=m.countInFrames??0;if(!Number.isSafeInteger(countIn)||countIn<0||countIn>sampleRate*72||countIn&&!m.recordToken)throw Error('Invalid count-in');
+      if(m.exportToken&&(countIn||m.recordToken||m.click?.enabled||!Number.isSafeInteger(m.tailFrames)||m.tailFrames<0||m.tailFrames>sampleRate*8))throw Error('Invalid export playback');
       if(m.recordToken!==undefined&&(typeof m.recordToken!=='string'||!/^[\w-]{1,80}$/.test(m.recordToken)))throw Error('Invalid recording token');
       const click=m.click;if(click&&(!Number.isFinite(click.bpm)||click.bpm<40||click.bpm>240||!Array.isArray(click.meter)||!Number.isInteger(click.meter[0])||click.meter[0]<1||click.meter[0]>12||![4,8].includes(click.meter[1])||typeof click.enabled!=='boolean'||!Number.isFinite(click.level)||click.level<0||click.level>1))throw Error('Invalid metronome');
       if(!Number.isSafeInteger(m.startFrame)||m.startFrame<currentFrame+128+countIn||m.startFrame>currentFrame+sampleRate*2+countIn)throw Error('Playback preparation missed its start time; try Play again');
       const pending=this.dawPending;if(!pending||pending.planId!==m.planId||pending.builder.events.length!==pending.count)throw Error('Playback plan is incomplete');const prepared=pending.builder.finish();this.dawPending=null;
-      this.daw??=new DawClock((part,note,velocity)=>!!this.engine?.ex.waswan_daw_note(part,note,velocity),()=>this.engine?.ex.waswan_daw_stop(0),state=>{audioTransport.playing=state.playing;if(state.startFrame!==undefined)audioTransport.startFrame=state.startFrame;if(!state.playing){audioTransport.recording=false;this.engine?.ex.waswan_daw_transport_guard?.(0);}this.port.postMessage({t:'daw-state',projectId:this.dawProject?.id,planId:this.dawPlanId,...state});},x.waswan_daw_capacity(),(part,bend,mod)=>!!this.engine?.ex.waswan_daw_expression(part,bend,mod));
-      this.dawPlanId=m.planId;this.daw.startPrepared(prepared,m.startFrame);Object.assign(audioTransport,{...prepared,events:undefined,initial:undefined,repeated:undefined,planId:m.planId,startFrame:m.startFrame,playing:true,countInFrames:countIn,click,recording:!!m.recordToken,recordToken:m.recordToken});x.waswan_daw_transport_guard(1);result={startFrame:m.startFrame};
-     }else if(m.t==='daw-stop'){this.dawPreview=null;audioTransport.previewSession=null;this.daw?.stop();this.dawPending=null;audioTransport.playing=false;audioTransport.recording=false;audioTransport.planId=null;x.waswan_daw_transport_guard(0);x.waswan_daw_stop(m.hard?1:0);result={stopped:true,frame:currentFrame};}
+      this.daw??=new DawClock((part,note,velocity)=>!!this.engine?.ex.waswan_daw_note(part,note,velocity),()=>this.engine?.ex.waswan_daw_stop(0),state=>{audioTransport.playing=state.playing;if(state.startFrame!==undefined)audioTransport.startFrame=state.startFrame;if(!state.playing){if(state.reason!=='ended')audioTransport.exportPlan=null;audioTransport.recording=false;this.engine?.ex.waswan_daw_transport_guard?.(0);}this.port.postMessage({t:'daw-state',projectId:this.dawProject?.id,planId:this.dawPlanId,...state});},x.waswan_daw_capacity(),(part,bend,mod)=>!!this.engine?.ex.waswan_daw_expression(part,bend,mod));
+      this.dawPlanId=m.planId;this.daw.startPrepared(prepared,m.startFrame);Object.assign(audioTransport,{...prepared,events:undefined,initial:undefined,repeated:undefined,planId:m.planId,startFrame:m.startFrame,playing:true,countInFrames:countIn,click,recording:!!m.recordToken,recordToken:m.recordToken,exportPlan:m.exportToken?m.planId:null,exportEnd:m.startFrame+prepared.length-prepared.fromFrame+(m.tailFrames||0)});x.waswan_daw_transport_guard(1);result={startFrame:m.startFrame};
+     }else if(m.t==='daw-stop'){this.dawPreview=null;audioTransport.previewSession=null;this.daw?.stop();this.dawPending=null;audioTransport.playing=false;audioTransport.recording=false;audioTransport.planId=null;audioTransport.exportPlan=null;x.waswan_daw_transport_guard(0);x.waswan_daw_stop(m.hard?1:0);result={stopped:true,frame:currentFrame};}
      else throw Error('Unknown DAW command');
      this.port.postMessage({t:'daw-reply',request:m.request,ok:true,result});
     }catch(error){if(['daw-plan-begin','daw-plan-append','daw-start'].includes(m.t))this.dawPending=null;this.port.postMessage({t:'daw-reply',request:m.request,ok:false,error:error.message});}
     return;
    }
+   // The same voice pool is reserved for playback until capture finishes.
+   if(this.dawExport&&m.t!=='dsp-control')return;
    if((this.daw?.active||this.dawLiveSession||this.dawPreview)&&m.t==='btn'&&[16,17].includes(m.b)){if(m.down)this.port.postMessage({t:'daw-notice',message:'Stop DAW and disable its inputs before using the Legacy transport'});return;}
    if(m.t==='studio-sequence-start'){
     try{
@@ -140,9 +154,10 @@ class MonitoredOberVave extends OberVave {
   const frames=outputs[0]?.[0]?.length||0,start=this.enabled&&this.clock?this.clock():null;
   if(this.sequence?.active)this.sequence.tick(currentFrame);
   if(this.daw?.active){if(!this.engine)this.daw.stop('engine-error');else if(this.engine.ex.sim_midi_mode?.())this.daw.stop('midi-mode');else if(this.engine.ex.waswan_ui_playing())this.daw.stop('legacy-transport');else this.daw.tick(currentFrame);}
+  if(this.dawExport){this.lastStore=currentTime;this.lastFrame=currentTime;}
   const result=super.process(inputs,outputs);
   if(!this.engine&&this.daw?.active)this.daw.stop('engine-error');
-  if(this.engine&&this.dawProject){
+  if(this.engine&&this.dawProject&&!this.dawExport){
    this.dawPoll+=frames;
    if(this.dawPoll>=1764){
     this.dawPoll=0;const x=this.engine.ex,token=x.waswan_daw_token()>>>0;
