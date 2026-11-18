@@ -205,6 +205,8 @@ class Foundation {
   }
   showSettings() {this.settingsPanel.hidden=false;this.settingsPanel.scrollIntoView({block:'nearest'});}
   receive(m) {
+    if(m.t==='audio-owner-busy'){this.midiSetupPending=false;this.notice.textContent='Audio is running in another WASWAN tab. Return to that tab or close it before starting here.';return;}
+    if(m.t==='audio-start-error'){this.midiSetupPending=false;this.notice.textContent=`Unable to start audio: ${m.message}`;return;}
     this.studio.update(m);
     this.sequence.update(m);
     if(m.t==='tone-store'){this.toneEditor.stored(m.data,m.ok);return;}

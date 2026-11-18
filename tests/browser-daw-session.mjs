@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const root='.local/validation/daw-mvp-wave-1';fs.mkdirSync(root,{recursive:true});
+const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
+try{
+ const context=await browser.newContext();
+ await context.addInitScript(()=>{window.audit={contexts:0};const AC=AudioContext;window.AudioContext=class extends AC{constructor(...args){super(...args);audit.context=this;audit.contexts++;}};});
+ const a=await context.newPage(),b=await context.newPage();
+ for(const p of [a,b])await p.goto('http://localhost:8737/simulator/');
+ const start=p=>p.getByRole('button',{name:'Start audio',exact:true}).click();
+ await Promise.all([start(a),start(b)]);
+ await a.waitForFunction(()=>audit.contexts||document.querySelector('.ww-notice').textContent.includes('another WASWAN tab'));
+ await b.waitForFunction(()=>audit.contexts||document.querySelector('.ww-notice').textContent.includes('another WASWAN tab'));
+ const counts=await Promise.all([a,b].map(p=>p.evaluate(()=>audit.contexts)));
+ assert.equal(counts.reduce((s,n)=>s+n,0),1);
+ const owner=counts[0]?a:b,view=counts[0]?b:a;
+ await owner.waitForFunction(()=>audit.context?.state==='running');
+ await view.evaluate(async()=>{const {SessionObserver}=await import('/simulator/daw-session.js');window.observer=new SessionObserver({owned:false},state=>window.observed=state);});
+ await view.waitForFunction(()=>window.observed?.state?.ms>5000);
+ assert.equal(await view.evaluate(()=>observed.state.programs.length),4);
+ await start(view);assert.equal(await view.evaluate(()=>audit.contexts),0);
+ await owner.evaluate(()=>audit.context.suspend());await start(view);
+ assert.equal(await view.evaluate(()=>audit.contexts),0,'suspension does not surrender ownership');
+ await owner.close();
+ await start(view);await view.waitForFunction(()=>audit.context?.state==='running');
+ assert.equal(await view.evaluate(()=>audit.contexts),1);
+ // Legacy URL obeys exactly the same lock before initializing an engine.
+ const legacy=await context.newPage();await legacy.goto('http://localhost:8737/simulator/?legacy=1');
+ await legacy.locator('#power').click();await legacy.waitForFunction(()=>document.querySelector('#status').textContent.includes('another WASWAN tab'));
+ assert.equal(await legacy.evaluate(()=>audit.contexts),0);
+ await view.close();
+ const failed=await context.newPage();await failed.goto('http://localhost:8737/simulator/');
+ await failed.evaluate(()=>{window.AudioContext=class{constructor(){throw Error('Injected start failure');}};});
+ await start(failed);await failed.waitForFunction(()=>document.querySelector('.ww-notice').textContent.includes('Injected start failure'));
+ await legacy.locator('#power').click();await legacy.waitForFunction(()=>audit.context?.state==='running');
+ await legacy.close();
+ const shutdown=await context.newPage(),waiting=await context.newPage();
+ await shutdown.goto('http://localhost:8737/simulator/');await waiting.goto('http://localhost:8737/simulator/');
+ await shutdown.route('**/obervave-voice.wasm',route=>route.abort());
+ await shutdown.evaluate(()=>{const AC=AudioContext;window.AudioContext=class extends AC{constructor(...args){super(...args);this.close=async()=>{throw Error('Injected close failure');};}};});
+ await start(shutdown);await shutdown.waitForFunction(()=>document.querySelector('.ww-notice').textContent.includes('Audio shutdown failed'));
+ await start(waiting);await waiting.waitForFunction(()=>document.querySelector('.ww-notice').textContent.includes('another WASWAN tab'));
+ assert.equal(await waiting.evaluate(()=>audit.contexts),0,'failed close must not allow a concurrent context');
+ await shutdown.close();await start(waiting);await waiting.waitForFunction(()=>audit.context?.state==='running');
+ const report={result:'PASS',chrome:await browser.version(),simultaneousStarts:counts,secondaryViewReceivesInstrumentState:true,suspendedOwnerRetainsLock:true,closedOwnerAllowsExplicitRestart:true,failedStartupReleasesLock:true,failedShutdownRetainsLock:true,legacySharesLock:true,transparentHandoff:false};
+ fs.writeFileSync(`${root}/session.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+}finally{await browser.close();}

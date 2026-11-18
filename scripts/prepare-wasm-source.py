@@ -18,4 +18,11 @@ for relative in ['firmware', 'web/sim']:
 (target / 'tests').mkdir(parents=True)
 shutil.copy2(upstream / 'tests/host.c', target / 'tests/host.c')
 subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / f'patches/polyphony-{voices}.patch')], cwd=target, check=True)
+# Optional host observation of the dry per-part bus, aligned with the buffered ISR.
+# No algorithm changes; the historical reference compiles with this hook absent.
+sim = target / 'web/sim/sim.c'
+text = sim.read_text()
+anchor = '        blk_pos++;'
+assert text.count(anchor) == 1
+sim.write_text(text.replace(anchor, '        #ifdef WASWAN_DAW_SAMPLE\n        WASWAN_DAW_SAMPLE(i, blk_pos);\n        #endif\n' + anchor))
 print(f'Isolated {voices}-voice source: {target}')

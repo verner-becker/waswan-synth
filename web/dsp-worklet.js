@@ -7,6 +7,8 @@ import {AUTOMATION_TARGETS,readAutomation,applyAutomation} from './studio-automa
 class MonitoredOberVave extends OberVave {
  constructor(options){
   super(options);this.enabled=false;this.session=null;this.stats=accumulator();this.elapsed=0;this.voiceElapsed=0;
+  this.dawOutputs=!!options.processorOptions?.dawOutputs;
+  if(this.dawOutputs&&this.engine)this.engine.ex.waswan_daw_taps?.(1);
   this.voices={active:0,gate:0,release:0,capacity:0};
   this.clockName=typeof globalThis.performance?.now==='function'?'performance.now':typeof globalThis.Date?.now==='function'?'Date.now':null;
   this.clock=this.clockName==='performance.now'?()=>globalThis.performance.now():this.clockName?()=>globalThis.Date.now():null;
@@ -52,6 +54,7 @@ class MonitoredOberVave extends OberVave {
     if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');if(this.session)this.publish(true,'reboot');}
     if(this.studioEvents&&COMMANDS.has(m.t))this.studioEvents.postMessage({t:'command',frame:currentFrame,command:m});
     original(e);
+    if(m.t==='reboot'&&this.dawOutputs)this.engine?.ex.waswan_daw_taps?.(1);
    }
   };
  }
@@ -71,6 +74,13 @@ class MonitoredOberVave extends OberVave {
   const frames=outputs[0]?.[0]?.length||0,start=this.enabled&&this.clock?this.clock():null;
   if(this.sequence?.active)this.sequence.tick(currentFrame);
   const result=super.process(inputs,outputs);
+  if(this.dawOutputs&&this.engine){
+   const x=this.engine.ex;
+   for(let p=0;p<4;p++)for(let c=0;c<2;c++){
+    const output=outputs[p+1]?.[c],pointer=x.waswan_daw_output?.(p,c);
+    if(output&&pointer)output.set(new Float32Array(x.memory.buffer,pointer,output.length));
+   }
+  }
   if(this.studioEvents&&this.engine){
    const next=readAutomation(this.engine,this.studioValues),previous=this.studioPrevious;
    for(let i=0;i<next.length;i++)if(next[i]!==null&&next[i]!==previous[i])this.studioEvents.postMessage({t:'parameter',frame:currentFrame+frames,target:AUTOMATION_TARGETS[i].id,value:next[i]});

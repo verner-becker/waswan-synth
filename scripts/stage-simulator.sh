@@ -15,6 +15,7 @@ cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
 cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
 cp web/ui-*.js web/ui-foundation.css .local/www/simulator/
 cp web/studio-*.js .local/www/simulator/
+cp web/daw-*.js .local/www/simulator/
 mkdir -p .local/www/simulator/vendor
 cp -R web/vendor/lamejs .local/www/simulator/vendor/
 cp web/midi.js web/midi-diagnostic.js web/midi-profile.js web/midi-profile-panel.js web/midi-profile.css web/engine.js web/polyphony-panel.js web/polyphony.css web/dsp-stats.js web/dsp-worklet.js web/dsp-monitor.js web/dsp-monitor.css .local/www/simulator/
@@ -37,6 +38,14 @@ version = {'referenceCommit':subprocess.check_output(['git','rev-parse','HEAD'],
 (root / 'dsp-version.js').write_text('export const build='+json.dumps(version)+';\n')
 p = root / 'app.js'
 s = p.read_text()
+s = "import {AudioOwner,SessionObserver} from './daw-session.js';\nconst audioOwner=new AudioOwner(),sessionObserver=new SessionObserver(audioOwner);\n" + s
+# Reserve the session before creating AudioContext/WASM, including Legacy URL.
+start_anchor = "try{const audioMode=window.isSecureContext&&window.AudioWorkletNode;"
+assert s.count(start_anchor) == 1
+s = s.replace(start_anchor, "try{if(!await audioOwner.acquire()){starting=false;log('Audio is running in another WASWAN tab. Return to that tab or close it before starting here.');updateFoundation({t:'audio-owner-busy'});return;}if(context&&context.state!=='closed')await context.close();node?.disconnect();worker?.terminate();const audioMode=window.isSecureContext&&window.AudioWorkletNode;")
+failure_anchor = "if(context)await context.close();}}"
+assert s.count(failure_anchor) == 1
+s = s.replace(failure_anchor, "updateFoundation({t:'audio-start-error',message:e.message});try{if(context&&context.state!=='closed')await context.close();await audioOwner.release();context=null;node=null;worker=null;}catch(cleanupError){updateFoundation({t:'audio-start-error',message:'Audio shutdown failed. Close this tab before starting another session.'});}}}")
 s = "import {mountFoundation,updateFoundation} from './ui-foundation.js';\n" + s
 # One shared instrument instance: the shell receives snapshots and delegates commands.
 s += "\nmountFoundation({send,midi,isRunning:()=>on,getAudio:()=>({context,node,gain,muted})});\n"
@@ -47,7 +56,7 @@ if s.count(anchor) != 1:
 s = "import {updateMidiDiagnostic} from './midi-diagnostic.js';\nimport {updateMidiProfile} from './midi-profile-panel.js';\nimport {updatePolyphony} from './polyphony-panel.js';\n" + s.replace(anchor, 'function frame(m){updateMidiDiagnostic(m);updateMidiProfile(m);updatePolyphony(m);state=m;')
 receive = 'function receive({data:m}){'
 assert s.count(receive) == 1
-s = "import {updateDspMonitor} from './dsp-monitor.js';\n" + s.replace(receive, receive+'updateFoundation(m);updateDspMonitor(m);')
+s = "import {updateDspMonitor} from './dsp-monitor.js';\n" + s.replace(receive, receive+'sessionObserver.publish(m);updateFoundation(m);updateDspMonitor(m);')
 assert s.count("node.onprocessorerror=()=>log(") == 1
 s = s.replace("node.onprocessorerror=()=>log(", "node.onprocessorerror=()=>{updateFoundation({t:'error',message:'Audio processor stopped'});updateDspMonitor({t:'error'});log(").replace("Reinicie o simulador.');gain=", "Reinicie o simulador.');};gain=")
 # Report the existing browser write, without a second persistence mechanism.

@@ -6,7 +6,32 @@
 #ifndef WASWAN_VOICES
 #define WASWAN_VOICES 8
 #endif
+#include <stdint.h>
+static void waswan_daw_sample(uint32_t index, uint32_t position);
+#define WASWAN_DAW_SAMPLE waswan_daw_sample
 #include WASWAN_SIM_SOURCE
+
+/* Optional dry outputs. The bus is captured at the same position as the final
+ * stereo block, before part mixer/FX/master; 131072 converts its Q17 scale.
+ * Legacy output and allocation are unchanged. Disabled on the original 8-voice
+ * reference, whose source intentionally has no host observation hook. */
+static float daw_dry[NPART][2][SIM_MAXN];
+static uint32_t daw_taps_enabled;
+static void waswan_daw_sample(uint32_t index, uint32_t position) {
+    if (!daw_taps_enabled) return;
+    for (uint32_t p=0; p<NPART; p++) {
+        daw_dry[p][0][index]=(float)bus[p][2u*position]*(1.0f/131072.0f);
+        daw_dry[p][1][index]=(float)bus[p][2u*position+1u]*(1.0f/131072.0f);
+    }
+}
+EXPORT uint32_t waswan_daw_taps(uint32_t enabled) {
+    daw_taps_enabled=enabled && WASWAN_VOICES>8;
+    memset(daw_dry,0,sizeof daw_dry);
+    return WASWAN_VOICES>8 ? NPART : 0;
+}
+EXPORT float *waswan_daw_output(uint32_t part, uint32_t channel) {
+    return part<NPART && channel<2 ? daw_dry[part][channel] : 0;
+}
 
 /* Studio uses the existing sequenced-note path with a distinct ownership tag.
  * No DSP algorithm, voice allocation limit, MIDI routing or legacy transport changes. */

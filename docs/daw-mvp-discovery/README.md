@@ -16,8 +16,8 @@ Esta série DAW é distinta das ondas Studio 0–5 já integradas. O histórico 
 - Uma branch por fase, empilhada sobre o fechamento da anterior. A primeira parte da main atualizada; as seguintes herdam seus commits. Isto substitui, para esta série, iniciar cada fase novamente da main.
 - Pode consultar um assessor **GPT-6.1 Sol, extra high (`xhigh`)** para dúvidas e revisão do planejamento. Assessment consultivo; o agente principal continua responsável pelas decisões e verificações.
 - Se entrar em loop sem solução, interromper a frente bloqueada, preservar trabalho e evidências e trazer o problema ao usuário. Não insistir indefinidamente nem trocar a arquitetura silenciosamente.
-- O trabalho noturno é uma intenção a ser delimitada nesta conversa, não autorização já concedida para implementar todo o MVP ou promessa de conclusão em uma noite.
-- Não integrar na main, ampliar polifonia ou alterar capacidades DSP sem aprovação explícita. O Discovery pede capacidades novas; a implementação e sua estratégia ainda precisam ser acordadas.
+- Após a apresentação do diagnóstico, o usuário autorizou: “proceda fase a fase, vou dormir”, até 18/11/2026 às 07:30 America/Sao_Paulo (10:30 UTC). Pode parar diante de bloqueio ou decisão que deva caber ao usuário. Sua eventual visita durante a madrugada não é dependência de execução.
+- A autorização cobre as fases propostas e adaptações de host/DSP necessárias ao MVP, preservando uma instância, upstream e pool global de 256. Não integrar na main nem ampliar polifonia. Multi-instância, redução dos requisitos e continuidade transparente ao fechar o host não foram decididas; parar a dependência se forem necessárias.
 
 ## Protocolo de execução proposto
 
@@ -32,7 +32,10 @@ Uma hipótese que falha só justifica outra tentativa com evidência ou abordage
 | Recebimento e leitura | Concluído; ZIP e imagens preservados |
 | Inspeção do código/manual e baseline dirigido | Registrados no relatório; alcance e limites explícitos |
 | Assessment Sol 6.1 xhigh | Consultado nesta sessão; síntese no relatório |
-| Plano e decisões de arquitetura | Propostos para discussão |
-| Implementação funcional DAW | Não iniciada; aguarda fechamento do escopo |
+| Plano e decisões de arquitetura | Ordem aprovada; decisões rotineiras dentro do escopo delegadas |
+| Fase 1 | Concluída como provas limitadas; [fechamento](wave-1.md). Branch `feat/daw-wave-1-session`, pai `1ca4830` |
+| Fase 2 | Próxima: domínio, assets, arquivos e Undo/Redo |
+
+Decisões de trabalho iniciais: host em documento com posse exclusiva por Web Locks; fechar o host interrompe áudio, sem failover automático ou promessa de continuidade. Carga inicial de prova: cinco minutos, três trilhas instrumentais e cinco de áudio; não representa limite suportado certificado. Stems propostos pós-FX/fader/pan da trilha e pré-Master, para validar na fase de exportação. Caso uma dessas escolhas não sustente os requisitos, trazer evidência ao usuário.
 
 Ao retomar: ler este controle, o relatório, AGENTS.md e o pacote; conferir Git e a última evidência. Não interpretar sugestões do assessor nem o backlog como autorização.
