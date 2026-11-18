@@ -20,9 +20,9 @@ const panText=value=>value===0?'Center':(value<0?'L ':'R ')+Math.round(Math.abs(
 export class DawArrangement {
   constructor(workspace,{transport,trackTools,master}){
     this.w=workspace;this.windows=new DawWindows(workspace,()=>this.windowChanged());this.prefs=readDawLayout(localStorage);this.rows=new Map();this.clips=new Map();this.markerButtons=new Map();this.peaks=new Map();this.peakQueue=[];this.grid=.25;this.snap=true;this.meterSamples=new Float32Array(256);
-    this.root=el('div','ww-daw-layout');this.upper=el('div','ww-daw-upper');this.browser=Panel('Browser','Selected track');this.browser.classList.add('ww-daw-browser');this.buildBrowser();
+    this.root=el('div','ww-daw-layout');this.upper=el('div','ww-daw-upper');this.browser=Panel('Track inspector');this.browser.classList.add('ww-daw-browser');this.buildBrowser();
     this.timeline=el('section','ww-daw-arrangement');this.timeline.setAttribute('aria-label','Arrangement');const tools=el('div','ww-daw-arrangement-tools');
-    this.browserToggle=action('Show Browser',()=>{if(this.prefs.maximized==='arrangement'){this.prefs.maximized=null;this.prefs.browser=true;}else this.prefs.browser=!this.prefs.browser;this.layout();});this.zoomOut=action('−',()=>this.zoom(this.prefs.zoom/1.25));this.zoomOut.setAttribute('aria-label','Zoom out Arrangement');this.zoomIn=action('+',()=>this.zoom(this.prefs.zoom*1.25));this.zoomIn.setAttribute('aria-label','Zoom in Arrangement');this.zoomFit=action('Fit',()=>this.fit());this.zoomFit.setAttribute('aria-label','Fit Arrangement to content');this.zoomValue=el('output','ww-muted');
+    this.browserToggle=action('Show Track inspector',()=>{if(this.prefs.maximized==='arrangement'){this.prefs.maximized=null;this.prefs.browser=true;}else this.prefs.browser=!this.prefs.browser;this.layout();});this.zoomOut=action('−',()=>this.zoom(this.prefs.zoom/1.25));this.zoomOut.setAttribute('aria-label','Zoom out Arrangement');this.zoomIn=action('+',()=>this.zoom(this.prefs.zoom*1.25));this.zoomIn.setAttribute('aria-label','Zoom in Arrangement');this.zoomFit=action('Fit',()=>this.fit());this.zoomFit.setAttribute('aria-label','Fit Arrangement to content');this.zoomValue=el('output','ww-muted');
     this.gridSelect=el('select');this.gridSelect.setAttribute('aria-label','Arrangement grid');for(const [label,value] of [['1/4',1],['1/8',.5],['1/16',.25],['1/32',.125]])this.gridSelect.add(new Option(label,value));this.gridSelect.value=this.grid;this.gridSelect.onchange=()=>{this.grid=Number(this.gridSelect.value);this.render();};
     this.snapToggle=action('Snap',()=>{this.snap=!this.snap;this.snapToggle.setAttribute('aria-pressed',String(this.snap));});this.snapToggle.setAttribute('aria-pressed','true');
     this.rulerMode=el('select');this.rulerMode.setAttribute('aria-label','Arrangement ruler');this.rulerMode.add(new Option('Bars / beats','music'));this.rulerMode.add(new Option('Minutes / seconds','time'));this.rulerMode.value=this.prefs.ruler;this.rulerMode.onchange=()=>{this.prefs.ruler=this.rulerMode.value;this.persist();this.render();};
@@ -94,7 +94,7 @@ export class DawArrangement {
   }
   persist(){try{localStorage.setItem('waswan-daw-layout-v1',JSON.stringify(this.prefs));}catch{this.w.status.textContent='Layout could not be saved in this browser';}}
   splitter(orientation,key,min,max){
-    const node=el('div','ww-daw-splitter');node.tabIndex=0;node.setAttribute('role','separator');node.setAttribute('aria-label',orientation==='horizontal'?'Resize lower panel':'Resize Browser');node.setAttribute('aria-orientation',orientation);node.setAttribute('aria-valuemin',min);node.setAttribute('aria-valuemax',max);let drag;
+    const node=el('div','ww-daw-splitter');node.tabIndex=0;node.setAttribute('role','separator');node.setAttribute('aria-label',orientation==='horizontal'?'Resize lower panel':'Resize Track inspector');node.setAttribute('aria-orientation',orientation);node.setAttribute('aria-valuemin',min);node.setAttribute('aria-valuemax',max);let drag;
     node.dataset.dawHint=node.title='Arrow keys resize · Home resets the size';
     node.onpointerdown=e=>{e.preventDefault();node.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,value:this.prefs[key]};};node.onpointermove=e=>{if(!drag)return;this.prefs[key]=Math.max(min,Math.min(max,drag.value+(orientation==='horizontal'?drag.y-e.clientY:e.clientX-drag.x)));this.layout(false);};
     for(const event of ['pointerup','pointercancel','lostpointercapture'])node.addEventListener(event,()=>{if(drag){drag=null;this.persist();}});node.ondblclick=()=>{this.prefs[key]=defaultDawLayout()[key];this.layout();};
@@ -112,7 +112,7 @@ export class DawArrangement {
     const detached=this.windows.has(p.panel);
     this.detachedNotice.hidden=!detached;
     this.detachedNotice.textContent=detached?this.windows.label(p.panel)+' is open in another window.':'';
-    this.detach.textContent=detached?'Focus detached panel':'Detach active panel';for(const [name,button] of [['clip',this.clipTab],['mixer',this.mixerTab],['automation',this.autoTab],['effects',this.fxTab]])button?.setAttribute('aria-pressed',String(p.panel===name));this.browserToggle.textContent=p.browser?'Hide Browser':'Show Browser';this.maximize.textContent=max==='arrangement'?'Restore Arrangement':'Expand Arrangement';this.bottomExpand.textContent=max==='editor'?'Restore editor':'Expand editor';this.hSplit.setAttribute('aria-valuenow',p.browserWidth);this.vSplit.setAttribute('aria-valuenow',p.bottomHeight);
+    this.detach.textContent=detached?'Focus detached panel':'Detach active panel';for(const [name,button] of [['clip',this.clipTab],['mixer',this.mixerTab],['automation',this.autoTab],['effects',this.fxTab]])button?.setAttribute('aria-pressed',String(p.panel===name));this.browserToggle.textContent=p.browser?'Hide Track inspector':'Show Track inspector';this.maximize.textContent=max==='arrangement'?'Restore Arrangement':'Expand Arrangement';this.bottomExpand.textContent=max==='editor'?'Restore editor':'Expand editor';this.hSplit.setAttribute('aria-valuenow',p.browserWidth);this.vSplit.setAttribute('aria-valuenow',p.bottomHeight);
   }
   layout(save=true){this.applyVisibility();if(save)this.persist();this.measure();}
   pane(name){return {clip:this.clipPane,mixer:this.mixerPane,effects:this.fxPane,automation:this.autoPane}[name];}
@@ -145,7 +145,7 @@ export class DawArrangement {
     this.duplicate=action('Duplicate selected track',()=>this.w.run(()=>{this.w.controller.command('track.duplicate',{id:this.w.selected,clips:this.includeClips.checked});this.w.selected=this.w.controller.snapshot().tracks.at(-1).id;this.w.refresh();}));
     this.up=action('Move selected track up',()=>this.move(-1));this.down=action('Move selected track down',()=>this.move(1));this.remove=action('Delete selected track',()=>this.w.edit('track.remove',{id:this.w.selected}));
     this.height=control('Track height','range',this.browser);Object.assign(this.height,{min:56,max:180,step:4,value:this.prefs.trackHeight});this.height.oninput=()=>{this.prefs.trackHeight=Number(this.height.value);this.render();};this.height.onchange=()=>this.persist();
-    this.browser.append(this.selection,this.selectedType,this.preset,this.icon,this.duplicate,this.up,this.down,this.remove,el('p','ww-muted','Input routing is explicit. Selecting a track keeps Synth controller mappings.'));
+    this.browser.prepend(this.selection,this.selectedType,this.preset);this.browser.append(this.icon,this.duplicate,this.up,this.down,this.remove);
     const presets=el('details');
     const presetButton=(label,task)=>action(label,()=>this.w.run(async()=>{
       const track=this.w.selectedTrack();if(track)this.w.status.textContent=await task(track);

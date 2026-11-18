@@ -40,12 +40,12 @@ class Foundation {
     this.buildDiagnostics();this.buildSettings();this.buildDock();this.shell.append(this.performanceReadouts);this.buildMidiDialog();
     this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'),()=>this.dock.querySelector('#keys .key')?.focus());
     this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
-    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{toggleKeyboard:()=>{
+    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{openSettings:()=>{window.focus();this.showSettings(true);},toggleKeyboard:()=>{
       this.dawKeyboardVisible=!this.dawKeyboardVisible;
       this.dock.hidden=!this.dawKeyboardVisible;
       if(this.dawTab?.connected&&this.dawKeyboardVisible)window.focus();
       return this.dawKeyboardVisible;
-    }});this.addView('daw',this.daw.node);bridge.isDawBusy=()=>this.daw.player.playing||this.daw.player.starting||this.daw.recorder.busy||this.daw.monitor.enabled||this.daw.audition?.busy||this.daw.audioExport?.exporter.busy;bridge.isStudioBusy=()=>!!(this.sequence.playing||this.sequence.starting||this.sequence.rendering||this.sequence.capture||this.studio.recorder.busy||this.studio.recorder.player||this.studio.recorder.playbackPreparing);
+    }});this.addView('daw',this.daw.node);this.settingsPanel.append(this.daw.midiProfiles.panel);bridge.isDawBusy=()=>this.daw.player.playing||this.daw.player.starting||this.daw.recorder.busy||this.daw.recorder.audioTrackId||this.daw.monitor.enabled||this.daw.audition?.busy||this.daw.audioExport?.exporter.busy;bridge.isStudioBusy=()=>!!(this.sequence.playing||this.sequence.starting||this.sequence.rendering||this.sequence.capture||this.studio.recorder.busy||this.studio.recorder.player||this.studio.recorder.playbackPreparing);
     this.dawTab=new DawTab(this.daw,{
       onMove:node=>this.views.set('daw',node),focusSynth:()=>this.selectWorkspace('perf'),
       onError:message=>{this.notice.textContent=message;}
@@ -54,6 +54,7 @@ class Foundation {
     const license=el('a','','GPL-3.0');license.href='../LICENSE.txt';credits.append(license);
     const lame=el('a','','LAME / lamejs'),source=el('a','','source & license');lame.href='https://lame.sourceforge.net/';source.href='./vendor/lamejs/index.html';credits.append(el('span','',' · MP3: '),lame,el('span','',' · '),source);this.shell.append(credits);
     const previous=this.bridge.midi.profile.onChange;
+    this.bridge.midi.onInputStateChange=()=>this.daw.refreshRecordingSummary();
     this.bridge.midi.profile.onChange=()=>{previous();this.updateBadges();this.updateLearnState();this.updateAssignments();};
     addEventListener('focus',()=>this.focusMidiContext());
     this.shell.addEventListener('focusin',event=>{if(!event.target.closest('.ww-daw'))this.focusMidiContext();});

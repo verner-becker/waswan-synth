@@ -29,10 +29,42 @@ export class DawRecorder {
     const {context}=this.w.bridge.getAudio();
     if(this.stream?.active&&this.device===this.settings.deviceId&&this.audioSource?.context===context)return;
     if(this.stream)this.releaseAudio();const stream=await (this.w.viewWindow?.navigator||navigator).mediaDevices.getUserMedia({video:false,audio:{deviceId:this.settings.deviceId==='default'?undefined:{exact:this.settings.deviceId},echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:{ideal:2}}});
-    if(!stream.getAudioTracks().length){for(const t of stream.getTracks())t.stop();throw Error('No compatible audio input');}this.stream=stream;this.device=this.settings.deviceId;this.audioSource=context.createMediaStreamSource(stream);for(const track of stream.getAudioTracks())track.onended=()=>{if(this.busy)void this.stop('input-disconnected');else this.releaseAudio();};
+    if(!stream.getAudioTracks().length){for(const t of stream.getTracks())t.stop();throw Error('No compatible audio input');}this.stream=stream;this.device=this.settings.deviceId;this.audioSource=context.createMediaStreamSource(stream);for(const track of stream.getAudioTracks())track.onended=()=>{
+      if(this.busy)void this.stop('input-disconnected');
+      else void this.releaseAudio().then(()=>this.w.refreshControls());
+    };
   }
-  releaseAudio(){this.audioSource?.disconnect();for(const t of this.stream?.getTracks()||[]){t.onended=null;t.stop();}this.stream=null;this.audioSource=null;this.audioMonitorNode=null;this.audioTrackId=null;}
-  async enableAudio(){if(this.w.player.playing)throw Error('Stop playback before changing the audio input');const track=this.w.selectedTrack();if(track?.type!=='audio')throw Error('Select an audio track');await this.w.player.prepareLive(this.w.controller);if(!this.w.monitor.enabled)await this.w.monitor.enable();await this.prepareAudio();this.routeAudio(track.id);}
+  releaseAudio(){
+    this.audioSource?.disconnect();
+    for(const t of this.stream?.getTracks()||[]){t.onended=null;t.stop();}
+    this.stream=this.audioSource=this.audioMonitorNode=this.audioTrackId=null;
+    this.w.monitor?.updateMix();
+    return this.w.monitor?.releaseUnusedSession();
+  }
+  async connectAudio(track){
+    await this.prepareAudio();
+    try{
+      const hadSession=!!this.w.monitor.token;
+      await this.w.monitor.ensureSession();
+      if(hadSession&&this.w.monitor.needsPreparation(this.w.controller.snapshot()))await this.w.player.prepareLive(this.w.controller);
+      this.routeAudio(track.id);
+    }catch(error){
+      await this.releaseAudio();
+      throw error;
+    }
+  }
+  async enableAudio(){
+    if(this.w.player.playing)throw Error('Stop playback before changing the audio input');
+    const track=this.w.selectedTrack();
+    if(track?.type!=='audio')throw Error('Select an audio track');
+    await this.connectAudio(track);
+  }
+  intent(){
+    if(this.busy&&this.takeIntent)return this.takeIntent;
+    const track=this.w.snapshot.tracks.find(t=>t.arm),clip=this.w.clip();
+    const replace=track&&clip?.trackId===track.id&&this.settings.replaceSelected!==false?clip:null;
+    return {track,replace,internal:track?.type==='audio'&&this.synthInput};
+  }
   routeAudio(id){if(this.audioMonitorNode&&this.audioSource)try{this.audioSource.disconnect(this.audioMonitorNode);}catch{}this.audioMonitorNode=this.w.player.tracks.get(id)?.gate;if(!this.audioMonitorNode)throw Error('Audio track input is unavailable');this.audioSource.connect(this.audioMonitorNode,0,1);this.audioTrackId=id;this.w.monitor.updateMix();}
   inputForTake(context,node){
     if(!this.synthInput)return this.audioSource;
@@ -45,16 +77,21 @@ export class DawRecorder {
   }
   seed(){const r=this.w.monitor.router;return {pedals:[...r.pedals],bends:[...r.bends],mods:[...r.mods],held:[...r.held].filter(([,e])=>e.trackId===this.track.id).map(([key,e])=>({channel:key>>7,pitch:key&127,velocity:e.velocity}))};}
   async start(){
-    if(this.busy||this.w.player.playing||this.w.player.starting||this.w.audition?.busy)throw Error('Stop playback before recording');const p=this.w.controller.snapshot(),track=p.tracks.find(t=>t.arm);if(!track)throw Error('Arm one track before Record');if(track.type==='midi'&&!track.instrument)throw Error('Choose an instrument before Record');if(this.w.bridge.isStudioBusy?.())throw Error('Stop Studio before recording');this.busy=true;this.track=track;this.cancelled=false;this.discard=false;this.status('preparing','Preparing recording and its recovery snapshot');
+    if(this.busy||this.w.player.playing||this.w.player.starting||this.w.audition?.busy)throw Error('Stop playback before recording');
+    const intent=this.intent(),{track,replace,internal}=intent;
+    if(!track)throw Error('Arm one track before Record');
+    if(track.type==='midi'&&!track.instrument)throw Error('Choose an instrument before Record');
+    if(this.w.bridge.isStudioBusy?.())throw Error('Stop Studio before recording');
+    this.takeIntent=intent;this.busy=true;this.track=track;this.cancelled=false;this.discard=false;
+    this.status('preparing','Preparing the recovery snapshot');
     try{
-      const internal=track.type==='audio'&&this.synthInput;
       if(internal&&(this.w.monitor.enabled||this.w.monitor.preparing))throw Error('Disable DAW MIDI input to play the Synth while recording its output');
       const reservedPart=internal?(this.w.frame?.track??0):undefined;
       await this.w.player.capture(this.w.controller);
       if(internal)await this.w.player.graph();
+      else if(track.type==='audio')await this.connectAudio(track);
       else if(!this.w.monitor.enabled)await this.w.monitor.enable();
-      if(track.type==='audio'&&!internal){await this.prepareAudio();this.routeAudio(track.id);}
-      const current=this.w.controller.snapshot(),selected=this.settings.replaceSelected===false?null:this.w.clip(),replace=selected?.trackId===track.id?selected:null,t=current.transport,fromFrame=t?.loop?Math.round(t.start*60*RATE/(current.bpm*PPQ)):replace?Math.round(clipSeconds(replace,current.bpm)*RATE):this.w.cursor||0,endFrame=t?.loop?Math.round(t.end*60*RATE/(current.bpm*PPQ)):Math.min(RATE*1200,Math.floor(8192*60*RATE/current.bpm)),limit=endFrame-fromFrame;
+      const current=this.w.controller.snapshot(),t=current.transport,fromFrame=t?.loop?Math.round(t.start*60*RATE/(current.bpm*PPQ)):replace?Math.round(clipSeconds(replace,current.bpm)*RATE):this.w.cursor||0,endFrame=t?.loop?Math.round(t.end*60*RATE/(current.bpm*PPQ)):Math.min(RATE*1200,Math.floor(8192*60*RATE/current.bpm)),limit=endFrame-fromFrame;
       if(limit<128)throw Error('Recording interval must contain at least 128 frames');const remaining={...current,clips:current.clips.filter(c=>c.id!==replace?.id)},other=compileProject(remaining,assignSlots(remaining,8,reservedPart)),noteCount=remaining.clips.reduce((n,c)=>n+(c.notes?.length||0),0),eventCount=remaining.clips.reduce((n,c)=>n+(c.midiEvents?.length||0),0),oldAsset=replace?.assetId&&!remaining.clips.some(c=>c.assetId===replace.assetId)?replace.assetId:null,audioBudget=LIMITS.totalFrames-current.assets.reduce((n,a)=>n+(a.id===oldAsset?0:a.frames),0);
       if(track.type==='audio'&&(audioBudget<128||current.assets.length-(oldAsset?1:0)>=LIMITS.assets))throw Error('Audio source budget reached');if(!replace&&current.clips.length>=LIMITS.clips)throw Error('Clip budget reached');
       this.meta={version:1,id:uuid(),clipId:uuid(),assetId:uuid(),kind:track.type,input:internal?'synth':track.type==='audio'?'device':'midi',projectId:current.id,trackId:track.id,name:('Recorded '+track.name).slice(0,120),created:Date.now(),status:'recording',replaceClipId:replace?.id||null,fromFrame,bpm:current.bpm,channel:this.w.monitor.channel,offsetMs:internal?0:Number(this.offset(track.type==='midi'?'midi':'audio')),limit:Math.min(limit,track.type==='audio'?audioBudget:limit),budget:{noteLimit:65536-noteCount,eventLimit:65536-eventCount,playbackBudget:131072-other.events.length}};
@@ -63,7 +100,7 @@ export class DawRecorder {
       const ready=new Promise((resolve,reject)=>{this.readyResolve=resolve;this.readyReject=reject;});this.worker.onmessage=({data:m})=>{if(m.t==='ready')this.readyResolve();if(m.t==='timeline-ready')this.timelineResolve?.();if(m.t==='finished')this.resolve(m.meta);if(m.t==='error'){const error=Error(m.message);this.readyReject(error);this.reject(error);if(this.busy&&!this.stopping)void this.stop('storage-error');}};this.worker.onerror=()=>{const error=Error('Recording writer failed');this.readyReject(error);this.reject(error);if(!this.stopping)void this.stop('storage-error');};
       const init={t:'init',meta:this.meta};let transfer=[];if(track.type==='audio'){const {context,node}=this.w.bridge.getAudio();await context.audioWorklet.addModule(new URL('./daw-record-capture.js',import.meta.url));const channel=new MessageChannel();this.capture=new AudioWorkletNode(context,'waswan-daw-capture',{numberOfInputs:2,outputChannelCount:[2],channelCount:2,channelCountMode:'explicit'});this.captureSource=this.inputForTake(context,node);this.captureSource.connect(this.capture,0,0);this.w.player.clockLink.connect(this.capture,0,1);this.capture.connect(this.w.player.bus);this.capture.port.postMessage({t:'init',token:this.meta.id,limit:this.meta.limit,port:channel.port1},[channel.port1]);init.port=channel.port2;transfer=[channel.port2];}this.worker.postMessage(init,transfer);await Promise.race([ready,new Promise((_,reject)=>{this.readyTimer=setTimeout(()=>reject(Error('Recording writer did not become ready')),10000);})]);clearTimeout(this.readyTimer);if(this.cancelled)throw Error('Recording cancelled before start');
       const {context,node}=this.w.bridge.getAudio();this.takeContext=context;this.takeNode=node;this.lastClockFrame=0;this.meta.seedFrame=Math.round(context.currentTime*RATE);this.meta.seed=this.seed();this.take=new MidiTake(this.meta.channel,this.meta.budget);if(track.type==='midi'){this.take.seed(this.meta.seed,this.meta.seedFrame);this.unsubscribe=subscribeDawInput(e=>this.input(e));}
-      if(this.cancelled)throw Error('Recording cancelled before start');const countInFrames=Math.round(Number(this.settings.countIn)*current.meter[0]*4/current.meter[1]*60/current.bpm*RATE),started=await this.w.player.start(this.w.controller,{fromFrame,endFrame:fromFrame+this.meta.limit,loop:false,countInFrames,reservedPart,recordToken:this.meta.id,beforeStart:async({startFrame})=>{this.meta.startFrame=startFrame;const ready=new Promise(resolve=>{this.timelineResolve=resolve;});this.worker.postMessage({t:'timeline',data:{startFrame,seedFrame:this.meta.seedFrame,seed:this.meta.seed}});await Promise.race([ready,new Promise((_,reject)=>{this.timelineTimer=setTimeout(()=>reject(Error('Take timeline could not be checkpointed')),10000);})]);clearTimeout(this.timelineTimer);},excludeClips:new Set(replace?[replace.id]:[]),click:this.clickSettings});if(this.cancelled)throw Error('Recording cancelled before start');this.meta.startFrame=started.startFrame;this.status('count-in','Count-in · recording '+track.name+' · Stop finishes this take');
+      if(this.cancelled)throw Error('Recording cancelled before start');const countInFrames=Math.round(Number(this.settings.countIn)*current.meter[0]*4/current.meter[1]*60/current.bpm*RATE),started=await this.w.player.start(this.w.controller,{fromFrame,endFrame:fromFrame+this.meta.limit,loop:false,countInFrames,reservedPart,recordToken:this.meta.id,beforeStart:async({startFrame})=>{this.meta.startFrame=startFrame;const ready=new Promise(resolve=>{this.timelineResolve=resolve;});this.worker.postMessage({t:'timeline',data:{startFrame,seedFrame:this.meta.seedFrame,seed:this.meta.seed}});await Promise.race([ready,new Promise((_,reject)=>{this.timelineTimer=setTimeout(()=>reject(Error('Take timeline could not be checkpointed')),10000);})]);clearTimeout(this.timelineTimer);},excludeClips:new Set(replace?[replace.id]:[]),click:this.clickSettings});if(this.cancelled)throw Error('Recording cancelled before start');this.meta.startFrame=started.startFrame;this.status('count-in',countInFrames?'Count-in · Stop cancels the take':'Starting take');
       this.recordSecond=null;
       this.timer=setInterval(()=>this.progress(context),250);
       void this.finished.then(()=>{if(this.busy&&!this.stopping)void this.stop('arrangement-end');},()=>{});
@@ -96,7 +133,7 @@ export class DawRecorder {
     if(this.synthTap){try{this.synthNode.disconnect(this.synthTap,0,0);}catch{}this.synthTap.disconnect();}
     this.synthTap=this.synthNode=null;
     if(this.audioSource&&this.audioSource.context!==this.w.bridge.getAudio().context)this.releaseAudio();
-    this.takeContext=this.takeNode=null;this.worker?.terminate();this.worker=null;await this.store?.release();this.store=null;await discardEmptyTake(this.meta?.id).catch(()=>{});this.busy=false;this.stopping=null;this.track=null;this.state='idle';this.w.monitor?.updateMix();}
+    this.takeContext=this.takeNode=null;this.worker?.terminate();this.worker=null;await this.store?.release();this.store=null;await discardEmptyTake(this.meta?.id).catch(()=>{});this.busy=false;this.stopping=null;this.track=this.takeIntent=null;this.state='idle';this.w.monitor?.updateMix();}
   async abort(){await this.w.player.stop().catch(()=>{});await this.cleanup();}
   async recover(id){
     const take=await readTake(id,{baseProject:true});

@@ -268,7 +268,12 @@
 .ww-daw-arrangement-clip>span{position:absolute;top:5px;left:7px;right:5px;text-overflow:ellipsis;overflow:hidden;pointer-events:none}.ww-daw-arrangement-clip canvas{position:absolute;left:6px;right:6px;top:24px;width:calc(100% - 12px);height:calc(100% - 29px);pointer-events:none}.ww-daw-arrangement-row.is-folded .ww-daw-arrangement-clip canvas{display:none}
 
 .ww-daw-record { border-color: #c26879; color: #ffbcc8; }
-.ww-daw-record[aria-pressed="true"] { background: #852d42; color: #fff; border-color: #ff91a9; }
+.ww-shell .ww-daw-record[data-state="recording"] { background: #852d42; color: #fff; border-color: #ff91a9; opacity:1; }
+.ww-daw-record-summary {margin:0;color:#bfd4de;line-height:1.4}
+.ww-daw-midi-destination {margin:0;line-height:1.4}
+.ww-daw-record-summary[data-state="recording"] {color:#ffb9c5}
+.ww-daw-track-input .ww-section-header h2 {font-size:13px}
+.ww-daw-track-input>p {margin:6px 0;font-size:12px;overflow-wrap:anywhere}
 
 .ww-daw-clip-actions {display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0 10px}.ww-daw-clip-actions output{font-size:11px}.ww-daw-arrangement-clip {touch-action:none;cursor:grab}.ww-daw-arrangement-clip>.ww-daw-clip-handle{position:absolute;top:0;bottom:0;left:auto;right:0;width:7px;pointer-events:auto;cursor:ew-resize;background:#ffffff18;z-index:2}.ww-daw-arrangement-clip>.is-left{left:0;right:auto}.ww-daw-arrangement-clip>.is-loop{top:auto;bottom:0;width:14px;height:14px;background:#b99cdb;border-left:1px solid #fff;cursor:e-resize;z-index:3}.ww-daw-arrangement-clip[data-type=audio]>.is-loop{display:none}.ww-daw-marquee{position:fixed;pointer-events:none;background:#62cbdf24;border:1px solid #81dbe9;z-index:1000}
 

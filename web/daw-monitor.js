@@ -11,19 +11,47 @@ export class DawMonitor {
   allowed(track){return track?.monitor==='in'||track?.monitor==='auto'&&(!this.w.player.playing||this.w.recorder?.busy&&this.w.recorder?.track?.id===track.id);}
   target(){const track=this.track();if(track?.type!=='midi')return null;const part=this.w.player.slots.get(track.id);return {trackId:track.id,part,audible:this.ready&&Number.isInteger(part)&&this.allowed(track),channel:this.channel};}
   command(type,data){if(!this.token)return;void this.w.player.requests().request(type,{...data,token:this.token,projectId:this.w.controller.snapshot().id}).catch(error=>this.w.error(error));}
-  async enable(){
-    if(this.enabled){await this.refresh();return;}if(this.w.bridge.isStudioBusy?.())throw Error('Stop Studio before enabling DAW input');if(!this.w.running)throw Error('Start audio before enabling DAW input');
-    const token=crypto.randomUUID();await this.w.player.openLive(this.w.controller,token);this.token=token;this.enabled=true;this.ready=true;this.router.enable();this.updateMix();this.w.refreshControls();
+  async ensureSession(){
+    await this.closing;
+    if(this.token)return;
+    if(this.w.bridge.isStudioBusy?.())throw Error('Stop Studio before enabling a DAW input');
+    if(!this.w.running)throw Error('Start audio before enabling a DAW input');
+    const token=crypto.randomUUID();
+    await this.w.player.openLive(this.w.controller,token);
+    this.token=token;
   }
-  async disable(){const token=this.token;this.enabled=false;this.ready=false;this.router.disable();this.token=null;if(token)await this.w.player.closeLive(token);this.w.refreshControls();}
+  async releaseUnusedSession(){
+    if(this.enabled||this.w.recorder?.audioTrackId)return;
+    const token=this.token;
+    if(token){
+      this.token=null;
+      this.closing=this.w.player.closeLive(token).catch(error=>this.w.error(error));
+    }
+    await this.closing;
+  }
+  async enable(){
+    if(this.enabled){await this.refresh();return;}
+    await this.ensureSession();
+    this.enabled=true;this.ready=true;this.router.enable();this.updateMix();this.w.refreshControls();
+  }
+  async disable(){
+    if(this.enabled&&this.w.recorder?.audioTrackId){
+      for(const part of new Set(this.router.parts.flatMap(parts=>[...parts])))this.router.dropPart(part);
+    }
+    this.enabled=false;this.ready=false;this.router.disable();
+    this.updateMix();
+    await this.releaseUnusedSession();
+    this.w.refreshControls();
+  }
   invalidate(){this.enabled=false;this.ready=false;this.router.disable();this.token=null;this.w.player.liveSessionToken=null;}
   needsPreparation(project){
     const slots=assignSlots(project),player=this.w.player;if(player.projectId!==project.id||slots.size!==player.slots.size||project.tracks.length!==player.tracks.size)return true;
     return project.tracks.some(t=>t.type==='midi'&&t.instrument&&(!samePatch(t.instrument.patch,player.boundPatches.get(t.id))||slots.get(t.id)!==player.slots.get(t.id)));
   }
   async refresh(){
+    this.updateMix();
     if(!this.enabled)return;if(this.preparing){this.pending=true;return;}
-    const project=this.w.controller.snapshot();this.updateMix();if(this.w.player.playing||this.w.player.starting||this.w.audition?.busy)return;
+    const project=this.w.controller.snapshot();if(this.w.player.playing||this.w.player.starting||this.w.audition?.busy)return;
     let needed;try{needed=this.needsPreparation(project);}catch(error){this.ready=false;this.w.error(error);return;}if(!needed){this.ready=true;return;}
     this.preparing=true;this.ready=false;
     try{
@@ -33,8 +61,14 @@ export class DawMonitor {
   }
   inputChanged(){this.updateMix();if(this.preparing)this.pending=true;else if(this.enabled&&!this.ready)void this.refresh();}
   updateMix(){
-    if(!this.enabled)return;const project=this.w.snapshot,ids=new Set(),selected=this.track();
-    for(const [id,part] of this.w.player.slots){const track=project.tracks.find(t=>t.id===id);if(!track||!this.allowed(track)){if(this.router.parts.some(set=>set.has(part)))this.router.dropPart(part);continue;}if(this.router.parts.some(set=>set.has(part)))ids.add(id);}
-    if(selected&&this.allowed(selected))ids.add(selected.id);const audioTrack=this.w.recorder?.audioTrackId;if(audioTrack){const track=project.tracks.find(t=>t.id===audioTrack);if(track&&this.allowed(track))ids.add(track.id);}this.w.player.liveMix(ids);
+    if(!this.token)return;
+    const project=this.w.snapshot,ids=new Set(),selected=this.track();
+    if(this.enabled){
+      for(const [id,part] of this.w.player.slots){const track=project.tracks.find(t=>t.id===id);if(!track||!this.allowed(track)){if(this.router.parts.some(set=>set.has(part)))this.router.dropPart(part);continue;}if(this.router.parts.some(set=>set.has(part)))ids.add(id);}
+      if(selected?.type==='midi'&&this.allowed(selected))ids.add(selected.id);
+    }
+    const audioTrack=project.tracks.find(t=>t.id===this.w.recorder?.audioTrackId);
+    if(audioTrack&&this.allowed(audioTrack))ids.add(audioTrack.id);
+    this.w.player.liveMix(ids);
   }
 }

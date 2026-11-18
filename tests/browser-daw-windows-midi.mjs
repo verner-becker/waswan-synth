@@ -37,7 +37,7 @@ try{
   const field=name=>daw.getByLabel(name,{exact:true});
   const setup=page.locator('.ww-midi-setup');
   const midi=async data=>page.evaluate(data=>audit.source.onmidimessage({data,timeStamp:performance.now()}),data);
-  const profile=daw.locator('.ww-daw-midi-profiles');
+  const profile=page.locator('#ww-settings .ww-daw-midi-profiles');
   const menu=daw.locator('.ww-daw-view-menu');
   async function detach(name){
     await menu.locator('summary').click();
@@ -64,7 +64,7 @@ try{
   await button('Show Clip editor').click();
   await daw.getByText('Exact note values',{exact:true}).click();
   await button('Add DAW note').click();
-  await button('Show Browser').click();
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
   await profile.locator('summary').click();
   await profile.getByLabel('Profile name',{exact:true}).fill('My controller');
   await profile.getByRole('button',{name:'Create profile for this device'}).click();
@@ -94,6 +94,8 @@ try{
   await profile.getByRole('button',{name:'Learn context control'}).click();
   await midi([176,48,64]);
   await profile.getByLabel('Follow focused workspace or panel').check();
+  await page.getByRole('button',{name:'Close settings',exact:true}).click();
+  await button('Show Track inspector').click();
   await button('Enable DAW MIDI input').click();
   await page.waitForFunction(()=>audit.w.monitor.ready);
   await midi([176,64,127]);

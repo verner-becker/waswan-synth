@@ -21,7 +21,7 @@ import {beatFrame,frameBeat,arrangementBeats,musicalPosition,secondsPosition} fr
 const patchName=patch=>patch?String.fromCharCode(...patch.slice(63,73)).replace(/[^\x20-\x7e]/g,'').trim()||'Saved sound':'Choose an instrument';
 const db=value=>value>0?(20*Math.log10(value)).toFixed(1)+' dB':'−∞ dB';
 export class DawWorkspace {
-  constructor(bridge,{toggleKeyboard=()=>false}={}){
+  constructor(bridge,{toggleKeyboard=()=>false,openSettings=()=>{}}={}){
     this.bridge=bridge;this.files=new ProjectFiles({
       openPicker:options=>this.pick('showOpenFilePicker',options),
       savePicker:options=>this.pick('showSaveFilePicker',options)
@@ -65,9 +65,8 @@ export class DawWorkspace {
     this.recoveryDialog.append(el('h2','','Recover a project from this browser'),this.recoveryChoices,this.recoveryConfirm,action('Cancel DAW recovery',()=>this.recoveryDialog.close()));document.body.append(this.recoveryDialog);
     this.attach(new ProjectController());
     this.layout=new DawArrangement(this,{transport,trackTools,master});this.layout.render();
-    this.monitor=new DawMonitor(this);this.recorder=new DawRecorder(this);this.buildInputControls(transport);this.buildRecordingControls(transport);this.importer=new DawImporter(this);this.audition=new DawAudition(this);this.clipTools=new DawClipTools(this);this.buildImportControls();this.editors=new DawEditors(this);this.mix=new DawMix(this);this.audioExport=new DawExportPanel(this,this.layout.transportOptions);
+    this.monitor=new DawMonitor(this);this.recorder=new DawRecorder(this);this.buildInputControls(openSettings);this.buildRecordingControls(transport);this.importer=new DawImporter(this);this.audition=new DawAudition(this);this.clipTools=new DawClipTools(this);this.buildImportControls();this.editors=new DawEditors(this);this.mix=new DawMix(this);this.audioExport=new DawExportPanel(this,this.layout.transportOptions);
     this.midiProfiles=new DawMidiProfilesPanel(this);
-    this.layout.browser.append(this.midiProfiles.panel);
     transport.append(action('Shortcuts',()=>shortcutHelp(this.node.ownerDocument)));
     this.refreshControls();
     this.node.addEventListener('pointerup',()=>this.controller.endCoalescing());
@@ -94,16 +93,50 @@ export class DawWorkspace {
     this.status.textContent='Project saved to '+this.files.handle.name;
   }
   field(name,type,value,parent){const label=el('label','',name+' '),input=el('input');input.type=type;input.value=value;input.setAttribute('aria-label',name);label.append(input);parent.append(label);return input;}
-  buildInputControls(transport){
-    this.inputToggle=action('Enable DAW MIDI input',()=>this.run(()=>this.monitor.enabled?this.monitor.disable():this.monitor.enable()));transport.append(this.inputToggle);this.inputToggle.title='Explicitly route external MIDI to the selected DAW instrument. Workspace navigation does not change this routing.';
-    this.inputPanel=Panel('Input','Selected track');this.inputMode=el('select');this.inputMode.setAttribute('aria-label','DAW track monitor');for(const value of ['in','auto','off'])this.inputMode.add(new Option('Monitor '+value,value));this.inputMode.onchange=()=>this.edit('track.update',{id:this.selected,changes:{monitor:this.inputMode.value}});
-    this.inputChannel=el('select');this.inputChannel.setAttribute('aria-label','DAW MIDI input channel');this.inputChannel.add(new Option('All MIDI channels','all'));for(let ch=0;ch<16;ch++)this.inputChannel.add(new Option('MIDI channel '+(ch+1),ch));this.inputChannel.onchange=()=>{this.monitor.channel=this.inputChannel.value==='all'?null:Number(this.inputChannel.value);this.monitor.updateMix();};
-    this.inputStatus=el('p','ww-muted','DAW MIDI input is off. The original Synth input is unchanged.');this.inputPanel.append(this.inputMode,this.inputChannel,this.inputStatus,el('p','ww-muted','In: always hear input. Auto: hear input while stopped or recording. Off: playback remains audible. Input routing stays active across workspaces.'));this.layout.browser.insertBefore(this.inputPanel,this.layout.preset.nextSibling);this.refreshControls();
+  buildInputControls(openSettings){
+    this.inputPanel=Panel('Recording input');
+    this.inputPanel.classList.add('ww-daw-track-input');
+    this.inputPanel.querySelector('.ww-section-header span').remove();
+    this.inputMode=el('select');
+    this.inputMode.setAttribute('aria-label','DAW track monitor');
+    for(const [value,label] of [['auto','Auto · while stopped or recording'],['in','In · always hear input'],['off','Off · playback only']]){
+      this.inputMode.add(new Option(label,value));
+    }
+    this.inputMode.onchange=()=>this.edit('track.update',{id:this.selected,changes:{monitor:this.inputMode.value}});
+    const monitor=el('label','','Monitor');
+    monitor.append(this.inputMode);
+    this.midiRouting=el('div','ww-daw-midi-routing');
+    this.inputToggle=action('Enable DAW MIDI input',()=>this.run(()=>this.monitor.enabled?this.monitor.disable():this.monitor.enable()));
+    this.inputToggle.id='ww-daw-midi-route';
+    this.inputToggle.title='Route incoming MIDI between Synth and DAW';
+    this.inputChannel=el('select');
+    this.inputChannel.setAttribute('aria-label','DAW MIDI input channel');
+    this.inputChannel.add(new Option('All MIDI channels','all'));
+    for(let ch=0;ch<16;ch++)this.inputChannel.add(new Option('MIDI channel '+(ch+1),ch));
+    this.inputChannel.onchange=()=>{
+      this.monitor.channel=this.inputChannel.value==='all'?null:Number(this.inputChannel.value);
+      this.monitor.updateMix();
+      this.refreshRecordingSummary();
+    };
+    this.inputStatus=el('p','ww-muted');
+    this.midiRouting.append(this.inputStatus,this.inputToggle,this.inputChannel,action('Controller settings',openSettings));
+    this.audioRouting=el('div','ww-daw-audio-routing');
+    this.inputPanel.append(monitor,this.midiRouting,this.audioRouting);
+    this.layout.preset.after(this.inputPanel);
   }
   buildImportControls(){this.importButton=action('Import WAV / MP3 / MIDI',()=>this.run(()=>this.importer.choose()));this.cancelImport=action('Cancel DAW import',()=>this.importer.cancel());this.midiExport=action('Export MIDI composition',()=>this.run(async()=>{const name=await saveMidi(this.controller.snapshot(),null,options=>this.pick('showSaveFilePicker',options));this.status.textContent='MIDI exported to '+name+' · choose instruments in the destination app; mix/FX remain in the WS project';}));this.midiSelectionExport=action('Export selected MIDI clips',event=>{const source=event.currentTarget.ownerDocument.defaultView;return this.run(async()=>{const name=await saveMidi(this.controller.snapshot(),new Set(this.clipTools.selected),options=>this.pick('showSaveFilePicker',options,source));this.status.textContent='MIDI selection exported to '+name;});});this.clipTools.bar.append(this.midiSelectionExport);this.toolbar.append(this.importButton,this.midiExport);this.layout.topActions.append(this.cancelImport);this.layout.viewport.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files'))e.preventDefault();});this.layout.viewport.addEventListener('drop',e=>{if(!e.dataTransfer.files.length)return;e.preventDefault();e.stopPropagation();if(e.dataTransfer.files.length!==1){this.error(Error('Drop one media file at a time'));return;}const beat=this.layout.beatAt(e,this.layout.ruler),atBeat=this.layout.snap?Math.round(beat/this.layout.grid)*this.layout.grid:beat,trackId=e.target.closest('.ww-daw-arrangement-row')?.dataset.trackId;void this.run(()=>this.importer.import(e.dataTransfer.files[0],{atBeat,trackId}));});this.refreshControls();}
   armTrack(id){if(this.recorder.busy||this.player.playing)return;const track=this.snapshot.tracks.find(t=>t.id===id),arm=!track?.arm;this.controller.command('batch',{commands:this.snapshot.tracks.filter(t=>t.arm||t.id===id).map(t=>({type:'track.update',payload:{id:t.id,changes:{arm:t.id===id&&arm}}}))});this.selected=id;this.refresh();}
   buildRecordingControls(transport){
-    this.record=action('Record DAW',()=>this.run(()=>this.recorder.start()));this.record.classList.add('ww-daw-record');this.record.setAttribute('aria-label','Record DAW');this.record.textContent='Record';this.arm=action('Arm selected DAW track',()=>this.armTrack(this.selected));transport.prepend(this.record);
+    this.record=action('Record DAW',()=>this.run(()=>this.recorder.start()));this.record.classList.add('ww-daw-record');this.record.setAttribute('aria-label','Record DAW');this.record.textContent='Record';
+    this.arm=action('Arm selected DAW track',()=>this.armTrack(this.selected));
+    this.arm.setAttribute('aria-label','Arm selected DAW track');
+    this.recordSummary=el('p','ww-daw-record-summary');
+    this.recordSummary.id='ww-daw-record-summary';
+    this.recordSummary.setAttribute('aria-live','polite');
+    this.record.setAttribute('aria-describedby',this.recordSummary.id);
+    this.midiDestination=el('p','ww-muted ww-daw-midi-destination');
+    this.layout.context.after(this.recordSummary,this.midiDestination);
+    transport.prepend(this.record);
     this.countIn=el('select');this.countIn.setAttribute('aria-label','DAW count-in bars');for(const bars of [0,1,2,4])this.countIn.add(new Option(bars?'Count-in '+bars+' bar'+(bars===1?'':'s'):'No count-in',bars));this.countIn.value=this.recorder.settings.countIn;this.countIn.onchange=()=>{this.recorder.settings.countIn=Number(this.countIn.value);this.recorder.preferences();};
     this.click=this.field('DAW metronome','checkbox','',transport);
     this.click.parentElement.firstChild.textContent='Click';
@@ -124,12 +157,18 @@ export class DawWorkspace {
     this.clickVolume.setAttribute('aria-valuetext',this.clickVolume.value+'%');
     this.player.setClick(this.recorder.clickSettings);
     transport.append(this.countIn);
-    this.midiOffset=this.field('DAW MIDI offset ms','number',0,this.inputPanel);this.audioOffset=this.field('DAW audio offset ms','number',0,this.inputPanel);for(const [input,kind] of [[this.midiOffset,'midi'],[this.audioOffset,'audio']]){Object.assign(input,{min:-2000,max:2000,step:1});input.onchange=()=>{const value=Number(input.value);if(!Number.isFinite(value)||Math.abs(value)>2000){this.error(Error('Offset range: −2000 to 2000 ms'));return;}this.recorder.setOffset(kind,value);};}
+    this.midiOffset=this.field('DAW MIDI offset ms','number',0,this.midiRouting);this.audioOffset=this.field('DAW audio offset ms','number',0,this.audioRouting);for(const [input,kind] of [[this.midiOffset,'midi'],[this.audioOffset,'audio']]){Object.assign(input,{min:-2000,max:2000,step:1});input.onchange=()=>{const value=Number(input.value);if(!Number.isFinite(value)||Math.abs(value)>2000){this.error(Error('Offset range: −2000 to 2000 ms'));return;}this.recorder.setOffset(kind,value);};}
     this.audioDevice=el('select');this.audioDevice.setAttribute('aria-label','DAW audio input device');this.audioDevice.append(new Option('Default audio input','default'),new Option('Synth output (internal)',SYNTH_INPUT));if(this.recorder.settings.deviceId!=='default'&&!this.recorder.synthInput)this.audioDevice.add(new Option('Saved audio input',this.recorder.settings.deviceId));this.audioDevice.value=this.recorder.settings.deviceId;this.audioDevice.onchange=()=>{this.recorder.releaseAudio();this.recorder.settings.deviceId=this.audioDevice.value;this.recorder.preferences();this.refreshControls();};
     this.audioInput=action('Enable DAW audio input',()=>this.run(async()=>{if(this.recorder.audioTrackId===this.selected){this.recorder.releaseAudio();this.monitor.updateMix();}else{await this.recorder.enableAudio();await this.refreshAudioDevices();}}));
-    this.replaceTake=this.field('Replace selected DAW clip','checkbox','',this.inputPanel);this.replaceTake.checked=this.recorder.settings.replaceSelected!==false;this.replaceTake.onchange=()=>{this.recorder.settings.replaceSelected=this.replaceTake.checked;this.recorder.preferences();};
-    this.synthInputHint=el('p','ww-muted','Record the current Synth through its own output. Turn off DAW MIDI input and play the Synth.');
-    this.inputPanel.append(this.arm,this.audioDevice,this.audioInput,this.synthInputHint,el('p','ww-muted','One armed track records. With Replace selected clip on, the selected clip on that track is replaced in full after validation. Turn it off to make a new clip at the cursor. With Loop on, Record makes one pass through Range in/out. Positive offset moves a device take earlier.'));
+    this.replaceTake=this.field('Replace selected DAW clip','checkbox','',this.inputPanel);this.replaceTake.checked=this.recorder.settings.replaceSelected!==false;this.replaceTake.onchange=()=>{this.recorder.settings.replaceSelected=this.replaceTake.checked;this.recorder.preferences();this.refreshRecordingSummary();};
+    this.synthInputHint=el('p','ww-muted','Hear this source from the Synth. Playback and click stay outside the take.');
+    this.returnToSynth=action('Route MIDI to Synth',()=>this.run(()=>this.monitor.disable()));
+    const source=el('label','','Source');
+    source.append(this.audioDevice);
+    this.audioRouting.prepend(source,this.audioInput,this.synthInputHint,this.returnToSynth);
+    this.takeDestination=el('p','ww-muted');
+    this.inputPanel.prepend(this.arm);
+    this.inputPanel.append(this.replaceTake.parentElement,this.takeDestination);
     this.takeRecovery=action('Recover interrupted take',()=>this.run(async()=>{const takes=await this.recorder.list();this.takeChoices.replaceChildren(...takes.map(t=>new Option(t.name+' · '+new Date(t.created).toLocaleString()+' · '+t.status,t.id)));this.takeConfirm.disabled=!takes.length;if(!takes.length)this.takeChoices.replaceChildren(new Option('No recoverable take checkpoints',''));this.takeDialog.showModal();}));this.toolbar.append(this.takeRecovery);
     this.takeDialog=el('dialog','ww-map-dialog');this.takeChoices=el('select');this.takeChoices.setAttribute('aria-label','DAW interrupted take');this.takeConfirm=action('Recover selected take checkpoint',()=>this.run(async()=>{if(!this.confirmDiscard())return;await this.recorder.recover(this.takeChoices.value);this.takeDialog.close();}));this.takeDialog.append(el('h2','','Recover a take and its original project snapshot'),this.takeChoices,this.takeConfirm,action('Cancel take recovery',()=>this.takeDialog.close()));document.body.append(this.takeDialog);this.refreshControls();
   }
@@ -225,13 +264,65 @@ export class DawWorkspace {
     for(const field of [this.notes,this.pitch,this.velocity,this.start,this.duration,this.addNote,this.applyNote,this.deleteNote])field.disabled=locked||track?.type!=='midi';
     this.applyNote.disabled=locked||!this.selectedNote;this.deleteNote.disabled=locked||!this.selectedNote;
     this.layout?.controls();this.clipTools?.refresh();this.audioExport?.refresh(locked);this.editors?.controls();this.mix?.refresh();if(this.importButton){this.importButton.disabled=locked;this.midiExport.disabled=fileLocked||!this.snapshot.clips.some(c=>c.type==='midi');this.midiSelectionExport.disabled=fileLocked||!this.snapshot.clips.some(c=>c.type==='midi'&&this.clipTools.selected.has(c.id));this.cancelImport.hidden=!this.importer.busy;}
-    if(this.record){this.record.disabled=fileLocked||this.audition?.busy||this.audition?.busy||this.player.playing||this.monitor?.preparing||!this.running||!this.snapshot.tracks.some(t=>t.arm);this.record.setAttribute('aria-pressed',String(recording));this.arm.disabled=locked||!track;this.arm.setAttribute('aria-pressed',String(!!track?.arm));for(const field of [this.countIn,this.midiOffset,this.audioOffset,this.audioDevice,this.replaceTake])field.disabled=fileLocked;
-      this.click.disabled=this.clickVolume.disabled=this.busy||!!this.audioExport?.exporter.busy;
-      this.audioInput.hidden=this.recorder.synthInput;
-      this.synthInputHint.hidden=!this.recorder.synthInput;
-      this.audioOffset.disabled=fileLocked||this.recorder.synthInput;this.audioInput.disabled=fileLocked||!this.running||this.player.playing||track?.type!=='audio';this.audioInput.textContent=this.recorder.audioTrackId===track?.id?'Disable DAW audio input':'Enable DAW audio input';this.midiOffset.value=this.recorder.offset('midi');this.audioOffset.value=this.recorder.offset('audio');}
-    if(this.inputToggle){this.inputToggle.textContent=this.monitor.enabled?'Disable DAW MIDI input':'Enable DAW MIDI input';this.inputToggle.disabled=fileLocked||this.monitor.preparing||!this.running||track?.type!=='midi'&&!this.monitor.enabled;this.inputMode.disabled=fileLocked||!track;this.inputChannel.disabled=fileLocked;this.inputMode.value=track?.monitor||'off';this.inputStatus.textContent=this.monitor.enabled?(this.monitor.ready?'MIDI → '+(this.monitor.track()?.name||'Synth'):'Preparing input; release held notes before retrying'):'DAW MIDI input is off. The original Synth input is unchanged.';}
+    if(this.record)this.refreshRecordingControls(locked,fileLocked);
   }
+  refreshRecordingControls(locked,fileLocked){
+    const track=this.selectedTrack(),recorder=this.recorder,midi=track?.type==='midi',audio=track?.type==='audio';
+    this.inputPanel.hidden=!track;
+    this.midiRouting.hidden=!midi;
+    this.audioRouting.hidden=!audio;
+    this.arm.disabled=locked||!track;
+    this.arm.setAttribute('aria-pressed',String(!!track?.arm));
+    this.arm.textContent=track?.arm?'Disarm track':'Arm track';
+    for(const control of [this.countIn,this.midiOffset,this.audioOffset,this.audioDevice,this.replaceTake])control.disabled=fileLocked;
+    this.click.disabled=this.clickVolume.disabled=this.busy||!!this.audioExport?.exporter.busy;
+    this.audioInput.hidden=recorder.synthInput;
+    this.synthInputHint.hidden=!recorder.synthInput;
+    this.returnToSynth.hidden=!recorder.synthInput||!this.monitor.enabled;
+    this.returnToSynth.disabled=locked;
+    this.inputMode.parentElement.hidden=audio&&recorder.synthInput;
+    this.audioOffset.parentElement.hidden=recorder.synthInput;
+    this.audioInput.disabled=locked||!this.running;
+    this.audioInput.textContent=recorder.audioTrackId===track?.id?'Disable DAW audio input':'Enable DAW audio input';
+    this.midiOffset.value=recorder.offset('midi');
+    this.audioOffset.value=recorder.offset('audio');
+    this.inputToggle.textContent=this.monitor.enabled?'Disable DAW MIDI input':'Enable DAW MIDI input';
+    this.inputToggle.disabled=fileLocked||this.monitor.preparing||!this.running||!midi&&!this.monitor.enabled;
+    this.inputMode.disabled=fileLocked||!track;
+    this.inputMode.value=track?.monitor||'off';
+    this.inputChannel.disabled=fileLocked;
+    this.refreshRecordingSummary();
+  }
+  refreshRecordingSummary(){
+    if(!this.recordSummary)return;
+    const {track,replace,internal}=this.recorder.intent(),input=this.bridge.midi.input;
+    const route=this.monitor.enabled&&this.monitor.track()?.type==='midi'?this.monitor.track().name:'Synth';
+    const routeText='MIDI → '+route+(input?'':' · no controller selected');
+    if(this.inputStatus.textContent!==routeText)this.inputStatus.textContent=routeText;
+    if(this.midiDestination.textContent!==routeText)this.midiDestination.textContent=routeText;
+    const source=internal?'Synth output':track?.type==='audio'?(this.audioDevice.selectedOptions[0]?.textContent||'Audio input'):
+      (input?.name||'MIDI input')+(this.monitor.channel===null?'':' · Ch '+(this.monitor.channel+1));
+    const destination=replace?'Replace “'+replace.name+'”':'New clip';
+    const state=this.recorder.state;
+    const labels={preparing:'Preparing', 'count-in':this.recorder.settings.countIn?'Count-in':'Starting',
+      recording:'Recording', finalizing:'Finishing', idle:'Record'};
+    const label=labels[state];
+    const blocker=!this.running?'Start audio':!track?'Arm a track with R':track.type==='midi'&&!track.instrument?
+      'Choose an instrument in the Track inspector':internal&&this.monitor.enabled?'Route MIDI to Synth in the Track inspector':
+      track.type==='midi'&&!input?'Choose a controller in Settings':'';
+    const busy=this.recorder.busy;
+    const details=track?track.name+' · '+source+' · '+destination:'';
+    const text=[details,busy?'':blocker].filter(Boolean).join(' · ');
+    if(this.recordSummary.textContent!==text)this.recordSummary.textContent=text;
+    this.recordSummary.dataset.state=state;
+    this.record.dataset.state=state;
+    this.record.textContent=label;
+    this.record.setAttribute('aria-pressed',String(state==='recording'));
+    this.record.disabled=busy||this.busy||this.importer?.busy||this.audition?.busy||this.player.playing||this.player.starting||
+      this.monitor.preparing||this.audioExport?.exporter.busy||!!blocker;
+    if(this.takeDestination.textContent!==destination)this.takeDestination.textContent=destination;
+  }
+
   transportState(state){
     if(!state.playing&&!state.preparing)this.assetRetention.schedule();
     const changed=this.player.playing!==state.playing||this.transportPlaying!==state.playing;this.player.playing=state.playing;this.transportPlaying=state.playing;if(!state.preparing&&Number.isFinite(state.frame))this.cursor=state.frame;this.paintPosition();

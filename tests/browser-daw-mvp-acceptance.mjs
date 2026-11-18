@@ -151,7 +151,7 @@ try{
   // Two internal takes: an audible accompaniment plus click must write silence
   // until the live Synth itself sounds. Speaker mute only changes monitoring.
   await button(host,'Add audio track').click();
-  await button(host,'Show Browser').click();
+  await button(host,'Show Track inspector').click();
   await button(host,'Arm Audio 2').click();
   await field(host,'DAW count-in bars').selectOption('0');
   await field(host,'DAW audio input device').selectOption('waswan:internal-synth');

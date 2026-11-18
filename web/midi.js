@@ -34,6 +34,7 @@ export class MidiInputController extends OriginalMidiInputController {
       this.contextMidiWanted={id:this.selectedId,profileId:profiles?.active?.id};
     super.refresh();
     profiles?.selectDevice(this.input,ports);
+    this.onInputStateChange?.();
     if(!profiles?.enabled||this.selectedId||this.contextMidiOff||this.contextMidiSelecting)return;
     const wanted=this.contextMidiWanted;
     const known=ports.filter(input=>{
@@ -52,6 +53,7 @@ export class MidiInputController extends OriginalMidiInputController {
     try{await super.select(id,status);}
     finally{if(this.contextMidiSelecting===attempt)this.contextMidiSelecting=null;}
     this.contextProfiles?.selectDevice(this.input,this.ports());
+    this.onInputStateChange?.();
   }
   message(data,timeStamp) {
     const running=this.isRunning(),listening=this.isListening();

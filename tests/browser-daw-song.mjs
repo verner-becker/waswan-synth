@@ -56,7 +56,7 @@ try{
     audit.ids={piano:piano.id,bass:bass.id,drums:drums.id};
   });
   await button('Select DRUM-X').click();
-  await button('Show Browser').click();
+  await button('Show Track inspector').click();
   await daw.getByLabel('Selected instrument preset',{exact:true}).selectOption('drum:0');
   await page.waitForFunction(()=>audit.w.selectedTrack()?.instrument?.type==='drumx');
   await button('Select Piano').click();

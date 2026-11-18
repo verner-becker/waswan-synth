@@ -33,7 +33,7 @@ try{
   const dir=await navigator.storage.getDirectory();audit.handle=await dir.getFileHandle('arrangement.wsproj',{create:true});const writer=await audit.handle.createWritable();await writer.write(await projectBlob(p,new Map([[id,source]])));await writer.close();
  });
  await clickDawFile(daw,'Open DAW project');await page.waitForFunction(()=>document.querySelectorAll('.ww-daw-arrangement-row').length===8);await page.waitForFunction(()=>[...audit.layout.peaks.values()].some(p=>p.peaks));assert.equal(await page.evaluate(()=>audit.layout.peaks.size),1,'shared sources have one preview cache entry');
- await button('Show Browser').click();await button('Fit Arrangement to content').click();assert(await timeline.evaluate(e=>e.scrollWidth<=e.clientWidth+1),'Fit includes five minutes with Browser open');assert(await page.evaluate(()=>audit.layout.prefs.zoom<2));
+ await button('Show Track inspector').click();await button('Fit Arrangement to content').click();assert(await timeline.evaluate(e=>e.scrollWidth<=e.clientWidth+1),'Fit includes five minutes with Browser open');assert(await page.evaluate(()=>audit.layout.prefs.zoom<2));
  const anchored=await page.evaluate(()=>{const l=audit.layout,v=l.viewport,x=v.clientWidth*.6;v.scrollLeft=40;return {x,beat:(v.scrollLeft+x-l.headWidth)/l.prefs.zoom};});
  await timeline.evaluate((e,x)=>{const r=e.getBoundingClientRect();e.dispatchEvent(new WheelEvent('wheel',{clientX:r.left+x,deltaY:-150,ctrlKey:true,bubbles:true,cancelable:true}));},anchored.x);
  const zoomed=await page.evaluate(x=>{const l=audit.layout;return (l.viewport.scrollLeft+x-l.headWidth)/l.prefs.zoom;},anchored.x);assert(Math.abs(zoomed-anchored.beat)<2,'pointer anchor preserved within scroll rounding');

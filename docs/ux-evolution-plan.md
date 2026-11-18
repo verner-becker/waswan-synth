@@ -4,6 +4,8 @@ O objetivo é tocar, editar e gravar em uma tela Full HD, aproveitar a largura d
 
 Em 18/11/2026, o usuário autorizou registrar este plano, integrar o MVP à `main`, remover as branches incorporadas e iniciar a etapa 1. Cada etapa tem uma branch empilhada sobre a anterior, validação e revisão antes da próxima. Uma nova integração à `main` exige aprovação explícita.
 
+Na revisão seguinte, o usuário autorizou a execução das etapas mapeadas em sequência e pediu nova revisão com Astra após as mudanças, reforçando a remoção do Legacy SMK.
+
 ## 1. Synth e navegação principal
 
 Aprovada pelo usuário em 18/11/2026 na branch `feat/ux-stage-1-synth-shell`. [Fechamento e evidências](ux-stage-1.md)
@@ -22,6 +24,8 @@ Implementada para revisão na branch `feat/ux-stage-2-arrangement`, sobre a etap
 - Validar início com projeto vazio, criação de pista e clipe, grade visível no primeiro uso, edição de notas e velocity, Undo/Redo e projeto salvo e reaberto.
 
 ## 3. Gravação e roteamento
+
+Implementada em `feat/ux-stage-3-recording`, sobre `5b0f19c`. [Fechamento e evidências](ux-stage-3.md)
 
 - Transformar **Browser** em **Inspetor da pista**. Reunir origem, monitor, armação e substituição de tomada. Mostrar no transporte a pista armada, a fonte e o que será gravado. Distinguir o roteamento MIDI ao Synth e à DAW e realçar gravação ativa em vermelho com texto.
 - Centralizar preferências e perfis de controladores em Settings, preservando a distinção entre porta, perfil, foco e roteamento. Manter o aprendizado por ação explícita.
