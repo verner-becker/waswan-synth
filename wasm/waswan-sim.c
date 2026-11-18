@@ -544,3 +544,5 @@ EXPORT uint32_t waswan_studio_apply_patches(uint32_t token,uint32_t a,uint32_t b
     set.prog=(uint8_t)a;fx_sync();smk_controls_epoch++;set_dirty=1;set_t=fm1_ms;
     dirty_hdr=dirty_page=dirty_tags=dirty_steps=1;return 1;
 }
+
+#include "waswan-instrument.h"

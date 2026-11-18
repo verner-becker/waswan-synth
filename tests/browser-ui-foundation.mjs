@@ -43,7 +43,7 @@ try {
   await p.getByRole('button',{name:'Filter',exact:true}).click();
   assert.equal(await p.locator('.ww-tone-editor [data-param="12"]:visible').count(),1);
   await p.locator('[data-workspace="tones"]').press('Home');assert.equal(await p.locator('[data-view="perf"]').isVisible(),true);
-  await p.locator('.ww-legacy-toggle').click();assert.equal(await p.locator('.ww-legacy .instrument').isVisible(),true);await p.locator('.ww-legacy-toggle').click();
+  await p.getByRole('button',{name:'Instrument setup',exact:true}).click();assert(await p.locator('.ww-instrument-setup').isVisible());assert.equal(await p.locator('.instrument').count(),0);await go('perf');
   const continuity=await p.evaluate(()=>({contexts:audit.contexts,ready:audit.ready,gates:audit.frame.polyphony.slots.filter(v=>v.gate).length,commands:audit.sent,programsSame:JSON.stringify(audit.frame.programs)===audit.programs,scopeSame:audit.frame.instrument.scope===audit.scope,ms:audit.frame.ms,sameNodes:audit.keyNode===document.querySelector('#keys')&&audit.padNode===document.querySelector('#pads')}));
   assert.equal(continuity.contexts,1);assert.equal(continuity.ready,1);assert.equal(continuity.gates,4);assert.deepEqual(continuity.commands,[]);assert(continuity.programsSame&&continuity.scopeSame&&continuity.sameNodes&&continuity.ms>startMs);
   const audible=await p.evaluate(()=>{const a=new Float32Array(audit.analyser.fftSize);audit.analyser.getFloatTimeDomainData(a);return Math.max(...a.map(Math.abs));});assert(audible>0,'real audio continues after all navigation');
@@ -75,7 +75,7 @@ try {
   await go('perf');
   for(const note of [57,60,64,67])await midi(0x90,note,100);await p.waitForFunction(()=>document.querySelector('.ww-chord').textContent==='Am7');await p.waitForTimeout(150);
   await p.setViewportSize({width:1560,height:1100});await p.screenshot({path:`${root}/performance-desktop.png`,fullPage:true});
-  await go('tones');await p.screenshot({path:`${root}/tone-editor.png`,fullPage:true});await go('seq');await p.screenshot({path:`${root}/sequencer.png`,fullPage:true});await p.locator('.ww-legacy-toggle').click();await p.screenshot({path:`${root}/legacy.png`,fullPage:true});await p.locator('.ww-legacy-toggle').click();await go('perf');
+  await go('tones');await p.screenshot({path:`${root}/tone-editor.png`,fullPage:true});await go('seq');await p.screenshot({path:`${root}/sequencer.png`,fullPage:true});await go('perf');await p.getByRole('button',{name:'Instrument setup',exact:true}).click();await p.screenshot({path:`${root}/instrument-setup.png`,fullPage:true});await go('perf');
   const layouts=[];
   for(const [width,height] of [[1920,937],[1536,750]]){
     await p.setViewportSize({width,height});
@@ -89,10 +89,11 @@ try {
   await p.setViewportSize({width:390,height:844});await p.screenshot({path:`${root}/performance-mobile.png`,fullPage:true});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no horizontal overflow');
   for(const note of [57,60,64,67])await midi(0x80,note,0);await p.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.gate));
   // Save and session round-trip use the existing firmware/storage flow, isolated from the user's browser.
-  await p.setViewportSize({width:1560,height:1100});await p.locator('.ww-legacy-toggle').click();
-  const writes=await p.evaluate(()=>audit.frame.writes[1]);await p.locator('#buttons [data-button="11"]').press('Enter',{delay:100});
+  await p.setViewportSize({width:1560,height:1100});await go('tones');
+  const writes=await p.evaluate(()=>audit.frame.writes[1]);await p.locator('.ww-tone-editor').getByRole('button',{name:'Save',exact:true}).click();
+  await p.locator('.ww-editor-save').getByRole('button',{name:'Confirm overwrite'}).click();
   await p.waitForFunction(w=>audit.frame.writes[1]>w&&!audit.frame.manualPending,writes);await p.waitForTimeout(1100);
-  const savedCutoff=await value(0);await p.locator('.ww-legacy-toggle').click();await p.locator('.ww-topbar').getByRole('button',{name:'Settings',exact:true}).click();
+  const savedCutoff=await value(0);await go('perf');await p.locator('.ww-topbar').getByRole('button',{name:'Settings',exact:true}).click();
   await p.locator('.lab summary').click();const exportPromise=p.waitForEvent('download');await p.locator('#export').click();const sessionDownload=await exportPromise;await sessionDownload.saveAs(`${root}/session-roundtrip.json`);
   const sessionBytes=fs.readFileSync(`${root}/session-roundtrip.json`),session=JSON.parse(sessionBytes);assert.equal(session.format,'obervave-voice-lab-1');assert.equal(Buffer.from(session.storage,'base64').length,21*16384);
   p.once('dialog',dialog=>dialog.accept());await Promise.all([p.waitForEvent('load'),p.locator('#import').setInputFiles({name:'session.json',mimeType:'application/json',buffer:sessionBytes})]);
@@ -100,7 +101,9 @@ try {
   await p.getByRole('button',{name:'Start audio',exact:true}).click();await p.waitForFunction(()=>audit.frame?.instrument&&audit.frame.ms>5000);assert.equal(await p.evaluate(()=>audit.contexts),1);
   await p.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
   // Boot can restore the current pattern's sound set. Explicitly recall the saved program to verify its contents.
-  await p.locator('.ww-legacy-toggle').click();const program=await p.evaluate(()=>audit.frame.programs[0]);const preset=p.locator('.dial[aria-label="Preset"]');await preset.press('ArrowUp');await p.waitForFunction(n=>audit.frame.programs[0]!==n,program);await preset.press('ArrowDown');await p.waitForFunction(n=>audit.frame.programs[0]===n,program);await waitValue(0,savedCutoff);assert.equal(await p.evaluate(()=>audit.frame.instrument.edited),false);assert.deepEqual(errors,[]);
+  const program=await p.evaluate(()=>audit.frame.programs[0]);
+  await p.evaluate(()=>audit.node.port.postMessage({t:'enc',e:6,steps:1}));await p.waitForFunction(n=>audit.frame.programs[0]!==n,program);
+  await p.evaluate(()=>audit.node.port.postMessage({t:'enc',e:6,steps:-1}));await p.waitForFunction(n=>audit.frame.programs[0]===n,program);await waitValue(0,savedCutoff);assert.equal(await p.evaluate(()=>audit.frame.instrument.edited),false);assert.deepEqual(errors,[]);
   const report={result:'PASS',chrome:await b.version(),continuity,audioPeakAfterNavigation:audible,controls:'keyboard, pointer drag, touch drag, fader, semantic MIDI learn and pickup',profilePreserved:true,mute:true,resumeWithoutRestart:true,reload:true,presetSave:true,sessionExportImport:true,dspExport:records.length,mobileOverflow:false,layouts,errors,screenshots:7};
   fs.writeFileSync(`${root}/browser.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 } finally {await b.close();}

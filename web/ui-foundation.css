@@ -62,7 +62,6 @@
 .ww-meter-track {grid-column:1/-1;grid-row:2;height:6px;background:#354149;border-radius:3px;overflow:hidden;}.ww-meter-fill {display:block;width:0;height:100%;background:var(--ww-accent);}.ww-meter output {font-size:12px;}
 .ww-chord {display:block;color:var(--ww-accent);font-size:28px;font-weight:600;margin:4px 0;line-height:1.2;overflow-wrap:anywhere;}
 .ww-settings {margin-bottom:var(--ww-gap);}.ww-settings .midi-panel {margin-top:18px;}.ww-settings .lab,.ww-settings .waswan-profile {margin-top:18px;}
-.ww-legacy {margin-bottom:var(--ww-gap);}.ww-legacy .instrument {margin:0 auto;max-width:1184px;}.ww-legacy .toolbar {margin-top:18px;}.ww-legacy .toolbar h1,.ww-legacy .toolbar p {display:none;}
 .ww-dock {margin-top:var(--ww-gap);}.ww-dock .ww-section-header {margin-bottom:12px;}.ww-dock-row {display:grid;grid-template-columns:2.3fr 1fr;gap:20px;}.ww-keyboard-area {min-width:0;}.ww-play-actions {display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}.ww-play-actions button {font-size:11px;min-height:32px;}
 .ww-dock .keybed {padding:0;min-width:0;background:transparent;border:0;}.ww-dock #keys {height:128px;margin:0;}.ww-dock .key {border-radius:0 0 4px 4px;min-height:0;padding:0;box-shadow:none;}.ww-dock .key.white {background:#edf1f2;color:#34454d;border:1px solid #59646b;}.ww-dock .key.black {background:#0a0e10;border:1px solid #000;}.ww-dock .key.down,.ww-dock .key.midi-down {background:var(--ww-accent);border-color:#80ffff;box-shadow:0 0 12px #27e3dd48;}.ww-dock .key span {font-size:9px;}
 .ww-dock .instrumentfoot {border:0;padding:10px 0 0;justify-content:flex-end;background:transparent;color:var(--ww-muted);}.ww-pad-area {min-width:0;}.ww-pad-area h3 {font-size:12px;font-weight:600;margin:0 0 8px;}.ww-dock .padheading {padding:0;gap:8px;margin:0 0 8px;}.ww-dock .padheading h2,.ww-dock .padheading span {font-size:10px;letter-spacing:0;color:var(--ww-muted);}
@@ -71,13 +70,13 @@
 .ww-map-dialog {color:var(--ww-text);background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:14px;max-width:470px;width:calc(100% - 32px);padding:24px;font-family:var(--ww-font);}.ww-map-dialog::backdrop {background:#000b;}.ww-map-dialog h2 {font-size:20px;}.ww-map-dialog p {line-height:1.6;font-size:13px;}.ww-map-dialog label {display:flex;flex-direction:column;gap:7px;margin:14px 0;font-size:12px;}.ww-map-dialog select {padding:10px;border:1px solid var(--ww-border);background:var(--ww-bg);color:var(--ww-text);border-radius:7px;}.ww-map-dialog button {margin:6px 6px 0 0;}
 .ww-voice-details {margin-top:20px;}.ww-voice-details summary {cursor:pointer;padding:12px 0;}.ww-shell .voice-slots {grid-template-columns:repeat(16,minmax(0,1fr));}.ww-shell .voice-slot {min-height:30px;font-size:9px;}
 @media(max-width:1100px){.ww-shell {padding:16px;}.ww-topbar {gap:10px;}.ww-brand strong {font-size:22px;}.ww-brand span {font-size:16px;}.ww-preset {min-width:200px;}.ww-surface {grid-template-columns:1.7fr 1fr;gap:12px;}.ww-knob-grid {padding-right:12px;gap:18px 6px;}.ww-musical-grid {grid-template-columns:repeat(2,minmax(0,1fr));}.ww-dock-row {grid-template-columns:1.8fr 1fr;}.ww-secondary-navigation {margin-left:0;}}
-@media(max-width:700px){.ww-page {--ww-space:14px;--ww-gap:12px;--ww-control:88px;}.ww-shell {padding:14px 10px;}.ww-brand {width:100%;}.ww-preset {min-width:180px;}.ww-status {margin-left:auto;}.ww-topbar {gap:8px;}.ww-chip {padding:7px;font-size:11px;}.ww-topbar>button {font-size:12px;min-height:34px;}.ww-notice {line-height:1.5;}.ww-surface {display:block;}.ww-knob-grid {grid-template-columns:repeat(2,minmax(0,1fr));border:0;padding:0;gap:20px 12px;}.ww-fader-grid {border-top:1px solid var(--ww-border);padding-top:20px;margin-top:24px;gap:8px;}.ww-fader input[type="range"] {height:135px;margin:10px 0;}.ww-control-name {font-size:12px;}.ww-musical-grid {grid-template-columns:minmax(0,1fr);}.ww-dock-row {display:flex;flex-direction:column;gap:20px;}.ww-dock #keys {height:115px;}.ww-dock #pads {gap:5px;}.ww-legacy {padding:8px;overflow-x:auto;}.ww-shell .voice-slots {grid-template-columns:repeat(8,minmax(0,1fr));}.ww-settings {overflow-wrap:anywhere;}.ww-settings .midi-controls {flex-direction:column;align-items:stretch;}.ww-settings .midi-controls select {max-width:100%;}}
+@media(max-width:700px){.ww-page {--ww-space:14px;--ww-gap:12px;--ww-control:88px;}.ww-shell {padding:14px 10px;}.ww-brand {width:100%;}.ww-preset {min-width:180px;}.ww-status {margin-left:auto;}.ww-topbar {gap:8px;}.ww-chip {padding:7px;font-size:11px;}.ww-topbar>button {font-size:12px;min-height:34px;}.ww-notice {line-height:1.5;}.ww-surface {display:block;}.ww-knob-grid {grid-template-columns:repeat(2,minmax(0,1fr));border:0;padding:0;gap:20px 12px;}.ww-fader-grid {border-top:1px solid var(--ww-border);padding-top:20px;margin-top:24px;gap:8px;}.ww-fader input[type="range"] {height:135px;margin:10px 0;}.ww-control-name {font-size:12px;}.ww-musical-grid {grid-template-columns:minmax(0,1fr);}.ww-dock-row {display:flex;flex-direction:column;gap:20px;}.ww-dock #keys {height:115px;}.ww-dock #pads {gap:5px;}.ww-shell .voice-slots {grid-template-columns:repeat(8,minmax(0,1fr));}.ww-settings {overflow-wrap:anywhere;}.ww-settings .midi-controls {flex-direction:column;align-items:stretch;}.ww-settings .midi-controls select {max-width:100%;}}
 @media(prefers-reduced-motion:reduce){.ww-shell * {transition:none!important;}}
 .ww-assignment-rows {margin:14px 0;}.ww-assignment-row {display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 0;border-bottom:1px solid var(--ww-border);}.ww-assignment-row>span {flex:1;min-width:170px;}.ww-assignment-row small {font-size:12px;}.ww-settings select {max-width:100%;padding:8px;background:var(--ww-bg);color:var(--ww-text);border:1px solid var(--ww-border);border-radius:7px;}.ww-settings>section {margin-top:16px;}.ww-settings .ww-assignment-row button {font-size:11px;}
 .ww-page {line-height:1.35;}.ww-section-header h2 {font-family:var(--ww-font);}.ww-dock .instrumentfoot input {accent-color:var(--ww-accent);}.ww-control {gap:5px;}
 @media(min-width:1300px){.ww-surface {grid-template-columns:2.7fr 1fr;gap:20px;}.ww-knob-grid {grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;align-items:center;}.ww-control-technical {font-size:11px;}.ww-fader input[type="range"] {height:102px;margin:5px 0;}.ww-control {gap:3px;}.ww-dock .instrumentfoot {margin-top:8px;padding-top:0;}.ww-dock .instrumentfoot input {min-height:0;height:18px;padding:0;}}
 /* The new product shell has a fixed English UI; language selection stays in the
-   original composition at ?legacy=1. */
+   upstream keyboard and pads. */
 .ww-page>nav[aria-label="Language / Idioma"] {display:none;}
 /* v0.2: compact execution modes occupy the existing Performance State space. */
 .ww-performance-modes {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin-top:8px;}
@@ -321,3 +320,21 @@
 
 .ww-daw-linked .ww-topbar{position:static}
 .ww-daw-linked [data-daw-tab-content]{min-width:0}
+
+.ww-instrument-setup .ww-section-header {margin-bottom:8px}
+.ww-instrument-groups {display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));align-items:start}
+.ww-instrument-group {padding:10px;border:1px solid var(--ww-border);border-radius:8px;min-width:0}
+.ww-instrument-group summary,.ww-instrument-expression summary {cursor:pointer;color:var(--ww-text);padding:4px}
+.ww-instrument-group label {display:inline-flex;flex-direction:column;gap:4px;margin:8px 8px 3px 0;font-size:12px}
+.ww-instrument-group input {width:80px}
+.ww-instrument-group button {font-size:12px;padding:6px 10px;margin:6px 6px 0 0}
+.ww-instrument-group>p {margin:8px 0;font-size:12px}
+.ww-instrument-group>.ww-instrument-group {margin-top:12px}
+.ww-instrument-mixer {display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.ww-instrument-mixer fieldset {margin:4px 0;padding:8px;border:1px solid var(--ww-border);min-width:0}
+.ww-instrument-mixer input {width:60px}
+.ww-native-parameter {display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:4px 0}
+.ww-native-parameter strong {min-width:90px}
+.ww-native-parameter button {margin:0}
+.ww-instrument-expression {margin-top:6px}
+.ww-instrument-expression .wheels {margin:8px 0 0}

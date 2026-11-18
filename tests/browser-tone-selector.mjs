@@ -22,7 +22,7 @@ try{
   console.log('PASS catalog');
   const originalPrograms=await p.evaluate(()=>audit.frame.programs);
   for(let part=0;part<4;part++){
-    if(part){await p.locator('.ww-legacy-toggle').click();await send({t:'enc',e:5,steps:1});await p.waitForFunction(part=>audit.frame.track===part,part);await p.locator('.ww-legacy-toggle').click();}
+    if(part){await send({t:'enc',e:5,steps:1});await p.waitForFunction(part=>audit.frame.track===part,part);}
     await choose(part+1);await waitProgram(part,part+1);const f=await p.evaluate(()=>audit.frame);
     assert.equal(f.instrument.edited,false);assert((await p.locator('.ww-preset').textContent()).includes(`Program ${part+1}`));assert.equal(f.instrument.name,library[part].name);
     for(let other=part+1;other<4;other++)assert.equal(f.programs[other],originalPrograms[other]);
@@ -39,7 +39,7 @@ try{
   console.log('PASS discard and cancel');
   // Clean selection never asks for confirmation. Legacy PRESETS and part navigation synchronize.
   await tone.selectOption('6');await waitProgram(3,6);assert(!(await dialog.isVisible()));
-  await p.locator('.ww-legacy-toggle').click();await send({t:'enc',e:6,steps:1});await waitProgram(3,7);await send({t:'enc',e:5,steps:-1});await waitProgram(2,3);await p.locator('.ww-legacy-toggle').click();
+  await send({t:'enc',e:6,steps:1});await waitProgram(3,7);await send({t:'enc',e:5,steps:-1});await waitProgram(2,3);
   console.log('PASS Legacy sync');
   // A note held across tone changes is handled by the original loader; no panic or new context.
   await send({t:'midi',st:0x90,d1:60,d2:100});await p.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate));

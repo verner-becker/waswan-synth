@@ -20,7 +20,7 @@ Track scope, approvals, wave status, decisions, and handoffs in `docs/studio-wav
 
 ## Architecture & Musical Behaviour
 
-Keep one instrument instance. Workspace navigation changes presentation only: never restart AudioContext/WASM, send panic, release notes, change presets, or replace mappings. Reuse the original keyboard/pad handlers and preserve Legacy SMK access.
+Keep one instrument instance. Workspace navigation changes presentation only: never restart AudioContext/WASM, send panic, release notes, change presets, or replace mappings. Reuse the original keyboard/pad handlers. Native instrument controls live in Instrument setup.
 
 The English shell targets the SMK-37 Pro's eight knobs and four faders. Preserve contextual `enc:*`/`fader:*` mappings and explicit `control:*` assignments. Reassignment requires user action; absolute semantic controls use soft takeover. Preserve preset/session formats and original parameter scales, including cutoff tables. Planned editors must remain visibly identified as planned.
 

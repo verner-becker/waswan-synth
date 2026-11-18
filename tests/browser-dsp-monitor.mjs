@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {startSynth,synthDiagnostics} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -10,10 +11,11 @@ try{
   window.audit={errors:[],windows:0};const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;}};
   const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...args){super(...args);audit.node=this;this.port.addEventListener('message',e=>{if(e.data.t==='frame')audit.frame=e.data;if(e.data.t==='dsp-window'){audit.latest=e.data;audit.windows++;}if(e.data.t==='error')audit.errors.push(e.data.message);});}};
  });
- await page.goto('http://localhost:8737/simulator/?legacy=1&lang=pt');
+ await page.goto('http://localhost:8737/simulator/?lang=pt');
  // Showing before startup must activate correctly after original ready handling.
+ await synthDiagnostics(page,{voice:true});
  await page.locator('[data-dsp-toggle]').click();assert(await page.locator('[data-dsp-start]').isDisabled());
- await page.locator('#power').click();await page.waitForFunction(()=>audit.frame?.ms>5000);
+ await startSynth(page);
  await page.waitForFunction(()=>audit.latest?.stats.blocks>0);
  await page.locator('[data-voice-mode="1"]').click();
  await page.evaluate(()=>{for(let n=0;n<128;n++)audit.node.port.postMessage({t:'midi',st:0x90,d1:n,d2:100});const a=audit.context.createAnalyser();audit.node.connect(a);audit.analyser=a;});

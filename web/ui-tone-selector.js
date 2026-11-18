@@ -25,7 +25,7 @@ export class ToneSelector {
     const intent={program,scope:f.instrument.scope,token:f.instrument.programToken};
     if(f.instrument.edited){
       this.intent=intent;const next=this.library.find(p=>p.number===program);
-      this.question.textContent=`Part ${'ABCD'[f.track]} · Program ${current} (${f.instrument.name}) has unsaved edits. Loading Program ${program} (${next.name}) replaces them. Save in TONES or Legacy SMK first if you want to keep them.`;
+      this.question.textContent=`Part ${'ABCD'[f.track]} · Program ${current} (${f.instrument.name}) has unsaved edits. Loading Program ${program} (${next.name}) replaces them. Save the tone first if you want to keep them.`;
       this.dialog.showModal();
     }else this.commit(intent,false);
   }

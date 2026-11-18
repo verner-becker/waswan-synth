@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Optional browser regression; install Playwright locally as documented.
+import {startSynth,synthButton,synthDiagnostics,openAssignment} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';import assert from 'node:assert/strict';
 const limit=Number(process.argv[2]||128);
@@ -19,17 +20,15 @@ try {
   const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;}};
   const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...a){super(...a);audit.node=this;this.port.addEventListener('message',e=>{if(e.data.t==='frame')audit.frame=e.data;});}};
  });
- await page.goto('http://localhost:8737/simulator/?legacy=1&lang=pt');await page.locator('#power').click();
- await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('áudio ativo'));
- await page.waitForTimeout(5200);
- assert.equal(await page.locator('[data-voice-mode="3"]').getAttribute('aria-pressed'),'true');
- await page.locator('#midiConnect').click();
- await page.waitForFunction(()=>document.querySelector('#midiStatus').textContent.includes('conectada:'));
- await page.locator('.waswan-profile summary').click();await page.locator('[data-enabled]').check();
- await page.locator('[data-target]').selectOption('enc:0');await page.locator('[data-learn]').click();
+ await page.goto('http://localhost:8737/simulator/?lang=pt');await startSynth(page,{connect:true});
+ await page.waitForFunction(()=>document.querySelector('#midiStatus').textContent.includes('input connected'));
+ const mapping=await openAssignment(page,'enc:0');
+ await mapping.getByRole('button',{name:'Learn control',exact:true}).click();
  const inject=async data=>page.evaluate(data=>audit.input.onmidimessage({data:new Uint8Array(data)}),data);
  await inject([0xb5,48,30]);await inject([0xb5,48,31]);
- assert.equal(await page.locator('.waswan-profile tbody tr').count(),1);
+ await mapping.getByRole('button',{name:'Close',exact:true}).click();
+ await synthDiagnostics(page,{voice:true});
+ assert.equal(await page.locator('[data-assignment]').count(),1);
  await page.locator('[data-voice-mode="0"]').click();
  await page.waitForFunction(()=>document.querySelector('[data-voice-mode="0"]').getAttribute('aria-pressed')==='true');
  assert.equal(await page.evaluate(()=>audit.frame.polyphony.limit),limit);
@@ -74,13 +73,13 @@ try {
    },{n:limit,b:base});
    assert(await page.evaluate(n=>!audit.frame.polyphony.slots.some(v=>v.gate&&v.note===n),victim));
   }
-  await page.locator('#panic').click();await page.waitForTimeout(200);
+  await synthButton(page,'Release all').click();await page.waitForTimeout(200);
  }
  await page.locator('[data-unison]').selectOption('8');
  await inject([0x90,60,100]);await page.waitForFunction(()=>audit.frame.polyphony.slots.filter(v=>v.gate).length===8);
  await page.locator('[data-voice-mode="0"]').click();
  await page.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.active));
- assert.equal(await page.locator('.waswan-profile tbody tr').count(),1);
+ assert.equal(await page.locator('[data-assignment]').count(),1);
  await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:`.local/validation/polyphony-${limit}-mobile.png`,fullPage:true});
  const width=await page.locator('.waswan-polyphony').evaluate(e=>({panel:e.getBoundingClientRect().width,viewport:innerWidth}));

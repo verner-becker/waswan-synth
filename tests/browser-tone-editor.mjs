@@ -26,7 +26,7 @@ try{
   await group('Envelopes');await setNumber(27,0);await group('Oscillators');
   const held=60;await send({t:'midi',st:0x90,d1:held,d2:100});await p.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate));
   const mark=await p.evaluate(()=>audit.sent.length);for(const name of ['Filter','Envelopes','Modulation','Voice','Arpeggiator','Shared effects','Oscillators'])await group(name);
-  await p.locator('[data-workspace="perf"]').click();await p.locator('.ww-legacy-toggle').click();await p.locator('.ww-legacy-toggle').click();await p.locator('[data-workspace="tones"]').click();
+  await p.locator('[data-workspace="perf"]').click();await p.locator('[data-workspace="tones"]').click();
   assert(await p.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate)));assert.equal(await p.evaluate(()=>audit.contexts),1);assert.equal(await p.evaluate(mark=>audit.sent.length-mark,mark),0);
   await editor.getByRole('button',{name:'Save as…',exact:true}).click();await dialog.getByRole('textbox',{name:'Tone name',exact:true}).fill('BAD_NAME');assert.equal(await dialog.getByRole('textbox',{name:'Tone name',exact:true}).evaluate(n=>n.checkValidity()),false);await dialog.getByRole('textbox',{name:'Tone name',exact:true}).fill('UX TEST');await dialog.getByRole('combobox',{name:'Destination program',exact:true}).selectOption('99');
   const originalName=await p.evaluate(()=>audit.frame.instrument.name);await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await p.evaluate(()=>audit.frame.instrument.name),originalName);assert.equal(await p.evaluate(()=>audit.frame.programs[0]),71);

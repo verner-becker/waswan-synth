@@ -147,6 +147,7 @@ class MonitoredOberVave extends OberVave {
     else if(m.action==='enable'){if(this.session)this.publish(true,'disabled');this.enabled=!!m.enabled;this.reset();}
    }else {
     if(m.t==='reboot'){this.sequence?.stop('instrument-reboot');this.daw?.stop('instrument-reboot');this.dawProject=null;this.dawObserved=null;this.dawPending=null;this.dawLiveSession=null;this.dawPreview=null;audioTransport.previewSession=null;audioTransport.playing=false;audioTransport.recording=false;audioTransport.planId=null;audioTransport.liveSession=null;if(this.session)this.publish(true,'reboot');}
+    if(m.t==='instrument-setup'&&m.action==='mode'&&m.args?.[0]&&(this.sequence?.active||this.daw?.active||this.dawLiveSession||this.dawPreview||this.dawExport))return;
     if(this.studioEvents&&COMMANDS.has(m.t))this.studioEvents.postMessage({t:'command',frame:currentFrame,command:m});
     original(e);
     if(m.t==='reboot'&&this.dawOutputs)this.dawParts=this.engine?.ex.waswan_daw_taps?.(1)||0;

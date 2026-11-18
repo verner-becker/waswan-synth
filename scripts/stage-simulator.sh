@@ -43,7 +43,7 @@ outputs_anchor = "numberOfInputs:0,outputChannelCount:[2],processorOptions:{wasm
 assert s.count(outputs_anchor) == 1
 s = s.replace(outputs_anchor,"numberOfInputs:0,numberOfOutputs:17,outputChannelCount:[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],processorOptions:{wasm,store}")
 s = "import {AudioOwner,SessionObserver} from './daw-session.js';\nconst audioOwner=new AudioOwner(),sessionObserver=new SessionObserver(audioOwner);\n" + s
-# Reserve the session before creating AudioContext/WASM, including Legacy URL.
+# Reserve the session before creating AudioContext/WASM, for the public route.
 start_anchor = "try{const audioMode=window.isSecureContext&&window.AudioWorkletNode;"
 assert s.count(start_anchor) == 1
 s = s.replace(start_anchor, "try{if(!await audioOwner.acquire()){starting=false;log('Audio is running in another WASWAN tab. Return to that tab or close it before starting here.');updateFoundation({t:'audio-owner-busy'});return;}if(context&&context.state!=='closed')await context.close();node?.disconnect();worker?.terminate();const audioMode=window.isSecureContext&&window.AudioWorkletNode;")
@@ -63,9 +63,27 @@ assert s.count(midi_focus_anchor) == 1
 s = s.replace(midi_focus_anchor, "isListening:()=>audioOwner.owned")
 key_anchor = "if(typing(e)||e.repeat||!on)return;"
 assert s.count(key_anchor) == 1
-s = s.replace(key_anchor, "if(typing(e)||e.defaultPrevented||e.repeat||!on)return;const shell=document.querySelector('.ww-shell');if(shell?.dataset.activeWorkspace==='daw'&&!e.target.closest?.('.ww-dock')&&!document.querySelector('.ww-legacy-toggle[aria-pressed=true]'))return;")
+s = s.replace(key_anchor, "if(typing(e)||e.defaultPrevented||e.repeat||!on)return;const shell=document.querySelector('.ww-shell');if(shell?.dataset.activeWorkspace==='daw'&&!e.target.closest?.('.ww-dock'))return;")
+# The upstream event handlers retain private initialization nodes. Only controls
+# composed by Foundation remain in the public document.
+query_anchor = "const $=s=>document.querySelector(s),key="
+assert s.count(query_anchor) == 1
+s = s.replace(query_anchor,"const panelBackend=document.createDocumentFragment();\nconst $=s=>document.querySelector(s)||panelBackend.querySelector(s),key=")
+s = s.replace("document.querySelector('.instrument').dataset.bank","$('.instrument').dataset.bank")
+frame_start = "const image=$('#screen').getContext('2d'),pixels=image.createImageData(240,240);\n"
+assert s.count(frame_start) == 1
+s = s.replace(frame_start, "")
+frame_start = "if(m.fb){for(let i=0;i<57600;i++)"
+frame_end = "image.putImageData(pixels,0,0);}"
+assert s.count(frame_start) == 1 and s.count(frame_end) == 1
+start = s.index(frame_start)
+s = s[:start] + s[s.index(frame_end,start)+len(frame_end):]
+# Browser controls call the same host actions as the reference panel.
+mute_anchor = "$('#mute').onclick=()=>{muted=!muted;gain.gain.setTargetAtTime(muted?0:1,context.currentTime,.01);$('#mute').textContent=muted?'Ativar som':'Silenciar';};"
+assert s.count(mute_anchor) == 1
+s = s.replace(mute_anchor, "function toggleOutputMute(){if(!gain||!context)return muted;muted=!muted;gain.gain.setTargetAtTime(muted?0:1,context.currentTime,.01);$('#mute').textContent=muted?'Ativar som':'Silenciar';return muted;}\n$('#mute').onclick=toggleOutputMute;")
 # One shared instrument instance: the shell receives snapshots and delegates commands.
-s += "\nmountFoundation({send,midi,isRunning:()=>on,getAudio:()=>({context,node,gain,muted})});\n"
+s += "\nmountFoundation({send,midi,panelBackend,actions:{start,mute:toggleOutputMute,panic:releaseAll},isRunning:()=>on,getAudio:()=>({context,node,gain,muted})});\n"
 
 anchor = 'function frame(m){state=m;'
 if s.count(anchor) != 1:
@@ -89,6 +107,8 @@ python3 - <<'PYHTML'
 from pathlib import Path
 p=Path('.local/www/simulator/index.html')
 s=p.read_text().replace('SMKSYNTH — Simulador','WASWAN Synth')
+assert s.count('<body>') == 1 and s.count('</main><script type="module"') == 1
+s=s.replace('<body>','<body><div hidden id="waswan-bootstrap">',1).replace('</main><script type="module"','</main></div><script type="module"',1)
 s=s.replace('<script src="../i18n.js', '<script>if(!new URLSearchParams(location.search).has("lang")){try{if(!localStorage.getItem("smksynth-language"))localStorage.setItem("smksynth-language","en");}catch{}}</script><script src="../i18n.js')
 p.write_text(s)
 PYHTML

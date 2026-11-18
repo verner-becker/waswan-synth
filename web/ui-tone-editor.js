@@ -34,7 +34,7 @@ export class ToneEditor {
     for(const [group,ids] of GROUPS){
       const panel=el('section','ww-editor-group');panel.hidden=this.groups.length>0;const button=action(group,()=>this.selectGroup(group));button.dataset.group=group;button.setAttribute('aria-pressed',String(!this.groups.length));this.nav.append(button);panel.append(el('h3','',group));
       if(group==='Shared effects')panel.append(el('p','ww-muted','These returns are shared by all Synth parts. Use Performance for part levels and the chorus, delay and reverb sends.'));
-      if(group==='Oscillators')panel.append(el('p','ww-muted','X-MOD is linear FM: OSC2 → OSC1. SUPER uses seven saws in OSC1, with a shared five-voice limit; sync/FM are bypassed. SUPER MIX remains in Legacy SMK.'));
+      if(group==='Oscillators')panel.append(el('p','ww-muted','X-MOD is linear FM: OSC2 → OSC1. SUPER uses seven saws in OSC1, with a shared five-voice limit; sync/FM are bypassed. Adjust SUPER mix in Instrument setup.'));
       const grid=el('div','ww-editor-grid');panel.append(grid);
       for(const id of ids){
         const p=catalog.find(p=>p.id===id);if(!p)continue;const label=LABELS[id]??p.name;
@@ -91,7 +91,7 @@ export class ToneEditor {
     const analog=f.engines[f.track]===0,available=running&&!!f.editor?.available;
     this.heading.textContent=`Part ${'ABCD'[f.track]} · Program ${f.programs[f.track]} · ${f.instrument.name}${f.instrument.edited?' · Edited':''}`;
     this.save.disabled=this.saveAs.disabled=!available;
-    this.unavailable.textContent=!analog?'DRUM-X uses different parameter meanings. Edit this engine in Legacy SMK.':!running?'Start audio to edit.':!available?'Editor temporarily unavailable during a Legacy dialog, save or context change.':'';
+    this.unavailable.textContent=!analog?'DRUM-X uses different parameter meanings. Edit this engine in Instrument setup.':!running?'Start audio to edit.':!available?'Editor temporarily unavailable during an instrument dialog, save or context change.':'';
     this.content.hidden=this.nav.hidden=this.hint.hidden=!analog;
     for(const p of this.catalog??[]){const v=f.editor.values[p.id];const bypass=f.editor.values[0].value===4&&[8,9].includes(p.id);
       this.controls.get(p.id)?.update({value:v.value,min:p.min,max:p.max,available:available&&!bypass},v.display,`${v.value} / ${p.max} · ${bypass?'Bypassed in SUPER':p.shared?'Shared FX':'Internal steps'}`);

@@ -6,13 +6,13 @@ O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commi
 
 ## Manual de uso
 
-[Manual completo em PDF](MANUAL-WASWAN-SYNTH.pdf), na raiz: 44 páginas em português, com sumário clicável, capturas reais, referência dos 63 parâmetros ANALOG, Studio/SEQ, recursos Legacy, exercícios e ficha de avaliação de usabilidade. A edição descreve a revisão `04dc1c8`, incluindo Studio e a revisão do SEQ integrados à `main` por aprovação do usuário. A referência `04dc1c8` identifica a implementação descrita, preservada no histórico.
+[Manual completo em PDF](MANUAL-WASWAN-SYNTH.pdf), na raiz: 49 páginas em português, com sumário clicável, capturas reais, referência dos 63 parâmetros ANALOG, Studio/SEQ, DAW, Instrument setup, exercícios e ficha de avaliação de usabilidade.
 
 Fonte editável: [docs/manual-waswan-synth.html](docs/manual-waswan-synth.html). Para gerar novamente com o Chrome/Playwright já preparado no projeto: `node scripts/build-manual.mjs`. O gerador verifica imagens, links e conteúdo fora dos limites de página antes de escrever o PDF.
 
 ## UI Foundation v0.3
 
-A `main` reúne a UI Foundation v0.3 com seletor de timbres, MIDI Setup e modos de voz na Performance, o motor de 256 vozes, o DSP Monitor, as correções de knobs e o WASWAN Studio com SEQ revisado. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. O botão **Legacy SMK** alterna o painel original na mesma sessão de áudio. Os futuros editores aparecem identificados como planejados.
+A `main` reúne a UI Foundation v0.3 com seletor de timbres, MIDI Setup e modos de voz na Performance, o motor de 256 vozes, o DSP Monitor, as correções de knobs e o WASWAN Studio com SEQ revisado. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. Abra **Instrument setup** pela Performance para acessar as funções nativas do motor.
 
 ```sh
 git switch main
@@ -20,7 +20,7 @@ sh scripts/build-simulator.sh
 python3 scripts/serve-simulator.py
 ```
 
-Abra http://localhost:8737/simulator/, use **Start audio** e conecte MIDI em **Settings**. Perfis existentes são preservados; nenhum mapeamento é instalado automaticamente. A composição legada completa está em `http://localhost:8737/simulator/?legacy=1&lang=pt`. Consulte [arquitetura, testes, limites e cinco screenshots](docs/ui-foundation-v1.md).
+Abra http://localhost:8737/simulator/, use **Start audio** e conecte MIDI em **Settings**. Perfis existentes são preservados; nenhum mapeamento é instalado automaticamente. Consulte [arquitetura, testes, limites e cinco screenshots](docs/ui-foundation-v1.md).
 
 ## WASWAN Studio e SEQ
 
@@ -54,7 +54,7 @@ python3 scripts/serve-simulator.py
 
 Abra **http://localhost:8737/simulator/** e clique em **Start audio**. Use **Use keyboard & pads** para tocar com os controles virtuais. Para usar o SMK-37 Pro, abra **Settings**, clique em **Connect MIDI keyboard** e escolha **SMK-37 Pro-Master**. **Release all** libera notas e sustain. A Performance oferece POLY, MONO, DUAL e UNISON. As opções de diagnóstico ficam em **Settings → Diagnostics → Voice allocation & execution modes**.
 
-Para ouvir os exemplos, use **Play / stop pattern** ou PLAY no **Legacy SMK**. Para tocar pela entrada MIDI na parte selecionada, mantenha `GLOBAL → MIDI CH = OMNI`. O `MIDI MODE` do painel simulado suspende o sintetizador. Use o modo Synth para produzir áudio.
+Para ouvir os exemplos, use **Play / stop pattern**. Para tocar pela entrada MIDI na parte selecionada, mantenha **Globals and hardware faders → Synth MIDI channel → Omni**. O `MIDI MODE` do painel simulado suspende o sintetizador. Use o modo Synth para produzir áudio.
 
 As ferramentas ficam em `.tools/` e os resultados em `.local/`, ambos ignorados pelo Git. O servidor usa apenas o loopback e serve o simulador, a tradução e os avisos de licença. Os instaladores de firmware não são publicados por esse servidor. Os links originais de instalação no rodapé não possuem destino nesta execução local.
 
@@ -62,7 +62,7 @@ O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binary
 
 ## Tone Editor v1
 
-Integrado à `main`, **TONES** apresenta os 63 parâmetros ANALOG em sete seções, com **Save** e **Save as…** na biblioteca existente de 99 programas. A gravação exige confirmação e informa a espera por silêncio e o resultado do armazenamento no navegador. Não há mudança no DSP ou nos formatos de presets/sessões. DRUM-X e controles especiais ainda usam Legacy SMK. Veja [arquitetura, limites e validação](docs/tone-editor-v1.md). A implementação foi aprovada pelo usuário e integrada preservando o histórico.
+Integrado à `main`, **TONES** apresenta os 63 parâmetros ANALOG em sete seções, com **Save** e **Save as…** na biblioteca existente de 99 programas. A gravação exige confirmação e informa a espera por silêncio e o resultado do armazenamento no navegador. Não há mudança no DSP ou nos formatos de presets/sessões. DRUM-X, SUPER mix e outros controles nativos ficam em **Instrument setup**. Veja [arquitetura, limites e validação](docs/tone-editor-v1.md). A implementação foi aprovada pelo usuário e integrada preservando o histórico.
 
 ## Controle fino de knobs v1
 

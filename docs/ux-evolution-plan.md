@@ -41,6 +41,8 @@ Implementada em `feat/ux-stage-4-daw-windows`, sobre `6686a1f`. [Fechamento e ev
 
 ## 5. Retirada da interface Legacy SMK
 
+Implementada em `feat/ux-stage-5-instrument`, sobre `2454662`. [Fechamento e evidências](ux-stage-5.md)
+
 - Inventariar e migrar o acesso às funções que ainda dependem do painel original. Incluir DRUM-X e pads, SUPER MIX, seleção e mixagem das partes A–D, quatro sends, Split/Layer, favoritos, patterns, sequenciador do instrumento, arpejador, ajustes globais, MIDI MODE, rodas pitch/mod, bancos de faders, Power, Mute, Panic e persistência.
 - Desacoplar as ações usadas pela shell dos elementos de apresentação. Preservar comportamento do teclado, pads, mapeamentos existentes, pickup e release. Depois de verificar paridade, retirar painel, links e `?legacy=1` da distribuição pública e atualizar manual e testes.
 

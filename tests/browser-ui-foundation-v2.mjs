@@ -45,19 +45,30 @@ try {
   assert.equal(await p.evaluate(()=>audit.frame.polyphony.parts[0].unison),originalUnison);assert(!await p.evaluate(()=>audit.sent.some(m=>m.t==='voice-unison')));
   // Real Diagnostics action updates the same snapshot and Performance selection.
   await go(p,'diag');await p.locator('.ww-voice-details summary').click();await p.locator('[data-voice-mode="3"]').click();await waitMode(p,0,3);await go(p,'perf');
-  // Change the selected part through the unchanged legacy encoder.
-  await p.locator('.ww-legacy-toggle').click();await p.locator('.dial[aria-label="Part"]').press('ArrowUp');await p.waitForFunction(()=>audit.frame.track===1);await p.locator('.ww-legacy-toggle').click();
+  const choosePart=async part=>{
+    await p.getByRole('button',{name:'Instrument setup',exact:true}).click();
+    await p.getByLabel('Active part',{exact:true}).selectOption(String(part));
+    await p.waitForFunction(part=>audit.frame.track===part,part);
+    await go(p,'perf');
+  };
+  await choosePart(1);
   await mode(p,1).click();await waitMode(p,1,1);assert.equal(await p.evaluate(()=>audit.frame.polyphony.parts[0].mode),3);
-  // Edit the actual native VOICE page, not a mocked snapshot.
-  await p.locator('.ww-legacy-toggle').click();for(let i=0;i<2;i++){await p.locator('#buttons [data-button="10"]').press('Enter',{delay:90});await p.waitForTimeout(120);}await p.waitForFunction(()=>audit.frame.knobControl.parameters[0]?.id===38);
-  await p.locator('.dial[aria-label="Screen 1"]').press('ArrowUp');await waitMode(p,1,2);await p.locator('.ww-legacy-toggle').click();
+  // An encoder edit still reaches the native VOICE page after the web panel is retired.
+  for(let i=0;i<2;i++){
+    await p.evaluate(()=>audit.node.port.postMessage({t:'btn',b:10,down:true}));
+    await p.waitForTimeout(90);
+    await p.evaluate(()=>audit.node.port.postMessage({t:'btn',b:10,down:false}));
+    await p.waitForTimeout(120);
+  }
+  await p.waitForFunction(()=>audit.frame.knobControl.parameters[0]?.id===38);
+  await p.evaluate(()=>audit.node.port.postMessage({t:'enc',e:0,steps:1}));await waitMode(p,1,2);
   await p.evaluate(()=>audit.node.port.postMessage({t:'drums',part:1,kit:0}));await p.waitForFunction(()=>audit.frame.engines[1]===2);assert(await p.locator('[data-performance-mode]').evaluateAll(xs=>xs.every(x=>x.disabled)));assert.equal(await p.locator('.ww-performance-modes [aria-pressed="true"]').count(),0);
-  await p.evaluate(()=>audit.node.port.postMessage({t:'analog',part:1}));await p.waitForFunction(()=>audit.frame.engines[1]===0);await p.locator('.ww-legacy-toggle').click();await p.locator('.dial[aria-label="Part"]').press('ArrowDown');await p.waitForFunction(()=>audit.frame.track===0);await p.locator('.ww-legacy-toggle').click();await waitMode(p,0,3);
+  await p.evaluate(()=>audit.node.port.postMessage({t:'analog',part:1}));await p.waitForFunction(()=>audit.frame.engines[1]===0);await choosePart(0);await waitMode(p,0,3);
   await mode(p,0).click();await waitMode(p,0,0);
   const midi=(st,d1,d2)=>p.evaluate(([st,d1,d2])=>audit.sources[1].onmidimessage({data:[st,d1,d2]}),[st,d1,d2]);
   await midi(0xb0,64,127);for(const n of [60,64,67]){await midi(0x90,n,100);await midi(0x80,n,0);}await p.waitForFunction(()=>audit.frame.polyphony.slots.filter(v=>v.gate).length===3);
   await p.evaluate(()=>{audit.sent=[];audit.programs=JSON.stringify(audit.frame.programs);});
-  for(const id of ['diag','perf','tones','perf'])await go(p,id);await p.locator('.ww-legacy-toggle').click();await p.locator('.ww-legacy-toggle').click();
+  for(const id of ['diag','perf','tones','perf'])await go(p,id);await p.getByRole('button',{name:'Instrument setup',exact:true}).click();await go(p,'perf');
   assert.deepEqual(await p.evaluate(()=>audit.sent),[]);assert.equal(await p.evaluate(()=>audit.contexts),1);assert.equal(await p.evaluate(()=>audit.ready),1);assert.equal(await p.evaluate(()=>audit.frame.polyphony.slots.filter(v=>v.gate).length),3);assert(await p.evaluate(()=>JSON.stringify(audit.frame.programs)===audit.programs));assert.equal(await p.locator('.ww-midi-setup').evaluate(n=>n.open),false);
   await midi(0xb0,64,0);await p.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.active));
   // Automatic resume never opens setup; manual Resume audio does.
@@ -73,7 +84,7 @@ try {
   }
   await p.setViewportSize({width:1560,height:1100});await p.screenshot({path:`${root}/performance-modes.png`,fullPage:true});
   await p.setViewportSize({width:390,height:844});await p.evaluate(()=>document.querySelector('.ww-topbar').scrollIntoView());await p.evaluate(()=>audit.context.suspend());await p.getByRole('button',{name:'Resume audio',exact:true}).click();await p.locator('.ww-midi-setup[open]').waitFor();await p.screenshot({path:`${root}/midi-setup-mobile.png`});assert(await p.locator('.ww-midi-setup').evaluate(n=>n.getBoundingClientRect().width<=innerWidth&&n.scrollWidth<=n.clientWidth));await ok(p);
-  results.push({scenario:'devices and voice modes',result:'PASS',sameMidiNodes:true,profilePreserved:true,allFourModes:true,partSelection:true,legacyAndDiagnostics:true,drumGuard:true,sustainNavigation:true,contexts:1,automaticResumeNoModal:true,manualResumeSetup:true,desktopPanelMoreCompact:true});await context.close();
+  results.push({scenario:'devices and voice modes',result:'PASS',sameMidiNodes:true,profilePreserved:true,allFourModes:true,partSelection:true,nativeControlsAndDiagnostics:true,drumGuard:true,sustainNavigation:true,contexts:1,automaticResumeNoModal:true,manualResumeSetup:true,desktopPanelMoreCompact:true});await context.close();
   for(const scenario of ['empty','denied']){
     const {p,context}=await fixture(scenario);await start(p);
     if(scenario==='empty'){
@@ -82,6 +93,6 @@ try {
     }else{await p.getByRole('button',{name:'Connect MIDI keyboard',exact:true}).click();assert((await p.locator('#midiStatus').textContent()).includes('permission denied'));await ok(p);}
     await virtualKey(p);assert.equal(await p.evaluate(()=>audit.context.state),'running');assert(await p.evaluate(()=>localStorage.getItem('waswan-midi-profile-v1')===audit.profile));results.push({scenario,result:'PASS',virtualKeyboard:true,audioRunning:true,profilePreserved:true});await context.close();
   }
-  const failure=await fixture();await failure.p.route('**/obervave-voice.wasm',route=>route.fulfill({status:500,body:'test failure'}));await failure.p.getByRole('button',{name:'Start audio',exact:true}).click();await failure.p.waitForFunction(()=>audit.context?.state==='closed');assert.equal(await failure.p.locator('.ww-midi-setup').evaluate(n=>n.open),false);assert(/iniciar|start/i.test(await failure.p.locator('#status').textContent()));await failure.p.unroute('**/obervave-voice.wasm');await start(failure.p);await ok(failure.p);results.push({scenario:'startup failure and retry',result:'PASS',noModalOnFailure:true});await failure.context.close();
+  const failure=await fixture();await failure.p.route('**/obervave-voice.wasm',route=>route.fulfill({status:500,body:'test failure'}));await failure.p.getByRole('button',{name:'Start audio',exact:true}).click();await failure.p.waitForFunction(()=>audit.context?.state==='closed');assert.equal(await failure.p.locator('.ww-midi-setup').evaluate(n=>n.open),false);assert(/iniciar|start/i.test(await failure.p.locator('.ww-notice').textContent()));await failure.p.unroute('**/obervave-voice.wasm');await start(failure.p);await ok(failure.p);results.push({scenario:'startup failure and retry',result:'PASS',noModalOnFailure:true});await failure.context.close();
   assert.deepEqual(allErrors,[]);const report={result:'PASS',chrome:await browser.version(),results,errors:allErrors};fs.writeFileSync(`${root}/browser.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{await browser.close();}

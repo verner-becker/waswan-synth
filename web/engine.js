@@ -2,6 +2,21 @@
 import {Engine as OriginalEngine} from './engine-original.js';
 import {validateContext} from './studio-format.js';
 
+const setupActions={
+  setting:['waswan_instrument_set',2], bank:['waswan_pad_bank',1], pattern:['waswan_pattern_action',3],
+  favourite:['waswan_favourite_action',3], keyboard:['waswan_keyboard_setup',10], row:['waswan_keyboard_activate',2],
+  drum:['waswan_drum_set',4], mode:['waswan_controller_mode',1], controller:['waswan_controller_set',3],
+  map:['waswan_controller_edit',6], controllerAction:['waswan_controller_action',1],
+  sequence:['waswan_sequence_view',1], sequenceAdjust:['waswan_sequence_adjust',5],
+  super:['waswan_super_set',3], kit:['waswan_kit_set',3], sequenceAction:['waswan_sequence_action',3]
+};
+const readString=(x,ptr)=>{
+  const bytes=new Uint8Array(x.memory.buffer);
+  let result='';
+  for(let i=ptr;ptr&&i<ptr+64&&bytes[i];i++)result+=String.fromCharCode(bytes[i]);
+  return result;
+};
+
 export class Engine extends OriginalEngine {
   constructor(...args){super(...args);this.fineAbsolute=Array(4).fill(null);this.controlOwners=Array(12).fill(null);}
   absoluteKnob(m) {
@@ -51,6 +66,13 @@ export class Engine extends OriginalEngine {
     x.waswan_ui_set(id,value,m.scope);
   }
   input(message) {
+    if(message.t==='instrument-setup'){
+      const spec=Object.hasOwn(setupActions,message.action)?setupActions[message.action]:null;
+      const args=message.args;
+      if(!spec||!Array.isArray(args)||args.length!==spec[1]||!args.every(value=>Number.isInteger(value)&&value>=-32768&&value<=32767))return;
+      this.setupResult={request:message.request,applied:!!this.ex[spec[0]]?.(...args)};
+      return;
+    }
     if(message.t==='studio-mixer'){
       if(Number.isInteger(message.part)&&message.part>=0&&message.part<4&&Number.isInteger(message.field)&&message.field>=0&&message.field<8&&Number.isInteger(message.value))this.ex.waswan_studio_mix_set?.(message.part,message.field,message.value);
       return;
@@ -61,14 +83,16 @@ export class Engine extends OriginalEngine {
         this.editorEdit={id:message.id,applied:!!this.ex.waswan_editor_set?.(message.id,message.value,message.scope)};
       return;
     }
-    if(message.t==='editor-save'){
+    if(message.t==='editor-save'||message.t==='drum-preset-save'){
       const m=message,x=this.ex,u32=v=>Number.isInteger(v)&&v>=0&&v<=0xffffffff;
-      if(!x.waswan_editor_save||!Number.isSafeInteger(m.request)||m.request<1||!Number.isInteger(m.program)||m.program<1||m.program>99||
+      const save=m.t==='editor-save'?x.waswan_editor_save:x.waswan_drum_preset_save;
+      if(!save||!Number.isSafeInteger(m.request)||m.request<1||!Number.isInteger(m.program)||m.program<1||m.program>99||
          !u32(m.scope)||!u32(m.token)||!u32(m.targetToken)||typeof m.name!=='string'||!/^[ A-Z0-9-]{1,10}$/.test(m.name)||!m.name.trim())return;
       // AudioWorkletGlobalScope does not guarantee TextEncoder; the validated name is ASCII.
       const name=m.name.padEnd(10,' '),buffer=new Uint8Array(x.memory.buffer,x.waswan_editor_name_buffer(),10);
       for(let i=0;i<10;i++)buffer[i]=name.charCodeAt(i);
-      const applied=!!x.waswan_editor_save(m.program-1,m.scope,m.token,m.targetToken);
+      const applied=!!save(m.program-1,m.scope,m.token,m.targetToken);
+      if(m.t==='drum-preset-save'){this.setupResult={request:m.request,applied};return;}
       this.editorSave={request:m.request,applied,program:m.program,part:m.scope&3,state:applied?'waiting':'rejected'};
       return;
     }
@@ -162,6 +186,33 @@ export class Engine extends OriginalEngine {
         unison:x.waswan_unison(part),arp:x.waswan_arp(part),sustain:!!x.waswan_sustain(part),
         held:x.waswan_held(part),limit:x.waswan_part_limit(part)})),
     };
+    if(x.waswan_instrument_setting){
+      const read=(count,fn)=>Array.from({length:count},(_,i)=>fn(i));
+      const sequence=x.waswan_native_sequence();
+      frame.setup={
+        result:this.setupResult,
+        settings:read(16,x.waswan_instrument_setting),
+        keyboard:read(2,row=>read(8,field=>x.waswan_keyboard_value(row,field))),
+        drum:frame.engines[frame.track]===2?{
+          kit:x.waswan_drum_value(0,3), overall:read(4,x.waswan_kit_value),
+          sounds:read(8,lane=>read(3,field=>x.waswan_drum_value(lane,field)))
+        }:null,
+        super:read(2,setting=>x.waswan_super_value(frame.track,setting)),
+        sequence:sequence?{
+          view:x.waswan_sequence_state(0),page:x.waswan_sequence_state(1),length:x.waswan_sequence_state(2),
+          record:x.waswan_sequence_state(3),endless:!!x.waswan_sequence_state(4),
+          knobs:read(4,k=>({label:readString(x,x.waswan_sequence_label(k,0)),value:readString(x,x.waswan_sequence_label(k,1))}))
+        }:null,
+        controller:frame.midiMode?{
+          settings:read(4,x.waswan_controller_value),
+          entries:read(71,index=>read(5,field=>x.waswan_controller_entry(index,field))),
+        }:null
+      };
+      if(frame.midiMode&&!this.setupControllerNames){
+        this.setupControllerNames=read(71,index=>readString(x,x.waswan_controller_name(index)));
+        frame.setup.controller.names=this.setupControllerNames;
+      }
+    }
     if(x.waswan_studio_mix_value)frame.studioMixer=Array.from({length:4},(_,part)=>Array.from({length:8},(_,field)=>x.waswan_studio_mix_value(part,field)));
     return frame;
   }

@@ -142,7 +142,7 @@ export class SequenceWorkspace {
   async start(allowEmpty=false,onePass=false){
     if(this.bridge.isDawBusy?.())throw Error('Stop DAW and disable its inputs before starting Studio');
     if(this.legacyPlaying)throw Error('Stop the Legacy sequencer before playing Studio MIDI');
-    if(this.frame?.midiMode)throw Error('Return to synth mode in Legacy SMK before playing MIDI');
+    if(this.frame?.midiMode)throw Error('Return to Synth in Instrument setup before playing MIDI');
     const {context,node,gain}=this.bridge.getAudio();if(!context||!node)throw Error('Start audio before playing MIDI');
     if(this.starting||this.playing)throw Error('Studio transport is already preparing or playing');
     const data=compileNotes(this.sequence);if(!data.events.length&&!data.automation.length&&!data.expression.length&&!this.sequence.audioClips?.length&&!allowEmpty)throw Error('Add notes or automation first');if(onePass)data.loop=false;
