@@ -48,8 +48,11 @@ Implementada em `feat/ux-stage-5-instrument`, sobre `2454662`. [Fechamento e evi
 
 ## 6. Consolidação de SEQ e STUDIO
 
-- Concentrar a composição na DAW. A proposta para revisão é manter **Gravação rápida** como ação do Synth, com tomada de referência, histórico de eventos, contexto de timbres e recuperação.
-- Abrir projetos Studio antigos representativos e comparar notas, áudio, expressão, FX compartilhados e automação. Verificar também o efeito de parar o transporte: Studio mantém o último valor automatizado e a DAW restaura o valor-base. Retirar SEQ e Studio da navegação após decidir o destino das funções e resolver as diferenças que afetam os projetos.
+Implementada em `feat/ux-stage-6-studio-consolidation`, sobre `21d6b29`. [Fechamento e evidências](ux-stage-6.md)
+
+- A composição começa na DAW. **Quick capture** no Synth guarda a tomada de referência, histórico de eventos, contexto de timbres e recuperação.
+- **File → Open DAW project** abre arquivos Studio no editor original ou em uma cópia editável da DAW. O original preserva expressão, FX compartilhados, automação e comportamento de Stop. O editor original também fica acessível em **Quick capture → Original Studio projects**.
+- A revisão após as seis etapas confirmou as correções de zoom e exportação Studio e registrou as prioridades restantes. [Parecer de seguimento do Astra](ux-evolution-astra-followup.md)
 
 ## Contratos de validação
 

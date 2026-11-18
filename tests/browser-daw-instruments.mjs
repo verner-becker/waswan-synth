@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {clickDawFile} from './daw-browser-controls.mjs';
+import {openStudioComposer} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -34,7 +35,7 @@ try{
  const energy=await page.evaluate(()=>{const read=a=>{const b=new Float32Array(a.fftSize);a.getFloatTimeDomainData(b);return Math.max(...b.map(Math.abs));};return {raw:read(audit.raw),daw:read(audit.mix)};});assert(energy.daw>.001);assert.equal(energy.raw,0,'project notes are absent from the original stereo output');
  await page.evaluate(()=>{audit.node.port.postMessage({t:'voice-mode',part:0,mode:0});audit.node.port.postMessage({t:'midi',st:144,d1:72,d2:100});});await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===72));
  const profile=await page.evaluate(()=>localStorage.getItem('waswan-midi-profile-v1'));await page.evaluate(()=>{audit.sent=[];audit.keys=document.querySelector('#keys');});
- for(const id of ['perf','seq','tones','daw'])await page.locator(`[data-workspace="${id}"]`).click();
+ await openStudioComposer(page);for(const id of ['perf','tones','daw'])await page.locator(`[data-workspace="${id}"]`).click();
  assert.deepEqual(await page.evaluate(()=>audit.sent),[]);assert.equal(await page.evaluate(()=>audit.contexts),1);assert.equal(await page.evaluate(()=>audit.hosts),1);assert(await page.evaluate(()=>audit.keys===document.querySelector('#keys')));assert.equal(await page.evaluate(()=>localStorage.getItem('waswan-midi-profile-v1')),profile);
  await page.screenshot({path:`${root}/daw-foundation.png`,fullPage:true});
  await button('Stop DAW').click();await page.waitForFunction(()=>!audit.daw.playing&&audit.frame.polyphony.slots.filter(v=>v.gate&&v.part>=4).length===0);

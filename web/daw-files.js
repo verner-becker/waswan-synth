@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import {projectBlob,readProject,fileToken,archiveHeader,sourceChecksum} from './daw-format.js';
+import {projectBlob,readProject,fileToken,archiveHeader,sourceChecksum,migrateStudio} from './daw-format.js';
 import {ImmutableAudioStore} from './daw-assets.js';
-import {wavHeader} from './studio-format.js';
+import {MAGIC as STUDIO_V1,MAGIC2 as STUDIO_V2,readProject as readStudio,wavHeader} from './studio-format.js';
 const type={description:'WASWAN project',accept:{'application/octet-stream':['.wsproj']}};
+const studioFile=async file=>[STUDIO_V1,STUDIO_V2].includes(await file.slice(0,STUDIO_V1.length).text());
 const safeId=id=>typeof id==='string'&&/^[\w-]{1,80}$/.test(id);
 const recoveryName=(meta,check)=>meta.id+'.'+check.crc32.toString(16)+'.'+meta.bytes+'.wav';
 async function write(handle,blob){
@@ -17,12 +18,23 @@ export class ProjectFiles {
     if(!this.locks?.request)throw Error('Web Locks is required for project writes');
     return this.locks.request(name,{mode:'exclusive',ifAvailable:true},lock=>{if(!lock)throw Error('Another project write is in progress');return task();});
   }
-  async open({accept=()=>true,deferBinding=false}={}){
+  async open({accept=()=>true,deferBinding=false,chooseStudio}={}){
     if(this.busy)throw Error('Finish the current file operation');this.busy=true;
     let assetStore;
     try{
       const [handle]=await this.openPicker({types:[type],multiple:false}),file=await handle.getFile(),token=await fileToken(file);
-      assetStore=this.createAssetStore?await this.createAssetStore(await this.root()):null;const loaded=await readProject(file,{assetStore});
+      let studio;
+      if(chooseStudio&&await studioFile(file)){
+        studio=await readStudio(file);
+        const choice=await chooseStudio(studio.project);
+        if(!choice)return null;
+        if(choice==='original'){
+          if(await fileToken(await handle.getFile())!==token)throw Error('Project file changed while opening');
+          return {originalFile:file};
+        }
+      }
+      assetStore=this.createAssetStore?await this.createAssetStore(await this.root()):null;
+      const loaded=studio?await migrateStudio(studio,assetStore):await readProject(file,{assetStore});
       if(!await accept(loaded)){await assetStore?.dispose();return null;}
       if(await fileToken(await handle.getFile())!==token)throw Error('Project file changed while opening');
       loaded.binding={handle,token};if(!deferBinding)this.adoptBinding(loaded.binding);return loaded;
@@ -33,7 +45,9 @@ export class ProjectFiles {
     try{
       const document=controller.snapshot(),assets=new Map(controller.assets),revision=controller.revision;
       const handle=saveAs||!this.handle?await savePicker({types:[type],suggestedName:document.name.replace(/[\\/:*?"<>|]/g,'-')+'.wsproj'}):this.handle;
-      const expected=handle===this.handle?this.token:await fileToken(await handle.getFile());
+      const destination=await handle.getFile();
+      if(document.legacy?.studio&&await studioFile(destination))throw Error('Choose a new file to keep the Studio original');
+      const expected=handle===this.handle?this.token:await fileToken(destination);
       if(handle.requestPermission&&await handle.requestPermission({mode:'readwrite'})!=='granted')throw Error('Project write permission was denied');
       const blob=await projectBlob(document,assets),nextToken=await fileToken(blob);
       await this.exclusive('waswan-project-file-writer-v1',async()=>{

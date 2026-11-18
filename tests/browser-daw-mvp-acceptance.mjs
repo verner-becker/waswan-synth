@@ -29,6 +29,10 @@ await context.addInitScript(()=>{
 const daw=page=>page.locator('.ww-daw');
 const button=(page,name)=>daw(page).getByRole('button',{name,exact:true});
 const field=(page,name)=>daw(page).getByLabel(name,{exact:true});
+const visibleHeight=locator=>locator.evaluate(node=>{
+  const {top,bottom}=node.getBoundingClientRect();
+  return Math.max(0,Math.min(innerHeight,bottom)-Math.max(0,top));
+});
 async function linked(host){
   const opening=host.waitForEvent('popup');
   await host.getByRole('button',{name:'Open DAW in new tab',exact:true}).click();
@@ -116,12 +120,16 @@ try{
   await divider.press('ArrowLeft');
   assert.equal(await divider.getAttribute('aria-valuenow'),'660');
   await tab.screenshot({path:`${root}/linked-side-editor.png`});
-  await tab.setViewportSize({width:1366,height:620});
+  await tab.setViewportSize({width:960,height:468});
   await tab.waitForFunction(()=>!document.querySelector('.ww-daw-layout').classList.contains('ww-daw-side-docked'));
   await button(tab,'Arrangement view').click();
   assert(await daw(tab).locator('.ww-daw-upper').isVisible());
+  assert(await visibleHeight(daw(tab).locator('.ww-daw-arrangement-row').first())>=24);
+  assert(await visibleHeight(button(tab,'Play DAW'))>=24);
   await button(tab,'Editor view').click();
   assert(await daw(tab).locator('.ww-daw-upper').isHidden());
+  assert(await visibleHeight(daw(tab).locator('.ww-daw-audio-scroll'))>=48);
+  assert(await visibleHeight(button(tab,'Play DAW'))>=24);
   await button(tab,'Restore editor').click();
   await tab.setViewportSize({width:3440,height:1440});
   await tab.waitForFunction(()=>document.querySelector('.ww-daw-layout').classList.contains('ww-daw-side-docked'));

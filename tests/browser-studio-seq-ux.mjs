@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {openStudioComposer} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {readProject,projectBlob,wavHeader} from '../web/studio-format.js';
-const root='.local/validation/studio-seq-ux',assets='docs/assets/studio-seq-ux';fs.mkdirSync(root,{recursive:true});fs.mkdirSync(assets,{recursive:true});
+const root='.local/validation/studio-seq-ux',assets=process.env.STUDIO_SEQ_SCREENSHOTS||root;fs.mkdirSync(assets,{recursive:true});fs.mkdirSync(root,{recursive:true});
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
 try{
  const page=await browser.newPage({acceptDownloads:true,viewport:{width:1440,height:1000}}),errors=[],dialogs=[];let accept=true;page.on('pageerror',e=>errors.push(e.message));page.on('dialog',async d=>{dialogs.push(d.message());await(accept?d.accept():d.dismiss());});
@@ -11,7 +12,7 @@ try{
   window.audit={contexts:0,sent:[]};audit.source={id:'ux-input',name:'UX MIDI input',state:'connected',async open(){},async close(){}};navigator.requestMIDIAccess=async()=>({inputs:new Map([['ux-input',audit.source]])});
   const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;audit.contexts++;}};const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...args){super(...args);if(args[1]!=='obervave-smk37')return;audit.node=this;const send=this.port.postMessage.bind(this.port);this.port.postMessage=(m,...rest)=>{audit.sent.push({t:m.t});if(m.t==='studio-context'&&audit.delayContext){const delay=audit.delayContext;audit.delayContext=0;setTimeout(()=>send(m,...rest),delay);}else send(m,...rest);};this.port.addEventListener('message',({data:m})=>{if(m.t==='frame')audit.frame=m;if(m.t==='studio-sequence-state')audit.sequence=m;});}};
  });
- const button=n=>page.getByRole('button',{name:n,exact:true}),field=n=>page.getByLabel(n,{exact:true}),workspace=id=>page.locator(`[data-workspace="${id}"]`).click();
+ const button=n=>page.getByRole('button',{name:n,exact:true}),field=n=>page.getByLabel(n,{exact:true}),workspace=id=>id==='seq'?openStudioComposer(page):page.locator(`[data-workspace="${id}"]`).click();
  const midi=(st,d1,d2)=>page.evaluate(data=>audit.source.onmidimessage({data,timeStamp:performance.now()}),[st,d1,d2]);
  const download=async(name,path)=>{const wait=page.waitForEvent('download');await button(name).click();await(await wait).saveAs(path);return fs.readFileSync(path);};
  const centerError=()=>page.locator('.ww-piano-scroll').evaluate(scroll=>{const box=scroll.getBoundingClientRect(),canvas=scroll.querySelector('canvas').getBoundingClientRect();return Math.abs(canvas.top+(127-48)*12+6-(box.top+scroll.clientHeight/2));});

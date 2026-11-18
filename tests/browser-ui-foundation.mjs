@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {openStudioComposer} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -26,7 +27,7 @@ try {
   await p.getByRole('button',{name:'Start audio',exact:true}).click();await p.waitForFunction(()=>audit.frame?.ms>5000&&audit.frame?.instrument?.controls.length===12);
   await p.getByRole('button',{name:'Use keyboard & pads',exact:true}).click();
   await p.waitForFunction(()=>document.activeElement?.matches('#keys .key'));
-  assert.equal(await p.locator('.ww-navigation [data-workspace]').count(),5);
+  assert.deepEqual(await p.locator('.ww-navigation [data-workspace]').evaluateAll(nodes=>nodes.map(n=>n.textContent)),['Performance','TONES','Quick capture','DAW']);
   assert.equal(await p.locator('.ww-performance .ww-midi-badge:visible').count(),0);
   assert.equal(await p.evaluate(()=>audit.frame.polyphony.limit),256);assert.equal(await p.evaluate(()=>audit.context.state),'running');
   await p.locator('.ww-topbar').getByRole('button',{name:'Settings',exact:true}).click();await p.locator('#midiConnect').click();await p.waitForFunction(()=>!!audit.source.onmidimessage);
@@ -37,7 +38,8 @@ try {
   await p.waitForFunction(()=>document.querySelector('.ww-chord').textContent==='Am7');
   await p.evaluate(()=>{audit.sent=[];audit.keyNode=document.querySelector('#keys');audit.padNode=document.querySelector('#pads');audit.programs=JSON.stringify(audit.frame.programs);audit.scope=audit.frame.instrument.scope;});
   const startMs=await p.evaluate(()=>audit.frame.ms);
-  for(const id of ['seq','studio','tones','daw','diag','perf'])await go(id);
+  await openStudioComposer(p);
+  for(const id of ['studio','tones','daw','diag','perf'])await go(id);
   const perfNav=p.locator('[data-workspace="perf"]');await perfNav.focus();await perfNav.press('ArrowRight');
   assert.equal(await p.locator('[data-view="tones"]').isVisible(),true);
   await p.getByRole('button',{name:'Filter',exact:true}).click();
@@ -75,7 +77,7 @@ try {
   await go('perf');
   for(const note of [57,60,64,67])await midi(0x90,note,100);await p.waitForFunction(()=>document.querySelector('.ww-chord').textContent==='Am7');await p.waitForTimeout(150);
   await p.setViewportSize({width:1560,height:1100});await p.screenshot({path:`${root}/performance-desktop.png`,fullPage:true});
-  await go('tones');await p.screenshot({path:`${root}/tone-editor.png`,fullPage:true});await go('seq');await p.screenshot({path:`${root}/sequencer.png`,fullPage:true});await go('perf');await p.getByRole('button',{name:'Instrument setup',exact:true}).click();await p.screenshot({path:`${root}/instrument-setup.png`,fullPage:true});await go('perf');
+  await go('tones');await p.screenshot({path:`${root}/tone-editor.png`,fullPage:true});await openStudioComposer(p);await p.screenshot({path:`${root}/sequencer.png`,fullPage:true});await go('perf');await p.getByRole('button',{name:'Instrument setup',exact:true}).click();await p.screenshot({path:`${root}/instrument-setup.png`,fullPage:true});await go('perf');
   const layouts=[];
   for(const [width,height] of [[1920,937],[1536,750]]){
     await p.setViewportSize({width,height});

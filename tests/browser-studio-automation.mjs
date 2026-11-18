@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {openStudioComposer} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -32,7 +33,7 @@ try{
  await midi(176,21,5);await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>audit.frame.instrument.controls[0].value),40);
  await midi(176,21,40);await page.waitForTimeout(100);await midi(176,21,41);await page.waitForFunction(()=>audit.frame.instrument.controls[0].value===41);await button('Stop recording').click();await page.waitForFunction(()=>document.querySelector('.ww-studio-status').dataset.state==='ready');
  const pickupProject=await readProject(new Blob([await download('Save project',`${root}/pickup.wsproj`)]));const changes=pickupProject.project.events.filter(e=>e.kind==='parameter'&&e.target==='part:0:cutoff');assert.equal(changes.length,1);assert.equal(changes[0].value,41);
- await page.locator('[data-workspace="seq"]').click();await field('Automation target').selectOption('part:0:cutoff');await button('Use take applied controls').click();assert.equal(await field('Automation lane').locator('option').count(),1);assert.equal(await field('Automation value').inputValue(),'40');await button('Delete automation lane').click();
+ await openStudioComposer(page);await field('Automation target').selectOption('part:0:cutoff');await button('Use take applied controls').click();assert.equal(await field('Automation lane').locator('option').count(),1);assert.equal(await field('Automation value').inputValue(),'40');await button('Delete automation lane').click();
  await field('Automation target').selectOption('master');await button('Add automation lane').click();await page.waitForFunction(()=>document.querySelector('[aria-label="Automation lane"]').options.length===1);
  await field('Automation start beat').fill('1');await field('Automation value').fill('500');await button('Set automation point').click();await field('Automation start beat').fill('5');await field('Automation value').fill('900');await button('Set automation point').click();
  await field('Arrangement tail seconds').fill('.5');await midi(144,67,100);await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===67));
@@ -50,7 +51,7 @@ try{
  await page.evaluate(async()=>{const find=n=>[...document.querySelectorAll('button')].find(b=>b.textContent===n);find('Export MP3').click();await Promise.resolve();find('Cancel MP3 export').click();});
  await page.waitForFunction(()=>document.body.textContent.includes('MP3 export cancelled'));
  assert.equal(await page.evaluate(()=>audit.contexts),1);assert.equal(await page.evaluate(()=>localStorage.getItem('waswan-midi-profile-v1')),profile);assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===67)));
- await midi(128,67,0);await page.locator('[data-workspace="seq"]').click();await page.screenshot({path:`${root}/automation-desktop.png`,fullPage:true});await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:`${root}/automation-mobile.png`,fullPage:true});
+ await midi(128,67,0);await openStudioComposer(page);await page.screenshot({path:`${root}/automation-desktop.png`,fullPage:true});await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:`${root}/automation-mobile.png`,fullPage:true});
  assert(requests.every(url=>url.startsWith('http://localhost:8737/')));assert.deepEqual(errors,[]);
  const report={result:'PASS',chrome:await browser.version(),pickupObservedChanges:1,automationImport:true,nativeMaster900:true,exactRecordingDeadline:true,renderedFrames:saved.project.frames,mp3:{bytes:mp3.length,kbps:192,decoded,sourceWavUnchanged:true,cancel:true},localRequestsOnly:true,sameContext:true,liveNotePreserved:true,profilePreserved:true,mobileOverflow:false,physicalValidation:false,errors};fs.writeFileSync(`${root}/browser.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
 }finally{await browser.close();}

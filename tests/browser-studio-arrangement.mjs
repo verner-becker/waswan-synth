@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {openStudioComposer} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -24,7 +25,7 @@ try{
  const button=name=>page.getByRole('button',{name,exact:true}),field=name=>page.getByLabel(name,{exact:true});
  const open=async()=>{await page.locator('[data-workspace="studio"]').click();await field('Open Studio project').setInputFiles({name:'fixture.wsproj',mimeType:'application/octet-stream',buffer:file});await page.waitForFunction(()=>document.querySelector('.ww-studio-status').textContent.includes('Project opened'));};
  const midi=(st,d1,d2)=>page.evaluate(([st,d1,d2])=>audit.source.onmidimessage({data:[st,d1,d2],timeStamp:performance.now()}),[st,d1,d2]);
- await page.goto('http://localhost:8737/simulator/');await page.locator('.ww-sequence').waitFor({state:'attached'});await page.locator('.ww-sequence > details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));await open();await page.locator('[data-workspace="seq"]').click();assert.equal(await field('Sequence notes').locator('option').count(),2);assert.equal(await page.evaluate(()=>audit.contexts),0,'project notes load without starting audio');
+ await page.goto('http://localhost:8737/simulator/');await page.locator('.ww-sequence').waitFor({state:'attached'});await page.locator('.ww-sequence > details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));await open();await openStudioComposer(page);assert.equal(await field('Sequence notes').locator('option').count(),2);assert.equal(await page.evaluate(()=>audit.contexts),0,'project notes load without starting audio');
  await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await button('Connect MIDI keyboard').click();await page.waitForFunction(()=>!!audit.source.onmidimessage);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
  await button('Make clip A').click();assert.equal(await field('Arrangement clip').locator('option').count(),1);
  await button('Duplicate clip').click();assert.equal(await field('Arrangement clip').locator('option').count(),2);assert.equal(await field('Sequence notes').locator('option').count(),3);
@@ -44,7 +45,7 @@ try{
  catch(error){console.log('CONTEXT',await page.evaluate(()=>({status:document.querySelector('.ww-studio-status').textContent,cut:audit.frame.instrument.controls[0].value,mixer:audit.frame.studioMixer,playing:audit.frame.instrument.playing})));throw error;}
  assert.equal(await page.evaluate(()=>audit.contexts),1);
  // A fresh overdub adds external notes, rather than replacing accompaniment.
- await page.locator('[data-workspace="seq"]').click();await button('Overdub A').click();
+ await openStudioComposer(page);await button('Overdub A').click();
  await page.waitForFunction(()=>document.querySelector('.ww-studio-status').dataset.state==='recording'&&audit.sequence?.playing);
  await midi(144,67,100);await page.waitForTimeout(300);await midi(128,67,0);await page.waitForTimeout(300);
  const mark=await page.evaluate(()=>audit.sent.length);await button('Finish overdub').click();await page.waitForFunction(()=>document.querySelector('.ww-note-list').options.length===3);

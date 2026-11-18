@@ -14,9 +14,8 @@ import {chordLabel} from './ui-chords.js';
 import {trackIcon} from './daw-icons.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,CompactMeter,RotaryKnob,VerticalFader,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
 
-const SYNTH_VIEWS=[['perf','Performance','Performance'],['tones','TONES','Tone Editor']];
-const STUDIO_VIEWS=[['seq','SEQ','Sequencer'],['studio','Studio','Studio recorder']];
-const WORKSPACES=[...SYNTH_VIEWS,...STUDIO_VIEWS,['daw','DAW','DAW'],['diag','Diagnostics','Diagnostics'],['instrument','Instrument setup','Instrument setup']];
+const SYNTH_VIEWS=[['perf','Performance','Performance'],['tones','TONES','Tone Editor'],['studio','Quick capture','Quick capture']];
+const WORKSPACES=[...SYNTH_VIEWS,['seq','Studio original','Original Studio composition'],['daw','DAW','DAW'],['diag','Diagnostics','Diagnostics'],['instrument','Instrument setup','Instrument setup']];
 let app;
 export function updateFoundation(message) { app?.receive(message); }
 export function mountFoundation(bridge) {
@@ -34,13 +33,21 @@ class Foundation {
     this.buildHeader();
     this.buildNavigation();
     this.main=el('main','ww-main');this.shell.append(this.main);
-    this.views=new Map();this.buildPerformance();this.studio=new StudioWorkspace(bridge);this.addView('studio',this.studio.node);this.sequence=new SequenceWorkspace(bridge,this.studio.recorder);this.addView('seq',this.sequence.node);
+    this.views=new Map();this.buildPerformance();this.studio=new StudioWorkspace(bridge,()=>this.selectWorkspace('seq'));this.addView('studio',this.studio.node);this.sequence=new SequenceWorkspace(bridge,this.studio.recorder);this.addView('seq',this.sequence.node);
     this.toneEditor=new ToneEditor(m=>this.bridge.send(m),()=>{if(this.workspace==='tones')this.focusMidiContext();});this.addView('tones',this.toneEditor.node);
     this.instrumentSetup=new InstrumentSetup(bridge,b=>this.hardware(b));this.addView('instrument',this.instrumentSetup.node);
     this.buildDiagnostics();this.buildSettings();this.buildDock();this.shell.append(this.performanceReadouts);this.buildMidiDialog();
     this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'),()=>this.dock.querySelector('#keys .key')?.focus());
     this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
-    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{openSettings:()=>{window.focus();this.showSettings(true);},toggleKeyboard:()=>{
+    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{openStudioFile:async file=>{
+      if(!await this.studio.recorder.open(file))return;
+      window.focus();
+      const id=this.studio.recorder.take.project.sequence?'seq':'studio';
+      this.selectWorkspace(id);
+      const heading=this.views.get(id).querySelector('h2');
+      heading.tabIndex=-1;
+      heading.focus();
+    },openSettings:()=>{window.focus();this.showSettings(true);},toggleKeyboard:()=>{
       if(this.dawTab?.connected){
         window.focus();
         this.selectWorkspace('perf');
@@ -74,9 +81,7 @@ class Foundation {
     const daw=WorkspaceNavigation([['daw','DAW','DAW']],id=>this.selectWorkspace(id),'DAW');
     this.openDawTab=action('Open DAW in new tab',()=>this.dawTab.open(),'ww-daw-new-tab');
     daw.append(this.openDawTab);
-    const studio=WorkspaceNavigation(STUDIO_VIEWS,id=>this.selectWorkspace(id),'Other workspaces');
-    studio.classList.add('ww-secondary-navigation');
-    bar.append(synth,daw,studio);this.shell.append(bar);
+    bar.append(synth,daw);this.shell.append(bar);
     this.workspaceButtons=[...bar.querySelectorAll('[data-workspace]')];
   }
   buildHeader() {

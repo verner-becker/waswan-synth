@@ -21,7 +21,7 @@ import {beatFrame,frameBeat,arrangementBeats,musicalPosition,secondsPosition} fr
 const patchName=patch=>patch?String.fromCharCode(...patch.slice(63,73)).replace(/[^\x20-\x7e]/g,'').trim()||'Saved sound':'Choose an instrument';
 const db=value=>value>0?(20*Math.log10(value)).toFixed(1)+' dB':'−∞ dB';
 export class DawWorkspace {
-  constructor(bridge,{toggleKeyboard=()=>false,openSettings=()=>{}}={}){
+  constructor(bridge,{toggleKeyboard=()=>false,openSettings=()=>{},openStudioFile=()=>{}}={}){
     this.bridge=bridge;this.files=new ProjectFiles({
       openPicker:options=>this.pick('showOpenFilePicker',options),
       savePicker:options=>this.pick('showSaveFilePicker',options)
@@ -32,7 +32,18 @@ export class DawWorkspace {
     this.toolbar=el('div','ww-daw-file-actions');
     const button=(name,task)=>action(name,()=>this.run(task));
     this.newButton=button('New DAW project',async()=>{if(!this.confirmDiscard())return;await this.adopt({project:emptyProject(),assets:new Map(),dispose:async()=>{},warnings:[]});this.files.forget();this.refresh();});
-    this.openButton=button('Open DAW project',async()=>{const loaded=await this.files.open({accept:()=>this.confirmDiscard(),deferBinding:true});if(loaded){await this.adopt(loaded);if(loaded.warnings.length)this.files.forget();else this.files.adoptBinding(loaded.binding);this.refresh();}});
+    this.openButton=button('Open DAW project',async()=>{
+      const loaded=await this.files.open({deferBinding:true,accept:()=>this.confirmDiscard(),chooseStudio:source=>this.studioChoice(source)});
+      if(!loaded)return;
+      if(loaded.originalFile){
+        await openStudioFile(loaded.originalFile);
+        return;
+      }
+      await this.adopt(loaded);
+      if(loaded.warnings.length){this.files.forget();this.controller.markUnsaved();}
+      else this.files.adoptBinding(loaded.binding);
+      this.refresh();
+    });
     this.saveButton=button('Save DAW project',()=>this.saveProject());
     this.saveAsButton=button('Save DAW project as',()=>this.saveProject({saveAs:true}));
     this.undo=button('Undo DAW edit',()=>this.controller.command('undo'));this.redo=button('Redo DAW edit',()=>this.controller.command('redo'));
@@ -66,6 +77,7 @@ export class DawWorkspace {
     this.recoveryDialog=el('dialog','ww-map-dialog');this.recoveryChoices=el('select');this.recoveryChoices.setAttribute('aria-label','DAW recovery project');
     this.recoveryConfirm=button('Recover selected DAW copy',async()=>{const loaded=await this.files.recover(this.recoveryChoices.value,{accept:()=>this.confirmDiscard(),deferBinding:true});if(loaded){await this.adopt(loaded);this.files.forget();this.controller.markUnsaved();this.refresh();this.recoveryDialog.close();}});
     this.recoveryDialog.append(el('h2','','Recover a project from this browser'),this.recoveryChoices,this.recoveryConfirm,action('Cancel DAW recovery',()=>this.recoveryDialog.close()));document.body.append(this.recoveryDialog);
+    this.buildStudioCompatibility();
     this.attach(new ProjectController());
     this.layout=new DawArrangement(this,{transport,trackTools,master});this.layout.render();
     this.monitor=new DawMonitor(this);this.recorder=new DawRecorder(this);this.buildInputControls(openSettings);this.buildRecordingControls(transport);this.importer=new DawImporter(this);this.audition=new DawAudition(this);this.clipTools=new DawClipTools(this);this.buildImportControls();this.editors=new DawEditors(this);this.mix=new DawMix(this);this.audioExport=new DawExportPanel(this,this.layout.transportOptions);
@@ -79,6 +91,41 @@ export class DawWorkspace {
     this.node.addEventListener('focusin',()=>this.layout.windows.status());
   }
   get viewWindow(){return this.node.ownerDocument.defaultView;}
+  buildStudioCompatibility(){
+    this.studioDialog=el('dialog','ww-map-dialog ww-studio-import');
+    this.studioDialog.setAttribute('aria-labelledby','ww-studio-import-title');
+    this.studioTitle=el('h2');
+    this.studioTitle.id='ww-studio-import-title';
+    this.studioNotice=el('p','ww-muted');
+    this.studioDetails=el('ul');
+    this.studioOriginal=action('Open Studio original',()=>this.studioDialog.close('original'),'ww-primary');
+    this.studioConvert=action('Open editable DAW copy',()=>this.studioDialog.close('convert'));
+    this.studioDismiss=action('Close',()=>this.studioDialog.close());
+    this.studioDialog.append(this.studioTitle,this.studioNotice,this.studioDetails,this.studioOriginal,this.studioConvert,this.studioDismiss);
+    document.body.append(this.studioDialog);
+    this.studioCompatibility=action('Studio playback compatibility',()=>this.studioChoice(this.snapshot.legacy.studio,{report:true}));
+    this.studioCompatibility.hidden=true;
+    this.toolbar.append(this.studioCompatibility);
+  }
+  studioChoice(source,{report=false}={}){
+    const lanes=source.sequence?.automation||[];
+    const baseLanes=lanes.filter(lane=>/^part:[0-3]:(level|pan)$/.test(lane.target));
+    const details=[
+      'DAW converts the notes, audio clips and Volume/Pan automation. It keeps the original source data with the copy.',
+      'Open the Studio original to use the shared Synth effects, the original expression and other automation lanes.'
+    ];
+    if(!report)details.push('The editable copy asks for a new file when you save.');
+    if(lanes.length>baseLanes.length)details.push((lanes.length-baseLanes.length)+' automation lane(s) remain in the source data.');
+    if(baseLanes.length)details.push('At Stop, DAW restores the base faders. Studio keeps the last automated values.');
+    this.studioTitle.textContent=report?'Studio playback compatibility':'Open Studio project';
+    this.studioNotice.textContent=source.name||'Studio project';
+    this.studioDetails.replaceChildren(...details.map(line=>el('li','',line)));
+    this.studioConvert.hidden=this.studioOriginal.hidden=report;
+    this.studioDismiss.textContent=report?'Close':'Cancel';
+    this.studioDialog.returnValue='';
+    this.studioDialog.showModal();
+    return new Promise(resolve=>this.studioDialog.addEventListener('close',()=>resolve(this.studioDialog.returnValue),{once:true}));
+  }
   setLinked(linked){
     if(linked)this.inlineKeyboardLabel=this.keyboard.textContent;
     this.linked=linked;
@@ -249,6 +296,7 @@ export class DawWorkspace {
     if(!this.controller)return;this.snapshot=this.controller.snapshot();const p=this.snapshot;if(!p.tracks.some(t=>t.id===this.selected))this.selected=p.tracks[0]?.id||null;
     if(this.name.ownerDocument.activeElement!==this.name)this.name.value=p.name;if(this.tempo.ownerDocument.activeElement!==this.tempo)this.tempo.value=p.bpm;if(this.length.ownerDocument.activeElement!==this.length)this.length.value=p.length/PPQ;
     this.dirty.textContent=this.controller.dirty?'Unsaved changes':this.files.handle?'Saved · '+this.files.handle.name:'New project';this.masterValue.textContent=db(p.master.volume);if(this.master.ownerDocument.activeElement!==this.master)this.master.value=p.master.volume;
+    this.studioCompatibility.hidden=!p.legacy?.studio;
     for(const [id,row] of this.rows)if(!p.tracks.some(t=>t.id===id)){row.node.remove();this.rows.delete(id);}
     p.tracks.forEach((t,i)=>{const row=this.rows.get(t.id)||this.row(t);if(this.trackList.children[i]!==row.node)this.trackList.insertBefore(row.node,this.trackList.children[i]||null);row.node.classList.toggle('is-selected',this.selected===t.id);row.choose.setAttribute('aria-pressed',String(this.selected===t.id));
       if(row.name.ownerDocument.activeElement!==row.name)row.name.value=t.name;if(row.volume.ownerDocument.activeElement!==row.volume)row.volume.value=t.volume;if(row.pan.ownerDocument.activeElement!==row.pan)row.pan.value=t.pan;row.volume.title=db(t.volume);row.pan.title=t.pan.toFixed(2);row.mute.setAttribute('aria-pressed',String(t.mute));row.solo.setAttribute('aria-pressed',String(t.solo));

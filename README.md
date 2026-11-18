@@ -6,7 +6,7 @@ O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commi
 
 ## Manual de uso
 
-[Manual completo em PDF](MANUAL-WASWAN-SYNTH.pdf), na raiz: 49 páginas em português, com sumário clicável, capturas reais, referência dos 63 parâmetros ANALOG, Studio/SEQ, DAW, Instrument setup, exercícios e ficha de avaliação de usabilidade.
+[Manual completo em PDF](MANUAL-WASWAN-SYNTH.pdf), na raiz, com 49 páginas em português, sumário clicável, referência dos 63 parâmetros ANALOG, Quick capture, projetos Studio originais, DAW e Instrument setup.
 
 Fonte editável: [docs/manual-waswan-synth.html](docs/manual-waswan-synth.html). Para gerar novamente com o Chrome/Playwright já preparado no projeto: `node scripts/build-manual.mjs`. O gerador verifica imagens, links e conteúdo fora dos limites de página antes de escrever o PDF.
 
@@ -22,11 +22,11 @@ python3 scripts/serve-simulator.py
 
 Abra http://localhost:8737/simulator/, use **Start audio** e conecte MIDI em **Settings**. Perfis existentes são preservados; nenhum mapeamento é instalado automaticamente. Consulte [arquitetura, testes, limites e cinco screenshots](docs/ui-foundation-v1.md).
 
-## WASWAN Studio e SEQ
+## Quick capture e projetos Studio originais
 
-As ondas 0–5, a revisão de UX do SEQ e o manual foram aprovados e integrados à `main` em 17/11/2026, preservando os commits originais. O SEQ oferece New/Open/Save project, Record MIDI com preview e destino A–D, piano roll centrado em C3, clipes, overdub, automação e áudio importado limitado. STUDIO captura e recupera tomadas, exporta WAV/MP3 e projetos locais; o SEQ também exporta MIDI.
+Use **Synth → Quick capture** para gravar ou recuperar uma performance, exportar WAV/MP3 e guardar o contexto do instrumento. Para acessar o editor original com MIDI, áudio e automação, abra **Original Studio projects → Open Studio composition editor**.
 
-Comece por **SEQ → New project → Record MIDI → Stop → Save project**. Consulte o [roteiro de uso](docs/studio-guide.md), o [controle das ondas](docs/studio-waves.md) e a [revisão de UX](docs/studio-seq-ux.md). Validação física/musical e limites documentados continuam distintos dos testes automatizados; não houve atualização de firmware, submódulo ou criação de tag nesta integração.
+Em **DAW → File → Open DAW project**, arquivos Studio podem ser abertos no editor original ou convertidos para uma cópia editável na DAW. A cópia leva notas, áudio e automação de volume/pan. O original conserva a reprodução com efeitos compartilhados, expressão e as demais automações. Consulte o [manual](MANUAL-WASWAN-SYNTH.pdf), o [roteiro histórico](docs/studio-guide.md) e o [controle das ondas](docs/studio-waves.md).
 
 ## WASWAN DAW
 

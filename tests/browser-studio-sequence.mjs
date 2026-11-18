@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {openStudioComposer} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -16,7 +17,7 @@ try{
  const send=m=>page.evaluate(m=>audit.node.port.postMessage(m),m);
  const download=async(name,path)=>{const wait=page.waitForEvent('download');await button(name).click();await(await wait).saveAs(path);return fs.readFileSync(path);};
  await page.goto('http://localhost:8737/simulator/');await page.locator('.ww-sequence').waitFor({state:'attached'});await page.locator('.ww-sequence > details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();
- await send({t:'voice-mode',part:0,mode:0});await page.locator('[data-workspace="seq"]').click();
+ await send({t:'voice-mode',part:0,mode:0});await openStudioComposer(page);
  await field('Sequence BPM').fill('120');await field('Sequence BPM').dispatchEvent('change');
  await field('Length in quarter beats').fill('4');await field('Length in quarter beats').dispatchEvent('change');
  const clickNote=async(note,x)=>{
@@ -45,11 +46,12 @@ try{
  await page.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate&&v.sequenced&&v.note===60));
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===60)));
  const mark=await page.evaluate(()=>audit.sent.length);
- for(const id of ['perf','studio','tones','diag','seq']){
+ for(const id of ['perf','studio','tones','diag']){
   if(id==='diag')await page.getByRole('button',{name:'Settings',exact:true}).click();
   await page.locator(`[data-workspace="${id}"]`).click();
  }
  assert.deepEqual(await page.evaluate(n=>audit.sent.slice(n),mark),[],'navigation sends no musical commands');
+ await openStudioComposer(page);
  await page.waitForFunction(()=>audit.sequence?.cycle>=1);await button('Stop').click();await page.waitForFunction(()=>!audit.sequence.playing);
  await page.waitForFunction(()=>audit.frame.polyphony.slots.every(v=>!v.gate||!v.sequenced));
  assert(await page.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate&&!v.sequenced&&v.note===60)));
@@ -60,7 +62,7 @@ try{
  assert.equal(project.project.frames,0);assert.equal(project.project.sequence.notes.length,2);assert.equal(project.project.sequence.bpm,120);
  await button('Delete note').click();assert.equal(await field('Sequence notes').locator('option').count(),1);
  await page.locator('[data-workspace="studio"]').click();await field('Open Studio project').setInputFiles(`${root}/sequence.wsproj`);await page.waitForFunction(()=>document.querySelector('.ww-studio-status').textContent.includes('Project opened'));
- await page.locator('[data-workspace="seq"]').click();await page.waitForFunction(()=>document.querySelector('.ww-note-list').options.length===2);
+ await openStudioComposer(page);await page.waitForFunction(()=>document.querySelector('.ww-note-list').options.length===2);
  await page.screenshot({path:`${root}/sequence-desktop.png`,fullPage:true});
  await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:`${root}/sequence-mobile.png`,fullPage:true});
  assert.deepEqual(errors,[]);const report={result:'PASS',chrome:await browser.version(),notes:2,pianoRoll:true,edit:true,quantizeUndo:true,loop:true,metronome:true,samePitchLiveNotePreserved:true,navigationNoCommands:true,sameContext:true,smf:true,sequenceOnlyProjectRoundtrip:true,mobileOverflow:false,physicalValidation:false,errors};

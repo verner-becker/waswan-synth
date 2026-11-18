@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* UI Foundation tokens. Legacy hardware controls retain their own stylesheet. */
+/* UI Foundation tokens. */
 .ww-page {
   --ww-bg:#0a0f12; --ww-panel:#121b20; --ww-raised:#1a252b; --ww-border:#34454d;
-  --ww-text:#f2f5f6; --ww-muted:#a9b8bf; --ww-accent:#27e3dd; --ww-active:#fff; --ww-pickup:#f3d18c;
+  --ww-text:#f2f5f6; --ww-muted:#a9b8bf; --ww-accent:#27e3dd; --ww-active:#fff; --ww-pickup:#f3d18c; --ww-recording-text:#ffb9c5;
   --ww-radius:14px; --ww-gap:14px; --ww-space:18px; --ww-control:94px;
   --ww-font:Inter,"Segoe UI",Arial,sans-serif;
   margin:0; background:var(--ww-bg); color:var(--ww-text); font-family:var(--ww-font);font-size:14px;
@@ -103,7 +103,7 @@
 .ww-studio-events {overflow:auto;max-height:320px;border-top:1px solid var(--ww-border);}
 .ww-studio-events table {border-collapse:collapse;width:100%;font-size:12px;}
 .ww-studio-events td,.ww-studio-events th {text-align:left;padding:8px;border-bottom:1px solid var(--ww-border);vertical-align:top;overflow-wrap:anywhere;}
-.ww-studio-status[data-state="recording"] {color:var(--ww-accent);}
+.ww-studio-status[data-state="recording"] {color:var(--ww-recording-text);}
 .ww-sequence-settings {display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:12px 0;}
 .ww-sequence-settings label {display:flex;align-items:center;gap:6px;}
 .ww-sequence-settings input[type="number"] {width:100px;max-width:100%;}
@@ -282,7 +282,7 @@
 .ww-shell .ww-daw-record[data-state="recording"] { background: #852d42; color: #fff; border-color: #ff91a9; opacity:1; }
 .ww-daw-record-summary {margin:0;color:#bfd4de;line-height:1.4}
 .ww-daw-midi-destination {margin:0;line-height:1.4}
-.ww-daw-record-summary[data-state="recording"] {color:#ffb9c5}
+.ww-daw-record-summary[data-state="recording"] {color:var(--ww-recording-text)}
 .ww-daw-track-input .ww-section-header h2 {font-size:13px}
 .ww-daw-track-input>p {margin:6px 0;font-size:12px;overflow-wrap:anywhere}
 
@@ -307,7 +307,7 @@
 .ww-daw-detached>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--ww-panel);border-bottom:1px solid var(--ww-border)}
 .ww-daw-detached>header h1{font-size:16px;margin:0}
 .ww-daw-detached>header output{font-size:12px;color:var(--ww-muted)}
-.ww-daw-detached>header output[data-state="recording"]{color:#ffb9c5}
+.ww-daw-detached>header output[data-state="recording"]{color:var(--ww-recording-text)}
 .ww-daw-detached>section,.ww-daw-detached>div{flex:1;min-height:0;overflow:auto}
 .ww-daw-detached-notice{padding:8px 12px}
 .ww-daw-midi-profiles{display:grid;gap:6px}

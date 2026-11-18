@@ -125,7 +125,7 @@ export class StudioRecorder {
     if(this.busy||this.canReplace&& !this.canReplace())throw Error('Finish recording or audio preparation before opening a project');
     const previous=this.state;this.state='loading';this.message='Opening project';this.changed();
     try{
-      const take=await readProject(file);if(this.confirmReplace&&!this.confirmReplace()){this.state=previous;this.message='Open cancelled';this.changed();return;}this.beforeReplace?.();this.stopPlayback();this.take=take;this.frames=take.project.frames;this.eventCount=take.project.events.length;this.state='ready';this.message='Project opened · current synth unchanged';this.changed();
+      const take=await readProject(file);if(this.confirmReplace&&!this.confirmReplace()){this.state=previous;this.message='Open cancelled';this.changed();return false;}this.beforeReplace?.();this.stopPlayback();this.take=take;this.frames=take.project.frames;this.eventCount=take.project.events.length;this.state='ready';this.message='Project opened · current synth unchanged';this.changed();return true;
     }catch(error){this.state=previous;this.message=error.message;this.changed();throw error;}
   }
   async ensureProject(sequence){
@@ -146,7 +146,7 @@ export class StudioRecorder {
   }
   async applyContext(){
     if(this.busy||!this.take)throw Error('Load a project and finish the current operation first');
-    if(this.canApplyContext&&!this.canApplyContext())throw Error('Stop DAW, Studio and Legacy playback before applying tones');
+    if(this.canApplyContext&&!this.canApplyContext())throw Error('Stop DAW and Studio playback and any active instrument pattern before applying tones');
     const {node}=this.bridge.getAudio();if(!node)throw Error('Start audio before applying saved tones');
     const context=this.take.project.sequenceContext||this.take.project.context;
     if(!context.parts.every(p=>p.patch))throw Error('This older project has no full tone snapshot; audio and MIDI remain available');

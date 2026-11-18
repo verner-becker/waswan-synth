@@ -83,7 +83,7 @@ export async function migrateStudio(take,assetStore){
   for(let part=0;part<4;part++){
     const t=makeTrack('midi','Part '+'ABCD'[part]);t.id='studio-part-'+part;
     const state=context.parts[part],mix=s?.tracks?.[part];
-    if(state.patch)t.instrument={type:state.engine===2?'drumx':'analog',patch:[...state.patch]};
+    if(state.patch)t.instrument={type:state.engine===2?'drumx':state.patch[0]===4?'super':'analog',patch:[...state.patch]};
     if(mix){t.volume=(mix.level/100)**2;t.pan=mix.pan/64;t.mute=mix.mute;t.solo=mix.solo;}
     parts.push(t);p.tracks.push(t);
     const groups=(s?.clips||[]).filter(c=>c.part===part).map(c=>({id:c.id,name:c.name,start:c.start,length:c.length,notes:s.notes.filter(n=>n.clip===c.id)}));
@@ -106,5 +106,5 @@ export async function migrateStudio(take,assetStore){
   // Preserve every original event/context, including expression and FX whose
   // independent DAW playback is not yet implemented. Never silently discard it.
   p.legacy={studio:old,takeAssetId:reference?.id||null};validateProject(p);
-  return {project:p,assets,dispose:assetStore?()=>assetStore.dispose():async()=>{},warnings:['Studio source data retained. Shared Legacy FX and expression require the DAW playback adapter; verify sound before replacing the original file.']};
+  return {project:p,assets,dispose:assetStore?()=>assetStore.dispose():async()=>{},warnings:['Studio source imported. Review playback compatibility in File.']};
 }

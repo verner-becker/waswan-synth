@@ -38,7 +38,7 @@ export class DawTab {
     placeholder.hidden=node.hidden;
     placeholder.append(el('p','','DAW is open in its own tab.'),action('Focus DAW tab',()=>win.focus()),
       action('Return DAW here',()=>this.restore({show:true})));
-    this.home={placeholder,dialogs:[w.recoveryDialog,w.takeDialog,w.audioExport.dialog]};
+    this.home={placeholder,dialogs:[w.recoveryDialog,w.takeDialog,w.audioExport.dialog,w.studioDialog]};
     node.replaceWith(placeholder);
     this.onMove(placeholder);
     target.replaceChildren(node);

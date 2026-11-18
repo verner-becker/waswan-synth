@@ -9,7 +9,7 @@ import {AutomationEditor} from './ui-studio-automation.js';
 const pitch=n=>['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'][n%12]+(Math.floor(n/12)-1);
 export class SequenceWorkspace {
   constructor(bridge,recorder){
-    this.bridge=bridge;this.recorder=recorder;this.sequence=emptySequence();this.history=[];this.selected=null;this.playing=false;this.grid=PPQ/4;
+    this.bridge=bridge;this.recorder=recorder;this.sequence=emptySequence();this.sequenceContext=null;this.history=[];this.selected=null;this.playing=false;this.grid=PPQ/4;
     recorder.beforeReplace=()=>{this.replacing=true;if(this.playing||this.starting)this.stopMidi();};
     recorder.canReplace=()=>!this.starting&&!this.rendering&&!this.capture&&!this.arrangement?.overdub&&!this.audio?.busy&&!this.audio?.preparing;
     recorder.confirmReplace=()=>!this.hasWork()||confirm('Discard the current Studio project and open another? Save a project file first if you want to keep it. Live tones and MIDI mappings are preserved.');
@@ -17,9 +17,9 @@ export class SequenceWorkspace {
     recorder.newProject=()=>this.newProject();
     recorder.stopFromUI=()=>this.capture||this.arrangement?.overdub||this.rendering?this.stopTransport():recorder.stop();
     recorder.canApplyContext=()=>!this.playing&&!this.starting&&!this.legacyPlaying&&!this.bridge.isDawBusy?.();
-    recorder.prepareProject=async()=>{if(!this.sequence.notes.length&&!this.sequence.clips?.length&&!this.sequence.audioClips?.length)return;if(this.bridge.getAudio().node)await this.storeProject();else if(recorder.take){recorder.take.project.sequence=structuredClone(this.sequence);this.audio.attach(recorder.take);}};
+    recorder.prepareProject=async()=>{if(this.sequenceContext||this.dirty||this.audio.assets.length)await this.storeProject({keepContext:true});};
     const previous=recorder.onChange;recorder.onChange=r=>{previous(r);this.update({t:'studio-project'});};
-    this.node=Panel('Studio arrangement','MIDI and audio clips · four instrument parts · current live timbres');this.node.classList.add('ww-sequence');
+    this.node=Panel('Original Studio composition','Compatibility editor · four live Synth parts');this.node.classList.add('ww-sequence');
     this.status=el('p','ww-sequence-status','Ready · Record MIDI or draw notes in the piano roll.');this.status.setAttribute('role','status');
     const run=task=>void Promise.resolve().then(task).catch(error=>{this.status.textContent=error.message;});this.run=run;
     const tools=el('div','ww-studio-actions');
@@ -101,7 +101,7 @@ export class SequenceWorkspace {
     if(this.recorder.busy||!this.recorder.canReplace())throw Error('Finish recording, loading or audio preparation before starting a new project');
     if(this.hasWork()&&!confirm('Start a new empty Studio project? The current composition, take and imported audio will be removed from this workspace. Save a project file first to keep them. Live tones and MIDI mappings are preserved.'))return false;
     if(this.playing||this.audio.source)this.stopMidi();
-    this.sequence=emptySequence();this.history=[];this.selected=null;this.preview=null;this.capture=null;this.transportStartFrame=null;this.expectedStartFrame=null;this.position=0;this.dirty=false;
+    this.sequence=emptySequence();this.sequenceContext=null;this.history=[];this.selected=null;this.preview=null;this.capture=null;this.transportStartFrame=null;this.expectedStartFrame=null;this.position=0;this.dirty=false;
     this.scroll.scrollLeft=0;this.recordPart.value='0';this.part.value='0';this.click.checked=false;this.tail.value='2';this.replacing=false;
     this.audio.adopt(null);this.arrangement.overdub=null;this.automation.selectedTick=null;this.automation.target.value='part:0:cutoff';this.note.value='48';this.velocity.value='100';this.startBeat.value='1';this.duration.value='.25';this.audio.status.textContent='Import WAV audio or use a recorded take. Sources are preserved by clip edits.';this.recorder.clearProject();this.take=null;
     this.status.textContent='New project · choose a destination and Record MIDI';this.centerC3();this.draw();return true;
@@ -133,15 +133,21 @@ export class SequenceWorkspace {
     this.draw();
   }
   remove(){this.edit(s=>s.notes=s.notes.filter(n=>n.id!==this.selected));this.selected=null;this.draw();}
-  async storeProject(){
-    if(!this.bridge.getAudio().node&&this.recorder.take){this.recorder.take.project.sequence=structuredClone(this.sequence);this.audio.attach(this.recorder.take);this.take=this.recorder.take;return;}
+  async storeProject({keepContext=false}={}){
     this.saving=true;
-    try{await this.recorder.ensureProject(this.sequence);this.recorder.take.project.sequence=structuredClone(this.sequence);this.audio.attach(this.recorder.take);this.take=this.recorder.take;}
+    try{
+      const savedContext=keepContext?this.sequenceContext:null;
+      if(!this.recorder.take||(!savedContext&&this.bridge.getAudio().node))await this.recorder.ensureProject(this.sequence);
+      const take=this.recorder.take;
+      this.sequenceContext=savedContext||take.project.sequenceContext||take.project.context;
+      take.project.sequenceContext=this.sequenceContext;
+      take.project.sequence=structuredClone(this.sequence);this.audio.attach(take);this.take=take;
+    }
     finally{this.saving=false;}
   }
   async start(allowEmpty=false,onePass=false){
     if(this.bridge.isDawBusy?.())throw Error('Stop DAW and disable its inputs before starting Studio');
-    if(this.legacyPlaying)throw Error('Stop the Legacy sequencer before playing Studio MIDI');
+    if(this.legacyPlaying)throw Error('Stop the instrument pattern in Performance before playing Studio MIDI');
     if(this.frame?.midiMode)throw Error('Return to Synth in Instrument setup before playing MIDI');
     const {context,node,gain}=this.bridge.getAudio();if(!context||!node)throw Error('Start audio before playing MIDI');
     if(this.starting||this.playing)throw Error('Studio transport is already preparing or playing');
@@ -183,7 +189,18 @@ export class SequenceWorkspace {
     }
     if(m.t==='error'){this.audio?.stop();this.playing=false;this.metronome?.port.postMessage({t:'stop'});this.draw();}
     const take=this.recorder.take;
-    if(take!==this.take){this.take=take;if(this.replacing&&!this.saving){try{this.sequence=structuredClone(validateSequence(take?.project.sequence||emptySequence(take?.project.context.tempo)));this.selected=null;this.history=[];this.preview=null;this.dirty=false;this.audio.adopt(take);this.replacing=false;this.draw();}catch(error){this.status.textContent=error.message;}}}
+    if(take!==this.take){
+      this.take=take;
+      if(this.replacing&&!this.saving){
+        try{
+          const project=take?.project;
+          this.sequence=structuredClone(validateSequence(project?.sequence||emptySequence(project?.context.tempo)));
+          this.sequenceContext=(project?.sequence||take?.assets?.length)?project.sequenceContext||project.context:null;
+          this.selected=null;this.history=[];this.preview=null;this.dirty=false;
+          this.audio.adopt(take);this.replacing=false;this.draw();
+        }catch(error){this.status.textContent=error.message;}
+      }
+    }
     if(m.t==='ready'||m.t==='frame'&&this.controlsReady!==!!this.bridge.getAudio().node){this.controlsReady=!!this.bridge.getAudio().node;this.draw();}
     if(m.t==='studio-project'){if(this.capture?.phase==='Recording'&&['ready','error'].includes(this.recorder.state))this.run(()=>this.stopTransport());if(this.rendering&&['ready','error'].includes(this.recorder.state))this.rendering=null;this.draw();}
   }

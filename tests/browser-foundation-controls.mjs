@@ -28,3 +28,10 @@ export async function openAssignment(page,target){
   await synthButton(page,'Assign selected control').click();
   return page.locator('.ww-map-dialog[open]');
 }
+
+export async function openStudioComposer(page){
+  await synthButton(page,'Quick capture').click();
+  const original=page.locator('.ww-studio-compatibility');
+  if(!await original.evaluate(node=>node.open))await original.locator('summary').click();
+  await synthButton(page,'Open Studio composition editor').click();
+}

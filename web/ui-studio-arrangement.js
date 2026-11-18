@@ -42,7 +42,7 @@ export class ArrangementEditor {
   selectNew(sequence){this.owner.replace(sequence);this.clips.value=sequence.clips.at(-1).id;this.draw();}
   async startOverdub(part){
     const o=this.owner,r=o.recorder;if(o.playing||r.busy||this.overdub)throw Error('Stop the current transport before overdubbing');
-    if(o.legacyPlaying)throw Error('Stop the Legacy sequencer first');
+    if(o.legacyPlaying)throw Error('Stop the instrument pattern in Performance before recording MIDI');
     await r.start();while(r.state==='starting')await new Promise(requestAnimationFrame);
     if(r.state!=='recording')throw Error(r.message);
     try{const start=await o.start(true);this.overdub={part,start};o.status.textContent='Overdubbing part '+'ABCD'[part];this.draw();}

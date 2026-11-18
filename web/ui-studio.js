@@ -25,18 +25,18 @@ function eventLabel(e){
   if(m.t==='voice-mode')return `Voice mode · ${['POLY','DUAL','UNISON','MONO'][m.mode]}`;
   if(m.t==='voice-sustain')return `Sustain · ${m.enabled?'on':'off'}`;
   if(m.t==='studio-note')return `Sequence · ${pitch(m.note)} · ${m.velocity?'velocity '+m.velocity:'note off'} · part ${'ABCD'[m.part]}`;
-  if(m.t==='studio-mixer')return `Part ${'ABCD'[m.part]} · ${['volume','pan','chorus send','delay send','reverb send','drive send','Legacy mute','Legacy solo'][m.field]} · ${m.value}`;
+  if(m.t==='studio-mixer')return `Part ${'ABCD'[m.part]} · ${['volume','pan','chorus send','delay send','reverb send','drive send','mute','solo'][m.field]} · ${m.value}`;
   if(m.t==='panic')return 'Release all';
   if(m.t==='enc'||m.t.startsWith('enc-fine'))return `Knob ${m.e+1} · ${m.steps===undefined?'position '+m.value:(m.steps>0?'+':'')+m.steps}`;
   if(m.t==='fader')return `Fader ${m.f+1} · ${m.v}`;
   if(m.t==='editor-set')return `Tone edit · value ${m.value}`;
   if(m.t==='editor-save')return `Save tone · program ${m.program}`;
-  return {btn:'Legacy button',master:'Master level',velocity:'Keyboard velocity','voice-unison':'Unison voices','drum-hit':'Drum hit',drums:'Drum kit',analog:'Analog engine'}[m.t]||'Instrument action';
+  return {btn:'Instrument button',master:'Master level',velocity:'Keyboard velocity','voice-unison':'Unison voices','drum-hit':'Drum hit',drums:'Drum kit',analog:'Analog engine'}[m.t]||'Instrument action';
 }
 export class StudioWorkspace {
-  constructor(bridge){
+  constructor(bridge,openComposer){
     this.recorder=new StudioRecorder(bridge);this.recorder.onChange=()=>this.draw();this.bridge=bridge;
-    this.node=Panel('Studio · performance recorder','Local stereo take · input MIDI and instrument commands');this.node.classList.add('ww-studio');
+    this.node=Panel('Quick capture','Stereo recording of the Synth · MIDI events and instrument settings');this.node.classList.add('ww-studio');
     this.status=el('p','ww-studio-status');this.status.setAttribute('role','status');
     const controls=el('div','ww-studio-actions');
     const run=task=>void Promise.resolve().then(task).catch(error=>{this.recorder.message=error.message;this.draw();});
@@ -54,12 +54,15 @@ export class StudioWorkspace {
     this.open=el('input');this.open.type='file';this.open.accept='.wsproj';this.open.setAttribute('aria-label','Open Studio project');
     this.open.onchange=()=>{const file=this.open.files[0];if(file)run(()=>this.recorder.open(file));this.open.value='';};
     controls.append(this.newProject,this.record,this.stop,this.play,this.stopPlay,this.wav,this.mp3,this.cancelMp3,this.save,this.recover,this.applyContext);
-    const openLabel=el('label','ww-studio-open','Open project ');openLabel.append(this.open);
+    const openLabel=el('label','ww-studio-open','Open saved take or Studio project ');openLabel.append(this.open);
+    const compatibility=el('details','ww-studio-compatibility');
+    compatibility.append(el('summary','','Original Studio projects'),
+      action('Open Studio composition editor',openComposer));
     this.counter=el('p','ww-studio-counter');this.context=el('p','ww-muted');this.events=el('div','ww-studio-events');
-    this.node.append(this.status,controls,this.mp3Status,openLabel,this.counter,
+    this.node.append(this.status,controls,this.mp3Status,openLabel,compatibility,this.counter,
       el('p','ww-muted','Records the synth after master/effects plus playing audio clips, before monitoring mute. Stop ends capture without releasing notes; wait for effect tails before stopping.'),
       this.context,el('p','ww-muted','Local recovery is not a backup. Save a project file to preserve the take. Opening a project does not replace the live instrument. Maximum: 20 minutes.'),
-      el('h3','','Recorded events'),el('p','ww-muted','MIDI input and instrument actions are listed separately. Legacy arp and sequence notes are not transcribed. A MIDI control waiting for pickup may leave the sound unchanged.'),this.events);
+      el('h3','','Recorded events'),el('p','ww-muted','The event list separates MIDI input from instrument actions. Listen to the WAV to hear performances generated inside the instrument.'),this.events);
     this.draw();
   }
   update(m){

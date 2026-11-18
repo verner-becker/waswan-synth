@@ -14,14 +14,19 @@ await assert.rejects(readProject(blob.slice(0,blob.size-1)),/truncated/);
 await assert.rejects(readProject(new Blob([blob,new Uint8Array(1)])),/Unexpected/);
 await assert.rejects(projectBlob(p,new Map()),/Missing/);
 const context={version:1,tempo:120,master:724,session:'A'.repeat(458752),parts:Array.from({length:4},()=>({program:1,engine:0,parameters:Array(63).fill(0),patch:Array(80).fill(0)}))};
+context.parts[2].parameters[0]=context.parts[2].patch[0]=4;
 for(const version of [1,2]){
  const old={format:'waswan-studio-project',version,name:'Old composition',status:'complete',frames:128,sampleRate:44100,channels:2,context,events:[{kind:'input',frame:10,receivedFrame:11,listening:true,data:[144,60,100]}],sequence:{version:1,ppq:960,bpm:120,meter:[4,4],length:15360,loop:false,notes:[{id:'old note with spaces',part:2,note:60,velocity:91,start:120,duration:240}]}};
+ old.sequence.expression=[{tick:120,data:[226,0,72]}];
+ old.sequence.automation=[['level',50],['pan',-16],['cutoff',75]].map(([target,value])=>({id:target,target:`part:2:${target}`,enabled:true,curve:'step',points:[{tick:960,value}]}));
  const assets=version===2?[{meta:{id:'old asset with spaces',name:'Old source',frames:128,bytes:audio.size},audio}]:[];
  if(version===2){old.assets=assets.map(a=>a.meta);old.sequence.audioClips=[{id:'old note with spaces',asset:old.assets[0].id,start:0,offset:0,frames:128,gain:.5,pan:.3,mute:false}];}
  if(version===1){old.sequence.clips=[{id:'empty name clip',name:'',part:2,start:0,length:15360}];old.sequence.notes[0].clip='empty name clip';}
  if(version===2){old.assets[0].name='';}
  const migrated=await readProject(studioBlob(old,audio,assets));
  assert.equal(migrated.project.version,4);assert.deepEqual(migrated.project.legacy.studio,old);assert(migrated.warnings.length);
+ assert.equal(migrated.project.tracks[2].instrument.type,'super');
+ assert.deepEqual(migrated.project.automation.map(lane=>[lane.trackId,lane.target,lane.points[0].value]),[['studio-part-2','volume',.25],['studio-part-2','pan',-.25]]);
  const note=migrated.project.clips.find(c=>c.type==='midi').notes[0];assert.equal(note.pitch,60);assert.equal(note.velocity,91);assert.equal(note.start,120);
  const migratedAgain=await readProject(await projectBlob(migrated.project,migrated.assets));assert.deepEqual(migratedAgain.project,migrated.project);
  for(const [id,bytes] of migrated.assets)assert.deepEqual(await migratedAgain.assets.get(id).arrayBuffer(),await bytes.arrayBuffer());

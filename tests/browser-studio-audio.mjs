@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {openStudioComposer} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
@@ -9,7 +10,7 @@ const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',hea
 try{
  const context=await browser.newContext({acceptDownloads:true,viewport:{width:1440,height:1100}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{if(d.message().startsWith('Discard the current Studio project'))void d.accept();});
  await page.addInitScript(()=>{window.audit={contexts:0,sent:[],sources:[]};const AC=AudioContext;window.AudioContext=class extends AC{constructor(o){super(o);audit.context=this;audit.contexts++;}createBufferSource(){const source=super.createBufferSource(),start=source.start.bind(source);source.start=(at,...rest)=>{audit.sources.push({at,loop:source.loop,length:source.buffer.length});start(at,...rest);};return source;}};const AN=AudioWorkletNode;window.AudioWorkletNode=class extends AN{constructor(...args){super(...args);if(args[1]!=='obervave-smk37')return;audit.node=this;const send=this.port.postMessage.bind(this.port);this.port.postMessage=(m,...rest)=>{audit.sent.push({t:m.t,data:m.t==='studio-sequence-start'?m.data:undefined,startFrame:m.startFrame});send(m,...rest);};this.port.addEventListener('message',({data:m})=>{if(m.t==='frame')audit.frame=m;if(m.t==='studio-sequence-state')audit.sequence=m;});}};});
- const button=n=>page.getByRole('button',{name:n,exact:true}),field=n=>page.getByLabel(n,{exact:true}),workspace=async id=>page.locator(`[data-workspace="${id}"]`).click();
+ const button=n=>page.getByRole('button',{name:n,exact:true}),field=n=>page.getByLabel(n,{exact:true}),workspace=id=>id==='seq'?openStudioComposer(page):page.locator(`[data-workspace="${id}"]`).click();
  const download=async(name,path)=>{const wait=page.waitForEvent('download');await button(name).click();await(await wait).saveAs(path);return fs.readFileSync(path);};
  await page.goto('http://localhost:8737/simulator/');await page.locator('.ww-sequence').waitFor({state:'attached'});await page.locator('.ww-sequence > details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));await button('Start audio').click();await page.waitForFunction(()=>audit.frame?.ms>5000);await page.locator('.ww-midi-setup').locator('.ww-midi-continue').click();await workspace('seq');
  await field('Length in quarter beats').fill('4');await field('Length in quarter beats').dispatchEvent('change');

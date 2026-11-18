@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {clickDawFile} from './daw-browser-controls.mjs';
+import {openStudioComposer} from './browser-foundation-controls.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,7 +29,7 @@ try{
  await page.waitForFunction(()=>audit.changes.some(m=>m.changes.some(c=>c.part===0&&c.patch[12]===55)));
  await clickDawFile(daw,'Save DAW project');await page.waitForFunction(()=>document.querySelector('.ww-daw-status').textContent.startsWith('Project saved'));
  const patches=await page.evaluate(async()=>{const {readProject}=await import('/simulator/daw-format.js');return (await readProject(await audit.handle.getFile())).project.tracks.map(t=>t.instrument.patch[12]);});assert.equal(patches[4],55);assert.equal(patches.filter(v=>v===55).length,1,'only the actual shared slot follows the edit');
- await page.locator('[data-workspace="seq"]').click();await page.locator('.ww-sequence > details').evaluateAll(ns=>ns.forEach(n=>n.open=true));
+ await openStudioComposer(page);await page.locator('.ww-sequence > details').evaluateAll(ns=>ns.forEach(n=>n.open=true));
  const wav=Buffer.from(await new Blob([wavHeader(4410),new Int16Array(8820)]).arrayBuffer());await page.getByLabel('Import audio WAV',{exact:true}).setInputFiles({name:'overlap.wav',mimeType:'audio/wav',buffer:wav});await page.waitForFunction(()=>document.querySelector('[aria-label="Audio clips"]').options.length===1);
  const mark=await page.evaluate(()=>({sources:audit.sources,starts:audit.sent.filter(t=>t==='studio-sequence-start').length}));await page.getByRole('button',{name:'Play',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.ww-sequence-status').textContent.includes('Stop DAW'));
  assert.deepEqual(await page.evaluate(()=>({sources:audit.sources,starts:audit.sent.filter(t=>t==='studio-sequence-start').length})),mark,'Studio rejects before scheduling audio or click');

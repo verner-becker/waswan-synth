@@ -93,15 +93,17 @@ export class DawArrangement {
     this.focusHint=el('p','ww-muted ww-daw-focus-hint');
     statusLine.append(this.context,this.w.status,this.focusHint);
     const compactViews=el('div','ww-daw-compact-views');
-    this.compactArrangement=action('Arrangement view',()=>{
-      this.prefs.maximized='arrangement';
+    const selectCompactView=name=>{
+      this.prefs.maximized=name;
       this.layout();
-    });
+      top.scrollIntoView({block:'start'});
+      this.measure();
+    };
+    this.compactArrangement=action('Arrangement view',()=>selectCompactView('arrangement'));
     this.compactEditor=action('Editor view',()=>{
       if(this.windows.focus(this.prefs.panel))return;
       this.prefs.bottom=true;
-      this.prefs.maximized='editor';
-      this.layout();
+      selectCompactView('editor');
     });
     compactViews.append(this.compactArrangement,this.compactEditor);
     this.w.node.replaceChildren(top,statusLine,compactViews,this.root);
@@ -269,7 +271,9 @@ export class DawArrangement {
   }
   updateContext(){
     const track=this.w.selectedTrack(),clip=this.w.clip(),hasClips=this.w.snapshot.clips.some(c=>c.trackId===track?.id);
-    const selection=clip?(clip.type==='midi'?'Piano Roll':'Waveform')+' · '+clip.name:
+    const editor=this.windows.has('clip')?'Clip editor in another window':
+      this.bottom.hidden||this.prefs.panel!=='clip'?'Show Clip editor':clip?.type==='midi'?'Piano Roll':'Waveform';
+    const selection=clip?clip.name+' · '+editor:
       !track?'Add a MIDI or audio track to begin':
         hasClips?track.name+' · Select a clip to edit':
           track.name+(track.type==='midi'?' · Double-click the lane to create a clip':' · Import audio or record a take');
