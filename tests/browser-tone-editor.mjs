@@ -58,7 +58,8 @@ try{
   // A complete edit/play workspace must fit a notebook at normal browser zoom.
   for(const [width,height] of [[1366,768],[1536,750],[1024,768],[1280,720]]){
     await p.setViewportSize({width,height});
-    assert(await p.evaluate(()=>document.documentElement.scrollHeight<=innerHeight&&document.documentElement.scrollWidth<=innerWidth));
+    const size=await p.evaluate(()=>[document.documentElement.scrollWidth,document.documentElement.scrollHeight]);
+    assert(size[0]<=width&&size[1]<=height,`Tone editor uses ${size.join(' × ')} at ${width} × ${height}`);
     assert.equal(await editor.locator('.ww-osc-channel:visible').count(),5);
   }
   const oscLevel=editor.getByRole('slider',{name:'OSC3 level',exact:true});

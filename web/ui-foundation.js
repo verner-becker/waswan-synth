@@ -2,6 +2,7 @@
 import {CONTROLS,controlTarget,displayValue} from './ui-controls.js';
 import {TARGETS,fineTarget} from './midi-profile.js';
 import {ToneSelector} from './ui-tone-selector.js';
+import {ToneBanks} from './ui-tone-banks.js';
 import {ToneEditor} from './ui-tone-editor.js';
 import {MidiSetup} from './ui-midi-setup.js';
 import {StudioWorkspace} from './ui-studio.js';
@@ -35,7 +36,7 @@ class Foundation {
     this.buildNavigation();
     this.main=el('main','ww-main');this.shell.append(this.main);
     this.views=new Map();this.buildPerformance();this.studio=new StudioWorkspace(bridge,()=>this.selectWorkspace('seq'));this.addView('studio',this.studio.node);this.sequence=new SequenceWorkspace(bridge,this.studio.recorder);this.addView('seq',this.sequence.node);
-    this.toneEditor=new ToneEditor(m=>this.bridge.send(m),()=>{if(this.workspace==='tones')this.focusMidiContext();});this.addView('tones',this.toneEditor.node);
+    this.toneEditor=new ToneEditor(m=>this.bridge.send(m),()=>{if(this.workspace==='tones')this.focusMidiContext();},this.banks);this.addView('tones',this.toneEditor.node);
     this.instrumentSetup=new InstrumentSetup(bridge,b=>this.hardware(b));this.addView('instrument',this.instrumentSetup.node);
     this.buildDiagnostics();this.buildSettings();this.buildDock();this.shell.append(this.performanceReadouts);this.buildMidiDialog();
     this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'),()=>this.dock.querySelector('#keys .key')?.focus());
@@ -97,11 +98,8 @@ class Foundation {
     this.part=el('span','ww-part','Part —');this.midiStatus=StatusIndicator('MIDI · Not connected');this.mode=el('span','ww-chip','Mode —');this.voices=el('span','ww-chip','Voices — / —');this.bpm=el('span','ww-chip','— BPM');
     this.start=action('Start audio',()=>this.startAudio(),'ww-primary');this.settings=action('Settings',()=>this.showSettings(this.settingsPanel.hidden));
     this.settings.setAttribute('aria-controls','ww-settings');this.settings.setAttribute('aria-expanded','false');
-    const banks=action('Tone banks',()=>this.toneEditor.banks.open('browse'));
-    banks.setAttribute('aria-haspopup','dialog');
-    const picker=el('div','ww-program-picker');
-    picker.append(this.toneSelector.node,banks);
-    preset.append(picker,this.toneSelector.detail);
+    this.banks=new ToneBanks(m=>this.bridge.send(m),this.toneSelector.node);
+    preset.append(this.banks.picker,this.toneSelector.detail,this.banks.feedback);
     top.append(brand,preset,this.part,this.midiStatus,this.mode,this.voices,this.bpm,this.start,this.settings);this.shell.append(top);
     this.notice=el('p','ww-notice','Start audio, then connect your MIDI controller in Settings.');this.notice.setAttribute('role','status');this.shell.append(this.notice);
   }
@@ -325,7 +323,7 @@ class Foundation {
     const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
     this.instrumentSetup.update(m,this.running);
-    this.toneEditor.update(m,this.running);this.toneSelector.update(m,this.running,this.toneEditor.banks.sourceLabel(m));
+    this.toneEditor.update(m,this.running);this.toneSelector.update(m,this.running,this.banks.sourceLabel(m));
     this.part.textContent=`Part ${'ABCD'[part]}`;const connected=!!this.bridge.midi.input;
     this.midiStatus.textContent=connected?'MIDI · Connected':'MIDI · Not connected';this.midiStatus.dataset.state=connected?'on':'off';
     this.mode.textContent=m.engines[part]===2?'DRUM-X':['POLY','DUAL','UNISON','MONO'][poly.parts[part].mode];

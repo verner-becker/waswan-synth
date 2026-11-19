@@ -51,3 +51,35 @@ export async function saveToneFile(directory,name,patch){
   }
   return fileName;
 }
+
+// Keep the structured-cloneable directory handle and bank names together.
+// The cached names can be shown before Chrome grants access to the folder again.
+export async function libraryBanks(root){
+  const banks=[];
+  let rootTones=false;
+  for await(const entry of root.values()){
+    if(entry.kind==='directory')banks.push({key:'folder:'+entry.name,name:entry.name});
+    else if(entry.name.toLowerCase().endsWith(TONE_FILE_EXTENSION))rootTones=true;
+  }
+  banks.sort((a,b)=>a.name.localeCompare(b.name));
+  if(rootTones||!banks.length)banks.unshift({key:'root',name:root.name});
+  return banks;
+}
+
+export async function librarySetting(value){
+  const db=await new Promise((resolve,reject)=>{
+    const request=indexedDB.open('waswan-tone-library',1);
+    request.onupgradeneeded=()=>request.result.createObjectStore('settings');
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error);
+  });
+  try{
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction('settings',value?'readwrite':'readonly');
+      const store=tx.objectStore('settings');
+      const request=value?store.put(value,'library'):store.get('library');
+      tx.oncomplete=()=>resolve(request.result);
+      tx.onabort=()=>reject(tx.error||Error('Library storage unavailable.'));
+    });
+  }finally{db.close();}
+}

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action,Panel,RotaryKnob} from './ui-primitives.js';
 import {FmEditor} from './ui-fm-editor.js';
-import {ToneBanks} from './ui-tone-banks.js';
 const GROUPS=[['Oscillators',[0,1,2,4,5,6,7,11,63,70,64,65,69,66,72,67,68,71,3,8,9,10]],['Filter',[12,13,14,15,16,17,18,19,51]],
   ['Envelopes',[20,21,22,23,24,25,26,27]],['Modulation',[28,29,30,31,32,33,34,35,36,37,46]],
   ['Voice',[38,39,40,41,42,43,44,45]],['Arpeggiator',[47,48,49,50]],['Shared effects',[52,53,54,55,56,57,58,59,60,61,62]]];
@@ -42,7 +41,7 @@ function oscillatorSlider(p,label,onInput){
 }
 
 export class ToneEditor {
-  constructor(send,onGroupChange){
+  constructor(send,onGroupChange,banks){
     this.send=send;this.onGroupChange=onGroupChange;this.request=0;this.controls=new Map();this.groups=[];
     this.node=Panel('Tone Editor','ANALOG');this.node.classList.add('ww-tone-editor');
     this.heading=el('p','','Start audio to inspect the selected tone.');
@@ -58,7 +57,7 @@ export class ToneEditor {
     this.fmSource=action('+ Add FM',()=>{if(!this.frame.fm)editFm(0,1);else this.selectSource('FM');});
     this.mixSource=action('Mix',()=>this.selectSource('Mix'));
     this.sources.append(this.analogSource,this.fmSource,this.mixSource);
-    this.banks=new ToneBanks(this.send);
+    this.banks=banks;
     const programs=el('div','ww-program-actions');
     programs.append(el('span','ww-muted','Program'),this.save,this.saveAs);
     const create=action('Save to bank…',()=>this.banks.open('create'));

@@ -35,10 +35,12 @@ try{
   await fm.getByLabel('FM level',{exact:true}).fill('82');
   await fm.getByLabel('FM level',{exact:true}).press('Tab');
   await page.waitForFunction(()=>audit.frame.fm?.bytes[4]===82);
-  const open=page.getByRole('button',{name:'Tone banks',exact:true});
+  const banks=page.getByRole('combobox',{name:'Tone bank',exact:true});
+  const tones=page.getByRole('combobox',{name:'Folder tone',exact:true});
+  const open=()=>banks.selectOption('manage');
   await page.getByRole('button',{name:'Save to bank…'}).click();
   const bank=page.getByRole('dialog',{name:'Tone banks'});
-  await bank.getByRole('button',{name:'Choose bank folder…'}).click();
+  await bank.getByRole('button',{name:'Choose library folder…'}).click();
   await bank.getByText('Folder “Test bank” · 0 tones').waitFor();
   assert(await bank.getByLabel('New tone name').inputValue());
   await bank.getByLabel('New tone name').fill(' ');
@@ -57,7 +59,7 @@ try{
   });
   await page.waitForFunction(value=>audit.frame.editor.values[52].value===value,chorus);
   await page.locator('[data-workspace="perf"]').click();
-  await open.click();
+  await open();
   await bank.getByLabel('Find a tone').fill('missing');
   assert(await bank.getByRole('button',{name:'Load into Part A'}).isDisabled());
   await bank.getByLabel('Find a tone').fill('híbr');
@@ -95,7 +97,7 @@ try{
   assert.equal(tone.name,'Baixo híbrido');
   assert.equal(tone.patch.length,169);
   assert.deepEqual(await page.evaluate(()=>audit.frame.editor.targets),original);
-  await open.click();
+  await open();
   await bank.getByRole('button',{name:'Refresh folder'}).click();
   await bank.getByText('Skipped 1 unreadable or invalid tone file.').waitFor();
   await bank.locator('input[type=file]').setInputFiles({name:'download.wstone',mimeType:'application/json',buffer:Buffer.from(files[0].text)});
@@ -104,7 +106,7 @@ try{
   page.once('dialog',dialog=>dialog.accept());
   await bank.getByRole('button',{name:'Load into Part A',exact:true}).click();
   await bank.waitFor({state:'hidden'});
-  await open.click();
+  await open();
   await bank.getByRole('button',{name:'Create bank tone'}).click();
   await bank.getByLabel('New tone name').fill('Baixo híbrido');
   await page.screenshot({path:evidence+'/create-desktop.png'});
@@ -118,8 +120,67 @@ try{
   await page.setViewportSize({width:390,height:844});
   assert(await bank.evaluate(node=>node.scrollWidth<=node.clientWidth+1));
   await page.screenshot({path:evidence+'/mobile.png'});
+  await page.keyboard.press('Escape');
+  // Configure one library with named subfolders and independent tone files.
+  await page.evaluate(async text=>{
+    window.testBank='My banks';
+    const root=await showDirectoryPicker();
+    for(const [name,tone] of [['DX7','Electric Piano'],['Poly-D','Bass']]){
+      const folder=await root.getDirectoryHandle(name,{create:true});
+      const file=await folder.getFileHandle('sample.wstone',{create:true});
+      const writer=await file.createWritable();
+      await writer.write(JSON.stringify({...JSON.parse(text),name:tone}));
+      await writer.close();
+    }
+  },files[0].text);
+  await banks.selectOption('choose');
+  await tones.getByRole('option',{name:'Electric Piano'}).waitFor({state:'attached'});
+  await banks.selectOption({label:'Poly-D'});
+  await tones.getByRole('option',{name:'Bass'}).waitFor({state:'attached'});
+  await page.reload();
+  await startSynth(page);
+  assert.equal(await banks.inputValue(),'internal');
+  const internal=page.getByRole('combobox',{name:'Tone program'});
+  const initial=Number(await internal.inputValue());
+  const referenceSlot=initial===1?2:1;
+  await internal.selectOption(String(referenceSlot));
+  if(await page.locator('.ww-tone-confirm').isVisible())await page.getByRole('button',{name:'Discard and load'}).click();
+  await page.waitForFunction(slot=>audit.frame.programs[audit.frame.track]===slot,referenceSlot);
+  const playing=await page.evaluate(()=>audit.frame.instrument.programToken);
+  await page.evaluate(()=>{
+    const original=FileSystemHandle.prototype.requestPermission;
+    FileSystemHandle.prototype.requestPermission=function(options){
+      FileSystemHandle.prototype.requestPermission=original;
+      return Promise.resolve('denied');
+    };
+  });
+  await banks.selectOption({label:'DX7'});
+  await page.getByText('Folder access denied.',{exact:false}).waitFor();
+  assert.equal(await banks.inputValue(),'internal');
+  await banks.selectOption({label:'DX7'});
+  await tones.getByRole('option',{name:'Electric Piano'}).waitFor({state:'attached'});
+  assert.equal(await page.evaluate(()=>audit.frame.instrument.programToken),playing);
+  if(await page.evaluate(()=>audit.frame.instrument.edited))page.once('dialog',dialog=>dialog.accept());
+  await tones.selectOption({label:'Electric Piano'});
+  await page.getByText('Bank tone · Electric Piano · Program',{exact:false}).waitFor();
+  await page.locator('.ww-topbar').scrollIntoViewIfNeeded();
+  await page.screenshot({path:evidence+'/bank-tone-combos.png'});
+  await page.locator('[data-workspace="tones"]').click();
+  await page.getByRole('button',{name:'Save to bank…'}).click();
+  await bank.getByLabel('New tone name').fill('Electric Piano soft');
+  await bank.getByRole('button',{name:'Create tone file'}).click();
+  await bank.getByText('Saved “Electric Piano soft” to disk.').waitFor();
+  await bank.getByRole('button',{name:'Close',exact:true}).click();
+  assert(await tones.getByRole('option',{name:'Electric Piano soft'}).count());
+  await banks.selectOption('internal');
+  const program=await page.evaluate(()=>audit.frame.programs[audit.frame.track]);
+  await page.getByRole('combobox',{name:'Tone program'}).selectOption(String(program));
+  await page.getByRole('button',{name:'Discard and load'}).click();
+  await page.waitForFunction(()=>!audit.frame.instrument.edited);
+  assert.equal(await page.evaluate(()=>audit.frame.instrument.programToken),playing);
+  await open();
   await page.evaluate(()=>{window.testBank='Second bank';});
-  await bank.getByRole('button',{name:'Choose bank folder…'}).click();
+  await bank.getByRole('button',{name:'Choose library folder…'}).click();
   await bank.getByText('Folder “Second bank” · 0 tones').waitFor();
   assert(await bank.getByRole('button',{name:'Load into Part A',exact:true}).isDisabled());
   await page.keyboard.press('Escape');
@@ -127,7 +188,7 @@ try{
   await startSynth(page);
   await page.evaluate(()=>audit.post({t:'enc',e:5,steps:1}));
   await page.waitForFunction(()=>audit.frame.track===1);
-  await open.click();
+  await open();
   assert(await bank.getByText('Folder access unavailable in this browser').isVisible());
   assert(await bank.getByRole('button',{name:'Create bank tone'}).isDisabled());
   await bank.locator('input[type=file]').setInputFiles({name:'portable.wstone',mimeType:'application/json',buffer:Buffer.from(files[0].text)});
@@ -139,5 +200,5 @@ try{
   await page.evaluate(()=>audit.post({t:'fm-set',scope:audit.frame.instrument.scope,field:4,value:32}));
   await page.getByText('Last file loaded · Baixo híbrido · Program',{exact:false}).waitFor();
   assert.deepEqual(errors,[]);
-  console.log('PASS: folder writes, FM round-trip, edit and held-note guards, shared effects, internal slots, downloaded file and mobile layout');
+  console.log('PASS: Bank and Tone selectors, remembered library after reload, read permission retry, subfolder writes, internal slot restore, FM round-trip, held notes and mobile layout');
 }finally{await browser.close();}

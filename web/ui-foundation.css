@@ -103,8 +103,8 @@
 
 /* The native select occupies the former tone-name line; stored names remain in its popup. */
 .ww-preset {min-width:0;flex-basis:165px;overflow:hidden;}
-.ww-tone-selector {font:600 16px var(--ww-font);color:var(--ww-text);background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:6px;max-width:100%;width:100%;height:24px;padding:0 5px;text-overflow:ellipsis;}
-.ww-tone-selector:hover,.ww-tone-selector:focus-visible {border-color:var(--ww-accent);outline:1px solid var(--ww-accent);}
+.ww-tone-selector,.ww-bank-select {font:600 16px var(--ww-font);color:var(--ww-text);background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:6px;max-width:100%;width:100%;height:24px;padding:0 5px;text-overflow:ellipsis;}
+.ww-tone-selector:hover,.ww-tone-selector:focus-visible,.ww-bank-select:focus-visible {border-color:var(--ww-accent);outline:1px solid var(--ww-accent);}
 .ww-preset small {overflow-wrap:anywhere;}
 .ww-tone-confirm {max-height:calc(100dvh - 32px);overflow:auto;}
 
@@ -429,8 +429,6 @@
 @media(max-width:760px){.ww-fm-panel {grid-template-columns:1fr;}.ww-fm-globals {grid-column:auto;}.ww-fm-fields {grid-template-columns:1fr 1fr;}}
 
 .ww-program-picker,.ww-program-actions,.ww-bank-heading,.ww-bank-location,.ww-bank-modes {display:flex;align-items:center;gap:8px;}
-.ww-program-picker .ww-tone-selector {flex:1;min-width:0;}
-.ww-program-picker button {white-space:nowrap;font-size:12px;min-height:30px;padding:4px 9px;}
 .ww-program-actions {font-size:13px;}
 .ww-tone-banks {max-width:540px;}
 .ww-bank-heading {justify-content:space-between;}
@@ -445,3 +443,17 @@
 .ww-tone-banks button:disabled {opacity:.5;cursor:default;}
 .ww-tone-banks [role="status"]:empty {display:none;}
 .ww-bank-modes button[aria-pressed="true"] {background:#123c40;border-color:var(--ww-accent);color:var(--ww-text);}
+.ww-program-picker>label,.ww-tone-field {display:grid;gap:3px;min-width:0;color:var(--ww-muted);font-size:11px;}
+.ww-program-picker>label {flex:2;}
+.ww-tone-field {flex:3;}
+.ww-program-picker select {width:100%;min-width:0;}
+.ww-preset {flex-basis:265px;}
+.ww-preset [role="status"]:empty {display:none;}
+@media(max-width:700px){.ww-topbar .ww-preset {flex-basis:100%;}}
+@media(min-width:701px){
+  .ww-program-picker>label,.ww-tone-field {grid-template-columns:auto minmax(0,1fr);align-items:center;}
+}
+@media(min-width:961px) and (max-width:1150px){
+  .ww-topbar {gap:6px;}
+  .ww-topbar .ww-preset {flex-basis:210px;}
+}

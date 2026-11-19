@@ -66,7 +66,7 @@ Integrado à `main`, **TONES** apresenta os 63 parâmetros ANALOG em sete seçõ
 
 Na versão com o módulo FM, abra **TONES → + Add FM** para acrescentar seis operadores a um programa. **Mix** controla os níveis de Analog e FM. [Guia do módulo e referências do FM-1](docs/fm-layer.md).
 
-Abra **Tone banks** ao lado do seletor de programas. Escolha a pasta do banco, busque um timbre e use **Load into Part A** (ou B, C, D) para tocá-lo. Para guardar o som que você editou como um novo arquivo `.wstone`, use **TONES → Save to bank…**. [Uso e armazenamento dos bancos locais](docs/studio-waves.md#bancos-locais-de-timbres)
+No cabeçalho, **Bank** escolhe o banco e **Tone** escolhe o timbre. **Internal** abre os 99 programas do instrumento. Use **Bank → Choose library folder…** uma vez para cadastrar a pasta que contém os bancos. Por exemplo, `Meus bancos/DX7/Electric Piano.wstone` aparece como **DX7 → Electric Piano** quando esse é o nome do timbre no arquivo. O Chrome guarda a referência da pasta. Para gravar um timbre novo no banco selecionado, use **TONES → Save to bank…**. [Uso e armazenamento dos bancos locais](docs/studio-waves.md#bancos-locais-de-timbres)
 
 ## Controle fino de knobs v1
 

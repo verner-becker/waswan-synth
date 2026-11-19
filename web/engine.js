@@ -127,8 +127,11 @@ export class Engine extends OriginalEngine {
     if(message.t==='program-select'){
       if(Number.isSafeInteger(message.request)&&message.request>0&&Number.isInteger(message.program)&&message.program>=1&&
          message.program<=this.ex.waswan_program_count()&&Number.isInteger(message.scope)&&message.scope>=0&&message.scope<=0xffffffff&&
-         Number.isInteger(message.token)&&message.token>=0&&message.token<=0xffffffff&&typeof message.discard==='boolean')
-        this.programSelection={request:message.request,applied:!!this.ex.waswan_program_select(message.program-1,message.scope,message.token,message.discard?1:0)};
+         Number.isInteger(message.token)&&message.token>=0&&message.token<=0xffffffff&&typeof message.discard==='boolean'){
+        // Mode 2 also restores the stored slot when a bank file occupies its live part.
+        const discard=message.discard?1+Number(message.reloadCurrent===true):0;
+        this.programSelection={request:message.request,applied:!!this.ex.waswan_program_select(message.program-1,message.scope,message.token,discard)};
+      }
       return;
     }
     if(message.t==='ui-control'){this.controlInput(message);return;}

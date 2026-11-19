@@ -19,10 +19,10 @@ export class ToneSelector {
   }
   choose(program) {
     const f=this.frame;if(!f?.instrument?.programAvailable)return;
-    const current=f.programs[f.track];this.node.value=String(current);
-    if(program===current||!this.library?.some(p=>p.number===program))return;
+    const current=f.programs[f.track];this.node.value=this.bankSource?'':String(current);
+    if((program===current&&!this.bankSource)||!this.library?.some(p=>p.number===program))return;
     this.failure=false;
-    const intent={program,scope:f.instrument.scope,token:f.instrument.programToken};
+    const intent={program,reloadCurrent:program===current,scope:f.instrument.scope,token:f.instrument.programToken};
     if(f.instrument.edited){
       this.intent=intent;const next=this.library.find(p=>p.number===program);
       this.question.textContent=`Part ${'ABCD'[f.track]} · Program ${current} (${f.instrument.name}) has unsaved edits. Loading Program ${program} (${next.name}) replaces them. Save the tone first if you want to keep them.`;
@@ -33,6 +33,7 @@ export class ToneSelector {
     this.pending=++this.request;this.send({t:'program-select',...intent,discard,request:this.pending});
   }
   update(frame,running,bankSource='') {
+    this.bankSource=bankSource;
     this.frame=frame;const f=frame.instrument,current=frame.programs[frame.track];
     if(frame.programLibrary){
       this.library=frame.programLibrary;this.currentKey=null;this.previousOption=null;this.node.replaceChildren();
@@ -46,7 +47,14 @@ export class ToneSelector {
       const item=this.library?.find(p=>p.number===current),option=this.node.options[current-1];
       if(item&&option){this.previousOption=option;this.previousLabel=`${current} · ${item.name}`;option.label=`${current} · ${liveName||item.name}`;}
     }
-    if(this.node.value!==String(current))this.node.value=String(current);this.node.disabled=!running||!f?.programAvailable||!this.library;
+    if(bankSource&&!this.node.options.namedItem('ww-choose-internal')){
+      const option=new Option('Choose internal tone…','');
+      option.id='ww-choose-internal';option.disabled=true;
+      this.node.add(option);
+    }else if(!bankSource)this.node.options.namedItem('ww-choose-internal')?.remove();
+    const selected=bankSource?'':String(current);
+    if(this.node.value!==selected)this.node.value=selected;
+    this.node.disabled=!running||!f?.programAvailable||!this.library;
     this.node.title=this.node.selectedOptions[0]?.label||'Tone program';
     if(this.pending&&frame.programSelection?.request===this.pending){this.failure=!frame.programSelection.applied;this.pending=null;}
     const detail=`${bankSource?bankSource+' · ':''}Program ${current}${f?.edited?' · Edited · save in TONES':''}${this.failure?' · Selection not applied; retry':''}`;

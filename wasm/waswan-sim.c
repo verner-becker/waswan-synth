@@ -457,7 +457,7 @@ EXPORT uint32_t waswan_program_select(uint32_t n, uint32_t scope, uint32_t token
     if (n >= NPROG || !waswan_program_available() || scope != waswan_ui_scope() || token != waswan_program_token()) return 0;
     if (host_edges || host_rel || host_rel_next || host_qw[0] != host_qr[0] || host_enc[ENC_ALGORITHM] || host_enc[ENC_PRESETS]) return 0;
     for (uint32_t q = mq_r; q != mq_w; q++) if ((mq[q % (sizeof mq / sizeof mq[0])][0] & 0xF0u) == 0xC0u) return 0;
-    if (n == ed_prog()) return 1;
+    if (n == ed_prog() && !(discard == 2 && ed_edited())) return 1;
     if (ed_edited() && !discard) return 0;
     trk_load(seq_trk, n);
     dirty_hdr = dirty_page = dirty_tags = dirty_steps = 1;
