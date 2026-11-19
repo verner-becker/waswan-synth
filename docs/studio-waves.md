@@ -136,3 +136,5 @@ O usuário aprovou usar pastas locais para bibliotecas de timbres e preservar o 
 Cada arquivo `.wstone` é JSON UTF-8 de até 4 KiB. O formato usa `format: "waswan-tone"`, `version: 1`, o nome exibido em `name` e o snapshot portátil em `patch`. Uma pasta pode ser publicada em Git com um arquivo por timbre. [Formato do snapshot](fm-layer.md#armazenamento)
 
 A validação em Chrome conferiu a gravação e a recarga de um timbre FM, a abertura de arquivo avulso, a troca de pasta, a preservação dos 99 slots e dos efeitos compartilhados e o bloqueio do carregamento durante uma nota ativa. O teste automatizado usou uma pasta de teste no OPFS para exercitar a leitura e a escrita. A confirmação manual do seletor nativo do sistema operacional fica pendente. Evidências em `.local/validation/tone-banks/`.
+
+O usuário confirmou que os bancos locais estavam funcionando e aprovou a integração do commit `01e0445` à `main` por fast-forward.
