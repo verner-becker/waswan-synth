@@ -36,7 +36,7 @@ Chrome 157.0.8103.78 headless local, AudioWorklet a 44,1 kHz, blocos de 128 fram
 | 128 | 0,45 ms | 0,51 ms | 0 | 0 |
 | 256 | 0,74 ms | 0,84 ms | 10 | 34 |
 
-Na primeira implementação, quatro osciladores a 256 vozes excederam o prazo em 422 blocos. A versão final seleciona uma rotina por forma antes de renderizar o bloco de OSC3/4. O DSP Monitor usa `Date.now` no worklet deste Chrome, com resolução nominal de 1 ms. As ultrapassagens medem duração do processamento e não contam falhas audíveis na saída física. O ensaio cobre um timbre e uma máquina. O aceite musical em controlador e saída físicos e a integração em `main` ficam pendentes.
+Na primeira implementação, quatro osciladores a 256 vozes excederam o prazo em 422 blocos. A versão final seleciona uma rotina por forma antes de renderizar o bloco de OSC3/4. O DSP Monitor usa `Date.now` no worklet deste Chrome, com resolução nominal de 1 ms. As ultrapassagens medem duração do processamento e não contam falhas audíveis na saída física. O ensaio cobre um timbre e uma máquina. O aceite musical em controlador e saída físicos está pendente. Em 19/11/2026, os quatro commits de desenvolvimento, de `b037806` a `0b35c9c`, foram integrados à `main` por fast-forward com aprovação do usuário.
 
 ## Apresentação de Oscillators
 
