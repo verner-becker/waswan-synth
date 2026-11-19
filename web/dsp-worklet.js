@@ -18,6 +18,11 @@ class MonitoredOberVave extends OberVave {
   const original=this.port.onmessage;
   this.port.onmessage=e=>{
    const m=e.data;
+   if(m.t==='tone-bank-read'||m.t==='tone-bank-load'){
+    const blocked=this.dawExport||(m.t==='tone-bank-load'&&(this.sequence?.active||this.daw?.active||this.dawLiveSession||this.dawPreview));
+    this.engine?.toneBank(m,blocked?'Stop active transports and DAW input before using this tone.':null);
+    return;
+   }
    if(typeof m.t==='string'&&m.t.startsWith('daw-')){
     try{
      if(typeof m.request!=='string'||!/^[\w-]{1,80}$/.test(m.request))throw Error('Invalid DAW request ID');

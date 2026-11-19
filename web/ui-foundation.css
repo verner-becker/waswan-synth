@@ -142,9 +142,9 @@
 .ww-editor-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;}
 .ww-editor-grid .ww-control {min-width:0;max-width:210px;width:100%;justify-self:center;}
 .ww-editor-choice {display:flex;flex-direction:column;gap:12px;padding:12px;min-width:0;}
-.ww-editor-choice select,.ww-editor-number,.ww-editor-save input {font:inherit;border:1px solid var(--ww-border);border-radius:6px;padding:8px;background:var(--ww-bg);color:var(--ww-text);max-width:100%;}
+.ww-editor-choice select,.ww-editor-number,.ww-editor-save input,.ww-tone-banks input {font:inherit;border:1px solid var(--ww-border);border-radius:6px;padding:8px;background:var(--ww-bg);color:var(--ww-text);max-width:100%;}
 .ww-editor-number {width:90px;text-align:center;}
-.ww-editor-save {max-height:calc(100dvh - 32px);overflow:auto;}
+.ww-editor-save,.ww-tone-banks {max-height:calc(100dvh - 32px);overflow:auto;overflow-wrap:anywhere;}
 .ww-editor-save input {width:100%;}
 .ww-editor-save select {max-width:100%;}
 .ww-editor-grid [hidden] {display:none!important;}

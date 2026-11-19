@@ -477,6 +477,22 @@ static uint32_t editor_idle(void) {
 EXPORT uint32_t waswan_editor_available(void) {
     return editor_idle() && obv_patch_engine(&live_p[seq_trk%NTRK])==OBV_ANALOG;
 }
+#ifdef WASWAN_DAW_RUNTIME
+EXPORT uint32_t waswan_tone_bank_load(uint32_t scope, uint32_t token, uint32_t discard) {
+    const uint32_t part=seq_trk%NTRK;
+    if(!editor_idle()||scope!=waswan_ui_scope()||token!=waswan_program_token()||
+       (ed_edited()&&!discard)||ctl_seq_run||daw_transport_guard||pb_busy()||
+       copy_to||pend_slot||manual_store_request||daw_slot_busy(part)||daw_live_count(part))return 0;
+    patch_t patch=daw_decoded(part);
+    if(!daw_patch_valid(&patch,part))return 0;
+    if(!part)fx_keep(&patch);
+    live_p[part]=patch;
+    trk_edited[part]=1;
+    smk_controls_epoch++;
+    dirty_hdr=dirty_page=dirty_tags=dirty_steps=1;
+    return 1;
+}
+#endif
 #ifdef WASWAN_OSC_BANK
 EXPORT uint32_t waswan_fm_edit(unsigned field,unsigned value,unsigned scope) {
     if(!waswan_editor_available() || scope!=waswan_ui_scope() || field>=FM_BYTES) return 0;

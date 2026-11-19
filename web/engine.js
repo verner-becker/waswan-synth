@@ -2,7 +2,7 @@
 import {Engine as OriginalEngine} from './engine-original.js';
 import {validateContext} from './studio-format.js';
 
-import {FM_BYTES,stageTone} from './fm-patch.js';
+import {FM_BYTES,stageTone,toneBytes} from './fm-patch.js';
 
 const setupActions={
   setting:['waswan_instrument_set',2], bank:['waswan_pad_bank',1], pattern:['waswan_pattern_action',3],
@@ -67,7 +67,27 @@ export class Engine extends OriginalEngine {
     value=Math.max(0,Math.min(max,current+m.steps*(m.behavior==='fine'?1:2)));
     x.waswan_ui_set(id,value,m.scope);
   }
+  toneBank(message,blocked) {
+    const x=this.ex,{request,scope,token}=message;
+    if(!Number.isSafeInteger(request)||request<1)return;
+    try{
+      if(blocked)throw Error(blocked);
+      if(!x.waswan_tone_bank_load)throw Error('Tone banks require the 256-voice simulator');
+      if(!x.waswan_program_available()||scope!==(x.waswan_ui_scope()>>>0)||token!==(x.waswan_program_token()>>>0))
+        throw Error('The selected part or tone changed. Try again.');
+      const part=x.sim_track();
+      if(message.t==='tone-bank-read')this.toneBankResult={request,patch:toneBytes(x,part)};
+      else{
+        stageTone(x,false,part,message.patch);
+        if(x.waswan_daw_staged_engine(part)<0)throw Error('This tone is invalid or unsupported');
+        if(!x.waswan_tone_bank_load(scope,token,message.discard===true?1:0))
+          throw Error('Stop playback and let the selected part fall silent before loading.');
+        this.toneBankResult={request,loaded:true};
+      }
+    }catch(error){this.toneBankResult={request,error:error.message};}
+  }
   input(message) {
+    if(message.t==='tone-bank-read'||message.t==='tone-bank-load'){this.toneBank(message);return;}
     if(message.t==='instrument-setup'){
       const spec=Object.hasOwn(setupActions,message.action)?setupActions[message.action]:null;
       const args=message.args;
@@ -138,6 +158,11 @@ export class Engine extends OriginalEngine {
   }
   frame() {
     const frame = super.frame(), x = this.ex;
+    frame.toneBanks=!!x.waswan_tone_bank_load;
+    if(this.toneBankResult){
+      frame.toneBankResult=this.toneBankResult;
+      this.toneBankResult=null;
+    }
     if(x.waswan_editor_meta){
       const string=ptr=>{const bytes=new Uint8Array(x.memory.buffer);let s='';for(let i=ptr;i<ptr+64&&bytes[i];i++)s+=String.fromCharCode(bytes[i]);return s;};
       if(!this.editorCatalog){

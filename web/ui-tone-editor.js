@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action,Panel,RotaryKnob} from './ui-primitives.js';
 import {FmEditor} from './ui-fm-editor.js';
+import {ToneBanks} from './ui-tone-banks.js';
 const GROUPS=[['Oscillators',[0,1,2,4,5,6,7,11,63,70,64,65,69,66,72,67,68,71,3,8,9,10]],['Filter',[12,13,14,15,16,17,18,19,51]],
   ['Envelopes',[20,21,22,23,24,25,26,27]],['Modulation',[28,29,30,31,32,33,34,35,36,37,46]],
   ['Voice',[38,39,40,41,42,43,44,45]],['Arpeggiator',[47,48,49,50]],['Shared effects',[52,53,54,55,56,57,58,59,60,61,62]]];
@@ -57,7 +58,8 @@ export class ToneEditor {
     this.fmSource=action('+ Add FM',()=>{if(!this.frame.fm)editFm(0,1);else this.selectSource('FM');});
     this.mixSource=action('Mix',()=>this.selectSource('Mix'));
     this.sources.append(this.analogSource,this.fmSource,this.mixSource);
-    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.sources,this.save,this.saveAs);this.node.append(bar);
+    this.banks=new ToneBanks(this.send);
+    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.sources,this.save,this.saveAs,this.banks.button);this.node.append(bar);
     this.status=el('p','ww-muted');this.status.setAttribute('role','status');this.node.append(this.status);
     this.unavailable=el('p','ww-muted');this.node.append(this.unavailable);
     this.nav=el('nav','ww-editor-tabs');this.nav.setAttribute('aria-label','Tone parameter groups');this.node.append(this.nav);
@@ -162,6 +164,7 @@ export class ToneEditor {
       this.storeReceipt?.hash===save.hash?(this.storeReceipt.ok?'Saved · instrument memory and browser storage updated.':'Instrument saved, but browser storage failed. Export the session in Settings to preserve it.'):'Instrument written · waiting for browser storage confirmation…';
   }
   update(f,running){
+    this.banks.update(f,running);
     this.frame=f;if(f.programLibrary)this.library=f.programLibrary;if(f.editorCatalog)this.build(f.editorCatalog);
     const analog=f.engines[f.track]===0,available=running&&!!f.editor?.available;
     this.heading.textContent=`Part ${'ABCD'[f.track]} · Program ${f.programs[f.track]} · ${f.instrument.name}${f.instrument.edited?' · Edited':''}`;
@@ -173,7 +176,7 @@ export class ToneEditor {
     this.analogSource.disabled=f.fm?.bytes[3]===0&&!available;
     this.fmSource.textContent=f.fm?'FM':'+ Add FM';this.fmSource.disabled=!available&&!f.fm;
     const scope=f.instrument.scope,added=!!f.fm&&!this.hadFm&&scope===this.sourceScope;
-    if(scope!==this.sourceScope||!f.fm||added)this.source=f.fm&&(added||f.fm.bytes[3]===0)?'FM':'Analog';
+    if(scope!==this.sourceScope||!f.fm||added||f.toneBankResult?.loaded)this.source=f.fm&&(added||f.fm.bytes[3]===0)?'FM':'Analog';
     this.hadFm=!!f.fm;this.sourceScope=scope;
     this.selectSource(this.source);
     this.fm.update(f.fm,available);

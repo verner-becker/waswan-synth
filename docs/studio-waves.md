@@ -126,3 +126,13 @@ O usuário autorizou um ciclo para quatro osciladores e formas adicionais, com p
 ## Módulo FM
 
 Em 19/11/2026 o usuário autorizou criar o módulo DX7-like por timbre e pediu pesquisa nos repositórios do FM-1. O commit `5709a3e`, desenvolvido na branch `feat/dx7-fm`, incorpora o DSP do sloopDX, integra a edição dos seis operadores e mistura FM e Analog dentro da mesma voz. O usuário aprovou a integração à `main` e a remoção da branch. O aceite musical com controlador e saída físicos segue pendente. [Uso, referências, testes e carga de áudio](fm-layer.md)
+
+## Bancos locais de timbres
+
+O usuário aprovou usar pastas locais para bibliotecas de timbres e preservar o armazenamento existente do Chrome. Em **TONES → Tone banks**, escolha a pasta do banco e use **Save current tone to folder** para criar um arquivo `.wstone`. Cada pasta é um banco. Para distribuir um banco, compartilhe a pasta ou compacte-a. Para usar um banco baixado, extraia-o e escolha a pasta que contém os timbres. **Open tone file…** abre um timbre avulso.
+
+**Load tone** aplica o snapshot à parte selecionada em RAM. Se houver edições nessa parte, a interface pede confirmação antes de substituí-las. O arquivo guarda o timbre e a extensão FM, quando presente. Os efeitos compartilhados, o mixer e o pattern pertencem à sessão. **Save** e **Save as…** continuam escrevendo nos slots internos. O Chrome solicita acesso à pasta e a aplicação pede permissão de escrita ao salvar. A pasta deve ser escolhida novamente ao recarregar a página.
+
+Cada arquivo `.wstone` é JSON UTF-8 de até 4 KiB. O formato usa `format: "waswan-tone"`, `version: 1`, o nome exibido em `name` e o snapshot portátil em `patch`. Uma pasta pode ser publicada em Git com um arquivo por timbre. [Formato do snapshot](fm-layer.md#armazenamento)
+
+A validação em Chrome conferiu a gravação e a recarga de um timbre FM, a abertura de arquivo avulso, a troca de pasta, a preservação dos 99 slots e dos efeitos compartilhados e o bloqueio do carregamento durante uma nota ativa. O teste automatizado usou uma pasta de teste no OPFS para exercitar a leitura e a escrita. A confirmação manual do seletor nativo do sistema operacional fica pendente. Evidências em `.local/validation/tone-banks/`.

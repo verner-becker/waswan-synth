@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
+import {startSynth} from './browser-foundation-controls.mjs';
+
+const evidence='.local/validation/tone-banks';
+fs.mkdirSync(evidence,{recursive:true});
+const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
+try{
+  const page=await browser.newPage({viewport:{width:1366,height:768}}),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.addInitScript(()=>{
+    window.audit={};
+    window.showDirectoryPicker=async()=>{
+      const root=await navigator.storage.getDirectory();
+      return root.getDirectoryHandle(window.testBank||'Test bank',{create:true});
+    };
+    const Worklet=window.AudioWorkletNode;
+    window.AudioWorkletNode=class extends Worklet{
+      constructor(...args){
+        super(...args);
+        audit.post=message=>this.port.postMessage(message);
+        this.port.addEventListener('message',({data})=>{if(data.t==='frame')audit.frame=data;});
+      }
+    };
+  });
+  await page.goto('http://localhost:8737/simulator/');
+  await startSynth(page);
+  await page.locator('[data-workspace="tones"]').click();
+  const original=await page.evaluate(()=>audit.frame.editor.targets);
+  await page.getByRole('button',{name:'+ Add FM',exact:true}).click();
+  const fm=page.locator('.ww-fm-panel');
+  await fm.getByLabel('FM level',{exact:true}).fill('82');
+  await fm.getByLabel('FM level',{exact:true}).press('Tab');
+  await page.waitForFunction(()=>audit.frame.fm?.bytes[4]===82);
+  const open=page.getByRole('button',{name:'Tone banks',exact:true});
+  await open.click();
+  const bank=page.getByRole('dialog',{name:'Tone banks'});
+  await bank.getByRole('button',{name:'Choose bank folder…'}).click();
+  await bank.getByText('Folder “Test bank” · 0 tones').waitFor();
+  await bank.getByLabel('Name for new file').fill('Baixo híbrido');
+  await bank.getByRole('button',{name:'Save current tone to folder'}).click();
+  await bank.getByText('Saved “Baixo híbrido” to disk.').waitFor();
+  await bank.getByRole('button',{name:'Close',exact:true}).click();
+  await fm.getByLabel('FM level',{exact:true}).fill('12');
+  await fm.getByLabel('FM level',{exact:true}).press('Tab');
+  await page.waitForFunction(()=>audit.frame.fm?.bytes[4]===12);
+  const chorus=await page.evaluate(()=>{
+    const value=(audit.frame.editor.values[52].value+5)%128;
+    audit.post({t:'editor-set',id:52,value,scope:audit.frame.instrument.scope});
+    return value;
+  });
+  await page.waitForFunction(value=>audit.frame.editor.values[52].value===value,chorus);
+  await open.click();
+  page.once('dialog',dialog=>dialog.dismiss());
+  await bank.getByRole('button',{name:'Load tone',exact:true}).click();
+  assert.equal(await page.evaluate(()=>audit.frame.fm.bytes[4]),12);
+  await page.evaluate(()=>audit.post({t:'midi',st:144,d1:60,d2:100}));
+  await page.waitForFunction(()=>audit.frame.polyphony.slots.some(voice=>voice.gate));
+  page.once('dialog',dialog=>dialog.accept());
+  await bank.getByRole('button',{name:'Load tone',exact:true}).click();
+  await bank.getByText('Stop playback and let the selected part fall silent before loading.').waitFor();
+  assert.equal(await page.evaluate(()=>audit.frame.fm.bytes[4]),12);
+  await page.evaluate(()=>audit.post({t:'midi',st:128,d1:60,d2:0}));
+  await page.waitForFunction(()=>audit.frame.polyphony.slots.every(voice=>!voice.active));
+  page.once('dialog',dialog=>dialog.accept());
+  await bank.getByRole('button',{name:'Load tone',exact:true}).click();
+  await bank.getByText('Loaded “Baixo híbrido” into Part A.').waitFor();
+  await page.waitForFunction(()=>audit.frame.fm?.bytes[4]===82);
+  assert.equal(await page.evaluate(()=>audit.frame.editor.values[52].value),chorus);
+  const files=await page.evaluate(async()=>{
+    const folder=await showDirectoryPicker();
+    const files=[];
+    for await(const handle of folder.values())files.push({name:handle.name,text:await(await handle.getFile()).text()});
+    const invalid=await folder.getFileHandle('invalid.wstone',{create:true});
+    const writer=await invalid.createWritable();
+    await writer.write('{}');
+    await writer.close();
+    return files;
+  });
+  assert.equal(files.length,1);
+  assert(files[0].name.endsWith('.wstone'));
+  const tone=JSON.parse(files[0].text);
+  assert.equal(tone.name,'Baixo híbrido');
+  assert.equal(tone.patch.length,169);
+  assert.deepEqual(await page.evaluate(()=>audit.frame.editor.targets),original);
+  await bank.getByRole('button',{name:'Refresh folder'}).click();
+  await bank.getByText('Skipped 1 unreadable or invalid tone file.').waitFor();
+  await bank.locator('input[type=file]').setInputFiles({name:'download.wstone',mimeType:'application/json',buffer:Buffer.from(files[0].text)});
+  await bank.getByText('Tone file opened. Choose Load tone to play it.').waitFor();
+  assert.equal(await bank.getByLabel('Bank tone').locator('option:checked').textContent(),'Baixo híbrido · opened file');
+  page.once('dialog',dialog=>dialog.accept());
+  await bank.getByRole('button',{name:'Load tone',exact:true}).click();
+  await bank.getByText('Loaded “Baixo híbrido” into Part A.').waitFor();
+  await page.setViewportSize({width:390,height:844});
+  assert(await bank.evaluate(node=>node.scrollWidth<=node.clientWidth+1));
+  await page.screenshot({path:evidence+'/mobile.png'});
+  await page.evaluate(()=>{window.testBank='Second bank';});
+  await bank.getByRole('button',{name:'Choose bank folder…'}).click();
+  await bank.getByText('Folder “Second bank” · 0 tones').waitFor();
+  assert(await bank.getByRole('button',{name:'Load tone',exact:true}).isDisabled());
+  assert.deepEqual(errors,[]);
+  console.log('PASS: folder writes, FM round-trip, edit and held-note guards, shared effects, internal slots, downloaded file and mobile layout');
+}finally{await browser.close();}

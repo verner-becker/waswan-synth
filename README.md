@@ -66,6 +66,8 @@ Integrado à `main`, **TONES** apresenta os 63 parâmetros ANALOG em sete seçõ
 
 Na versão com o módulo FM, abra **TONES → + Add FM** para acrescentar seis operadores a um programa. **Mix** controla os níveis de Analog e FM. [Guia do módulo e referências do FM-1](docs/fm-layer.md).
 
+Em **TONES → Tone banks**, escolha uma pasta para guardar ou abrir um banco de arquivos `.wstone`. Para abrir um banco baixado, extraia-o e selecione a pasta que contém os timbres. [Uso e armazenamento dos bancos locais](docs/studio-waves.md#bancos-locais-de-timbres)
+
 ## Controle fino de knobs v1
 
 O perfil MIDI, integrado à `main`, permite escolher **Normal / Fino** em cada mapeamento existente de K1–K4. Normal preserva os passos e a aceleração originais; Fino absoluto usa posição com captura suave; relativos finos alteram uma unidade interna por incremento lógico nos parâmetros diretos da tela. Presets e mapeamentos anteriores são preservados; o padrão continua Normal.
