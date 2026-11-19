@@ -17,6 +17,14 @@ try{
       return root.getDirectoryHandle(window.testBank||'Test bank',{create:true});
     };
     if(location.search.includes('file-only'))window.showDirectoryPicker=undefined;
+    const Audio=window.AudioContext;
+    window.AudioContext=class extends Audio{
+      createAnalyser(){
+        const analyser=super.createAnalyser();
+        audit.analyser??=analyser;
+        return analyser;
+      }
+    };
     const Worklet=window.AudioWorkletNode;
     window.AudioWorkletNode=class extends Worklet{
       constructor(...args){
@@ -146,6 +154,30 @@ try{
   await internal.selectOption(String(referenceSlot));
   if(await page.locator('.ww-tone-confirm').isVisible())await page.getByRole('button',{name:'Discard and load'}).click();
   await page.waitForFunction(slot=>audit.frame.programs[audit.frame.track]===slot,referenceSlot);
+  // Measure the post-master output and require a newly gated voice: an FX tail
+  // by itself must not pass as a playable key.
+  async function playNote(down,up){
+    await down();
+    try{
+      const peak=await page.waitForFunction(()=>{
+        if(!audit.frame.polyphony.slots.some(voice=>voice.gate))return false;
+        const samples=new Float32Array(audit.analyser.fftSize);
+        audit.analyser.getFloatTimeDomainData(samples);
+        const peak=Math.max(...samples.map(Math.abs));
+        return peak>.001&&peak;
+      },null,{timeout:4000});
+      return await peak.jsonValue();
+    }finally{
+      await up();
+      await page.waitForFunction(()=>audit.frame.polyphony.slots.every(voice=>!voice.active));
+    }
+  }
+  const playKey=()=>playNote(()=>page.keyboard.down('a'),()=>page.keyboard.up('a'));
+  const playMidi=()=>playNote(
+    ()=>page.evaluate(()=>audit.post({t:'midi',st:144,d1:60,d2:100})),
+    ()=>page.evaluate(()=>audit.post({t:'midi',st:128,d1:60,d2:0})));
+  await internal.focus();
+  const audioPeaks={internal:await playKey()};
   const playing=await page.evaluate(()=>audit.frame.instrument.programToken);
   await page.evaluate(()=>{
     const original=FileSystemHandle.prototype.requestPermission;
@@ -163,11 +195,18 @@ try{
   if(await page.evaluate(()=>audit.frame.instrument.edited))page.once('dialog',dialog=>dialog.accept());
   await tones.selectOption({label:'Electric Piano'});
   await page.getByText('Bank tone · Electric Piano · Program',{exact:false}).waitFor();
+  await tones.focus();
+  audioPeaks.folder=await playKey();
   await page.locator('.ww-topbar').scrollIntoViewIfNeeded();
   await page.screenshot({path:evidence+'/bank-tone-combos.png'});
   await page.locator('[data-workspace="tones"]').click();
   await page.getByRole('button',{name:'Save to bank…'}).click();
-  await bank.getByLabel('New tone name').fill('Electric Piano soft');
+  const newName=bank.getByLabel('New tone name');
+  await newName.fill('');
+  await newName.pressSequentially('sad');
+  assert.equal(await newName.inputValue(),'sad');
+  assert(await page.evaluate(()=>audit.frame.polyphony.slots.every(voice=>!voice.gate)));
+  await newName.fill('Electric Piano soft');
   await bank.getByRole('button',{name:'Create tone file'}).click();
   await bank.getByText('Saved “Electric Piano soft” to disk.').waitFor();
   await bank.getByRole('button',{name:'Close',exact:true}).click();
@@ -178,6 +217,17 @@ try{
   await page.getByRole('button',{name:'Discard and load'}).click();
   await page.waitForFunction(()=>!audit.frame.instrument.edited);
   assert.equal(await page.evaluate(()=>audit.frame.instrument.programToken),playing);
+  // Play immediately after confirming. The dialog returns focus to Tone.
+  assert(await internal.evaluate(node=>document.activeElement===node));
+  audioPeaks.restored=await playKey();
+  audioPeaks.midi=await playMidi();
+  await banks.focus();
+  audioPeaks.bankFocused=await playKey();
+  assert.equal(await banks.inputValue(),'internal');
+  assert.equal(await internal.inputValue(),String(program));
+  await internal.press('ArrowDown');
+  await page.waitForFunction(value=>audit.frame.programs[audit.frame.track]===value,program+1);
+  console.log('Post-master peaks',audioPeaks);
   await open();
   await page.evaluate(()=>{window.testBank='Second bank';});
   await bank.getByRole('button',{name:'Choose library folder…'}).click();

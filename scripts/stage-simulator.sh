@@ -61,6 +61,18 @@ s = s.replace("if(document.hidden)releaseAll()", "if(document.hidden)releaseBrow
 midi_focus_anchor = "isListening:()=>!document.hidden"
 assert s.count(midi_focus_anchor) == 1
 s = s.replace(midi_focus_anchor, "isListening:()=>audioOwner.owned")
+# Closed Bank/Tone selectors double as a performance surface. Native open
+# menus keep type-ahead; search, save names and other controls keep typing.
+typing_anchor = "const typing=e=>['INPUT','SELECT','TEXTAREA','BUTTON'].includes(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey;"
+assert s.count(typing_anchor) == 1
+s = s.replace(typing_anchor, """const supportsOpenSelect = CSS.supports('selector(select:open)');
+function typing(e){
+  if(e.ctrlKey||e.metaKey||e.altKey)return true;
+  if(e.target.matches?.('.ww-program-picker select')){
+    return supportsOpenSelect && e.target.matches(':open');
+  }
+  return ['INPUT','SELECT','TEXTAREA','BUTTON'].includes(e.target.tagName);
+}""")
 key_anchor = "if(typing(e)||e.repeat||!on)return;"
 assert s.count(key_anchor) == 1
 s = s.replace(key_anchor, "if(typing(e)||e.defaultPrevented||e.repeat||!on)return;const shell=document.querySelector('.ww-shell');if(shell?.dataset.activeWorkspace==='daw'&&!e.target.closest?.('.ww-dock'))return;")
