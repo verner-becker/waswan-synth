@@ -59,7 +59,12 @@ export class ToneEditor {
     this.mixSource=action('Mix',()=>this.selectSource('Mix'));
     this.sources.append(this.analogSource,this.fmSource,this.mixSource);
     this.banks=new ToneBanks(this.send);
-    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.sources,this.save,this.saveAs,this.banks.button);this.node.append(bar);
+    const programs=el('div','ww-program-actions');
+    programs.append(el('span','ww-muted','Program'),this.save,this.saveAs);
+    const create=action('Save to bank…',()=>this.banks.open('create'));
+    create.hidden=!globalThis.showDirectoryPicker;
+    create.setAttribute('aria-haspopup','dialog');
+    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.sources,programs,create);this.node.append(bar);
     this.status=el('p','ww-muted');this.status.setAttribute('role','status');this.node.append(this.status);
     this.unavailable=el('p','ww-muted');this.node.append(this.unavailable);
     this.nav=el('nav','ww-editor-tabs');this.nav.setAttribute('aria-label','Tone parameter groups');this.node.append(this.nav);
@@ -167,7 +172,7 @@ export class ToneEditor {
     this.banks.update(f,running);
     this.frame=f;if(f.programLibrary)this.library=f.programLibrary;if(f.editorCatalog)this.build(f.editorCatalog);
     const analog=f.engines[f.track]===0,available=running&&!!f.editor?.available;
-    this.heading.textContent=`Part ${'ABCD'[f.track]} · Program ${f.programs[f.track]} · ${f.instrument.name}${f.instrument.edited?' · Edited':''}`;
+    this.heading.textContent=`Part ${'ABCD'[f.track]} · Program ${f.programs[f.track]} · ${this.banks.sourceLabel(f)||f.instrument.name}${f.instrument.edited?' · Edited':''}`;
     this.save.disabled=this.saveAs.disabled=!available;
     this.unavailable.textContent=!analog?'DRUM-X uses different parameter meanings. Edit this engine in Instrument setup.':!running?'Start audio to edit.':!available?'Editor temporarily unavailable during an instrument dialog, save or context change.':'';
     this.sources.hidden=!analog||f.fm===undefined;

@@ -7,7 +7,7 @@ export class ToneSelector {
     this.send=send;this.request=0;this.failure=false;
     this.node=el('select','ww-tone-selector');this.node.setAttribute('aria-label','Tone program');
     this.node.add(new Option('Instrument not started',''));this.node.disabled=true;
-    this.detail=el('small','ww-muted','Original sound engine · 256-voice pool');this.detail.id='ww-tone-detail';this.node.setAttribute('aria-describedby',this.detail.id);
+    this.detail=el('small','ww-muted','Original sound engine · 256-voice pool');this.detail.id='ww-tone-detail';this.detail.setAttribute('aria-live','polite');this.node.setAttribute('aria-describedby',this.detail.id);
     this.dialog=el('dialog','ww-map-dialog ww-tone-confirm');this.dialog.setAttribute('aria-labelledby','ww-tone-confirm-title');
     const title=el('h2','','Discard unsaved tone edits?');title.id='ww-tone-confirm-title';this.question=el('p');
     const cancel=action('Cancel',()=>{this.intent=null;this.dialog.close();});cancel.autofocus=true;
@@ -32,22 +32,24 @@ export class ToneSelector {
   commit(intent,discard) {
     this.pending=++this.request;this.send({t:'program-select',...intent,discard,request:this.pending});
   }
-  update(frame,running) {
+  update(frame,running,bankSource='') {
     this.frame=frame;const f=frame.instrument,current=frame.programs[frame.track];
     if(frame.programLibrary){
       this.library=frame.programLibrary;this.currentKey=null;this.previousOption=null;this.node.replaceChildren();
       for(const p of this.library)this.node.add(new Option(`${p.number} · ${p.name}`,String(p.number)));
     }
     // Restore the previous stored label, then display the current live name, including edits.
-    const key=`${current}:${f?.name}`;
+    const liveName=bankSource?'':f?.name;
+    const key=`${current}:${liveName}`;
     if(this.currentKey!==key){
       this.currentKey=key;if(this.previousOption)this.previousOption.label=this.previousLabel;
       const item=this.library?.find(p=>p.number===current),option=this.node.options[current-1];
-      if(item&&option){this.previousOption=option;this.previousLabel=`${current} · ${item.name}`;option.label=`${current} · ${f?.name||item.name}`;}
+      if(item&&option){this.previousOption=option;this.previousLabel=`${current} · ${item.name}`;option.label=`${current} · ${liveName||item.name}`;}
     }
     if(this.node.value!==String(current))this.node.value=String(current);this.node.disabled=!running||!f?.programAvailable||!this.library;
-    this.node.title=`Program ${current} · ${f?.name??''}`;
+    this.node.title=this.node.selectedOptions[0]?.label||'Tone program';
     if(this.pending&&frame.programSelection?.request===this.pending){this.failure=!frame.programSelection.applied;this.pending=null;}
-    this.detail.textContent=`Program ${current}${f?.edited?' · Edited · save in TONES':''}${this.failure?' · Selection not applied; retry':''}`;
+    const detail=`${bankSource?bankSource+' · ':''}Program ${current}${f?.edited?' · Edited · save in TONES':''}${this.failure?' · Selection not applied; retry':''}`;
+    if(this.detail.textContent!==detail)this.detail.textContent=detail;
   }
 }

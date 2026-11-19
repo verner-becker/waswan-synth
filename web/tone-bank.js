@@ -22,10 +22,12 @@ export async function readToneFolder(directory){
   let skipped=0;
   for await(const handle of directory.values()){
     if(handle.kind!=='file'||!handle.name.toLowerCase().endsWith(TONE_FILE_EXTENSION))continue;
-    try{tones.push({fileName:handle.name,...await readToneFile(await handle.getFile())});}
-    catch{skipped++;}
+    try{
+      const file=await handle.getFile();
+      tones.push({fileName:handle.name,modified:file.lastModified,...await readToneFile(file)});
+    }catch{skipped++;}
   }
-  tones.sort((a,b)=>a.name.localeCompare(b.name)||a.fileName.localeCompare(b.fileName));
+  tones.sort((a,b)=>a.name.localeCompare(b.name)||a.modified-b.modified||a.fileName.localeCompare(b.fileName));
   return {tones,skipped};
 }
 

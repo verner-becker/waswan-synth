@@ -82,7 +82,7 @@ export class Engine extends OriginalEngine {
         if(x.waswan_daw_staged_engine(part)<0)throw Error('This tone is invalid or unsupported');
         if(!x.waswan_tone_bank_load(scope,token,message.discard===true?1:0))
           throw Error('Stop playback and let the selected part fall silent before loading.');
-        this.toneBankResult={request,loaded:true};
+        this.toneBankResult={request,loaded:true,token:x.waswan_program_token()>>>0};
       }
     }catch(error){this.toneBankResult={request,error:error.message};}
   }

@@ -93,10 +93,15 @@ class Foundation {
   }
   buildHeader() {
     const top=TopBar(),brand=el('div','ww-brand');brand.append(el('strong','','WASWAN'),el('span','','SYNTH'));
-    const preset=el('div','ww-preset');this.toneSelector=new ToneSelector(m=>this.bridge.send(m));preset.append(this.toneSelector.node,this.toneSelector.detail);
+    const preset=el('div','ww-preset');this.toneSelector=new ToneSelector(m=>this.bridge.send(m));
     this.part=el('span','ww-part','Part —');this.midiStatus=StatusIndicator('MIDI · Not connected');this.mode=el('span','ww-chip','Mode —');this.voices=el('span','ww-chip','Voices — / —');this.bpm=el('span','ww-chip','— BPM');
     this.start=action('Start audio',()=>this.startAudio(),'ww-primary');this.settings=action('Settings',()=>this.showSettings(this.settingsPanel.hidden));
     this.settings.setAttribute('aria-controls','ww-settings');this.settings.setAttribute('aria-expanded','false');
+    const banks=action('Tone banks',()=>this.toneEditor.banks.open('browse'));
+    banks.setAttribute('aria-haspopup','dialog');
+    const picker=el('div','ww-program-picker');
+    picker.append(this.toneSelector.node,banks);
+    preset.append(picker,this.toneSelector.detail);
     top.append(brand,preset,this.part,this.midiStatus,this.mode,this.voices,this.bpm,this.start,this.settings);this.shell.append(top);
     this.notice=el('p','ww-notice','Start audio, then connect your MIDI controller in Settings.');this.notice.setAttribute('role','status');this.shell.append(this.notice);
   }
@@ -320,7 +325,7 @@ class Foundation {
     const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
     this.instrumentSetup.update(m,this.running);
-    this.toneSelector.update(m,this.running);this.toneEditor.update(m,this.running);
+    this.toneEditor.update(m,this.running);this.toneSelector.update(m,this.running,this.toneEditor.banks.sourceLabel(m));
     this.part.textContent=`Part ${'ABCD'[part]}`;const connected=!!this.bridge.midi.input;
     this.midiStatus.textContent=connected?'MIDI · Connected':'MIDI · Not connected';this.midiStatus.dataset.state=connected?'on':'off';
     this.mode.textContent=m.engines[part]===2?'DRUM-X':['POLY','DUAL','UNISON','MONO'][poly.parts[part].mode];

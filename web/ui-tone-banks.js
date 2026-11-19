@@ -7,18 +7,28 @@ export class ToneBanks {
     this.send=send;
     this.request=0;
     this.tones=[];
-    this.button=action('Tone banks',()=>{
-      this.name.value='';
-      this.dialog.showModal();
-    });
+    this.loaded=new Map();
+    this.fileDate=new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'});
     this.dialog=el('dialog','ww-map-dialog ww-tone-banks');
     const title=el('h2','','Tone banks');
     title.id='ww-tone-banks-title';
     this.dialog.setAttribute('aria-labelledby',title.id);
-    this.folder=el('p','',globalThis.showDirectoryPicker?
-      'Choose a folder containing WASWAN tone files.':'Folder access is unavailable in this browser. You can still open individual WASWAN tone files.');
+    const head=el('div','ww-bank-heading');
+    head.append(title,action('Close',()=>this.dialog.close()));
+    this.context=el('p','ww-bank-context');
+    this.folder=el('strong','',globalThis.showDirectoryPicker?'No bank folder open':'Folder access unavailable in this browser');
     this.choose=action('Choose bank folder…',()=>this.run(()=>this.chooseFolder()));
     this.refresh=action('Refresh folder',()=>this.run(()=>this.scan()));
+    const location=el('div','ww-bank-location');
+    location.append(this.folder,this.choose,this.refresh);
+    this.browseButton=action('Browse tones',()=>this.setMode('browse'));
+    this.createButton=action('Create bank tone',()=>this.setMode('create'));
+    const modes=el('div','ww-bank-modes');
+    modes.setAttribute('role','group');
+    modes.setAttribute('aria-label','Bank action');
+    modes.append(this.browseButton,this.createButton);
+    this.browse=el('section');
+    this.create=el('section');
     this.openFile=action('Open tone file…',()=>this.file.click());
     this.file=el('input');
     this.file.type='file';
@@ -30,83 +40,150 @@ export class ToneBanks {
       if(file)this.run(async()=>{
         const tone=await readToneFile(file);
         this.openedTone={fileName:file.name,...tone};
+        this.search.value='';
         this.renderTones(this.openedTone);
-        this.status.textContent='Tone file opened. Choose Load tone to play it.';
+        this.status.textContent='Tone file opened. Load it into the selected part to play it.';
       });
     };
+    const searchLabel=el('label','','Find a tone');
+    this.search=el('input');
+    this.search.type='search';
+    this.search.oninput=()=>{this.renderTones();this.updateButtons();};
+    searchLabel.append(this.search);
     this.select=el('select');
+    this.select.size=5;
     const toneLabel=el('label','','Bank tone');
     toneLabel.append(this.select);
-    this.load=action('Load tone',()=>this.run(()=>this.loadTone()));
-    const nameLabel=el('label','','Name for new file');
+    this.load=action('Load into part',()=>this.run(()=>this.loadTone()),'ww-primary');
+    this.browse.append(searchLabel,toneLabel,this.load,this.openFile,this.file);
+    const nameLabel=el('label','','New tone name');
     this.name=el('input');
     this.name.maxLength=80;
+    this.name.required=true;
+    this.name.oninput=()=>this.updateButtons();
     nameLabel.append(this.name);
-    this.save=action('Save current tone to folder',()=>this.run(()=>this.saveTone()));
+    this.save=action('Create tone file',()=>this.run(()=>this.saveTone()),'ww-primary');
+    this.create.append(nameLabel,el('p','ww-muted','Capture the current sound as a new .wstone file in this folder. Existing files and instrument programs are preserved.'),this.save);
     this.status=el('p','ww-muted');
     this.status.setAttribute('role','status');
-    const close=action('Close',()=>this.dialog.close());
-    close.autofocus=true;
-    this.dialog.append(title,this.folder,this.choose,this.refresh,this.openFile,this.file,toneLabel,this.load,
-      nameLabel,this.save,this.status,close);
+    this.dialog.append(head,this.context,location,modes,this.browse,this.create,this.status);
     document.body.append(this.dialog);
     this.renderTones();
+    this.setMode('browse');
+  }
+  open(mode){
+    this.setMode(mode);
+    this.dialog.showModal();
+    if(!this.directory){
+      (globalThis.showDirectoryPicker?this.choose:this.openFile).focus();
+    }else if(mode==='create')this.name.focus();
+    else (this.search.disabled?this.createButton:this.search).focus();
+  }
+  setMode(mode){
+    this.status.textContent='';
+    const create=mode==='create';
+    if(create&&!this.name.value)this.name.value=this.name.placeholder;
+    this.browse.hidden=create;
+    this.create.hidden=!create;
+    this.browseButton.setAttribute('aria-pressed',String(!create));
+    this.createButton.setAttribute('aria-pressed',String(create));
     this.updateButtons();
+  }
+  sourceLabel(frame){
+    const loaded=this.loaded.get(frame.track);
+    if(!loaded)return '';
+    return (loaded.token===frame.instrument.programToken?'Bank tone · ':'Last file loaded · ')+loaded.name;
   }
   async run(task){
     if(this.busy)return;
     this.busy=true;
     this.updateButtons();
     this.status.textContent='';
-    try{await task();}
+    let focusTarget;
+    try{focusTarget=await task();}
     catch(error){if(error.name!=='AbortError')this.status.textContent=error.message;}
     finally{this.busy=false;this.updateButtons();}
+    if(this.dialog.open)focusTarget?.focus();
   }
   updateButtons(){
     const ready=this.running&&this.frame?.toneBanks&&this.frame?.instrument.programAvailable;
     this.choose.disabled=this.busy||!globalThis.showDirectoryPicker;
     this.openFile.disabled=!!this.busy;
     this.refresh.disabled=this.busy||!this.directory;
+    this.search.disabled=this.busy||(!this.tones.length&&!this.openedTone);
     this.select.disabled=this.busy||!this.select.value;
     this.load.disabled=this.busy||!ready||!this.select.value;
-    this.save.disabled=this.busy||!ready||!this.directory;
+    this.createButton.disabled=this.busy||!globalThis.showDirectoryPicker;
+    this.browseButton.disabled=this.name.disabled=!!this.busy;
+    this.save.disabled=this.busy||!ready||!this.directory||!this.name.value.trim();
+    this.refresh.hidden=!this.directory;
+    this.choose.hidden=!globalThis.showDirectoryPicker;
+    const part=this.frame?'Part '+'ABCD'[this.frame.track]:'part';
+    const label='Load into '+part;
+    if(this.load.textContent!==label)this.load.textContent=label;
+    const context=!this.running?'Start audio to load or capture a tone.':
+      part+' · Program '+this.frame.programs[this.frame.track]+' · '+(this.sourceLabel(this.frame)||this.frame.instrument.name)+
+      (this.frame.instrument.edited?' · Edited':'')+(ready?'':' · Instrument unavailable');
+    if(this.context.textContent!==context)this.context.textContent=context;
   }
-  renderTones(preferred){
-    this.items=this.openedTone?[this.openedTone,...this.tones]:this.tones;
+  renderTones(preferred=this.items?.[Number(this.select.value)]){
+    const all=this.openedTone?[this.openedTone,...this.tones]:this.tones;
+    const query=this.search.value.trim().toLocaleLowerCase();
+    const counts=new Map(),positions=new Map();
+    for(const tone of this.tones){
+      const position=(counts.get(tone.name)||0)+1;
+      counts.set(tone.name,position);
+      positions.set(tone,position);
+    }
+    this.items=all.filter(tone=>tone.name.toLocaleLowerCase().includes(query)||tone.fileName.toLocaleLowerCase().includes(query));
     this.select.replaceChildren();
     this.items.forEach((tone,index)=>{
       const option=new Option(tone===this.openedTone?`${tone.name} · opened file`:tone.name,String(index));
       option.title=tone.fileName;
+      if(tone!==this.openedTone&&counts.get(tone.name)>1)
+        option.textContent=`${tone.name} · #${positions.get(tone)} · ${this.fileDate.format(tone.modified)}`;
       this.select.add(option);
     });
-    if(!this.items.length)this.select.add(new Option('No tones available',''));
-    else if(preferred)this.select.value=String(this.items.indexOf(preferred));
+    if(!this.items.length)this.select.add(new Option(query?'No matching tones':this.directory?'This bank is empty':'Choose a folder or open a tone file',''));
+    this.select.selectedIndex=Math.max(0,this.items.indexOf(preferred));
   }
   async chooseFolder(){
     const directory=await globalThis.showDirectoryPicker({id:'waswan-tone-banks',mode:'read'});
     await this.scan(directory);
+    if(!this.create.hidden)return this.name;
+    return this.items.length?this.select:this.createButton;
   }
   async scan(directory=this.directory,selectedFile){
+    const previous=this.items[Number(this.select.value)];
+    const keep=directory===this.directory;
+    const keepOpened=!selectedFile&&keep&&previous===this.openedTone;
+    if(!selectedFile&&keep&&!keepOpened)selectedFile=previous?.fileName;
     const {tones,skipped}=await readToneFolder(directory);
     this.directory=directory;
     this.tones=tones;
-    this.openedTone=null;
-    this.renderTones(tones.find(tone=>tone.fileName===selectedFile));
+    if(!keep){
+      this.openedTone=null;
+      this.search.value='';
+    }
+    this.renderTones(keepOpened?this.openedTone:tones.find(tone=>tone.fileName===selectedFile));
     this.folder.textContent=`Folder “${directory.name}” · ${tones.length} ${tones.length===1?'tone':'tones'}`;
     this.status.textContent=skipped?`Skipped ${skipped} unreadable or invalid tone ${skipped===1?'file':'files'}.`:'';
   }
   async saveTone(){
     const {instrument}=this.frame;
-    const name=this.name.value.trim()||instrument.name||'Untitled tone';
+    const name=this.name.value.trim();
     const directory=this.directory;
     if(directory.requestPermission&&await directory.requestPermission({mode:'readwrite'})!=='granted')
       throw Error('Write access to the bank folder was denied.');
     const {patch}=await this.command('tone-bank-read',instrument);
     const fileName=await saveToneFile(directory,name,patch);
     this.name.value='';
+    this.search.value='';
+    this.setMode('browse');
     try{
       await this.scan(directory,fileName);
       this.status.textContent=`Saved “${name}” to disk. ${this.status.textContent}`.trim();
+      return this.select;
     }catch(error){
       this.status.textContent=`Saved “${name}” to disk. Refresh failed: ${error.message}`;
     }
@@ -116,8 +193,9 @@ export class ToneBanks {
     const {instrument,track}=this.frame;
     const part='ABCD'[track];
     if(instrument.edited&&!globalThis.confirm(`Discard the current edits in Part ${part} and load “${tone.name}”?`))return;
-    await this.command('tone-bank-load',instrument,{patch:tone.patch,discard:instrument.edited});
-    this.status.textContent=`Loaded “${tone.name}” into Part ${part}.`;
+    const {token}=await this.command('tone-bank-load',instrument,{patch:tone.patch,discard:instrument.edited});
+    this.loaded.set(track,{name:tone.name,scope:instrument.scope,token});
+    this.dialog.close();
   }
   command(t,{scope,programToken:token},fields={}){
     return new Promise((resolve,reject)=>{
@@ -135,10 +213,15 @@ export class ToneBanks {
     });
   }
   update(frame,running){
+    const scopeChanged=this.frame?.instrument.scope!==frame.instrument.scope;
     this.frame=frame;
     this.running=running;
     if(this.pending&&frame.toneBankResult?.request===this.request)this.pending(frame.toneBankResult);
-    this.name.placeholder=frame.instrument?.name||'Current tone name';
+    const loaded=this.loaded.get(frame.track);
+    if(loaded&&(!frame.instrument.edited||loaded.scope!==frame.instrument.scope))this.loaded.delete(frame.track);
+    const suggestion=this.loaded.get(frame.track)?.name||frame.instrument.name;
+    if(scopeChanged)this.name.value=this.create.hidden?'':suggestion;
+    if(this.name.placeholder!==suggestion)this.name.placeholder=suggestion;
     this.updateButtons();
   }
 }

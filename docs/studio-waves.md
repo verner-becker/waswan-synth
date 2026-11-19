@@ -129,12 +129,21 @@ Em 19/11/2026 o usuário autorizou criar o módulo DX7-like por timbre e pediu p
 
 ## Bancos locais de timbres
 
-O usuário aprovou usar pastas locais para bibliotecas de timbres e preservar o armazenamento existente do Chrome. Em **TONES → Tone banks**, escolha a pasta do banco e use **Save current tone to folder** para criar um arquivo `.wstone`. Cada pasta é um banco. Para distribuir um banco, compartilhe a pasta ou compacte-a. Para usar um banco baixado, extraia-o e escolha a pasta que contém os timbres. **Open tone file…** abre um timbre avulso.
+Cada pasta local é um banco. Para distribuir um banco, compartilhe a pasta ou compacte-a. Para abrir um banco baixado, extraia a pasta que contém os timbres.
 
-**Load tone** aplica o snapshot à parte selecionada em RAM. Se houver edições nessa parte, a interface pede confirmação antes de substituí-las. O arquivo guarda o timbre e a extensão FM, quando presente. Os efeitos compartilhados, o mixer e o pattern pertencem à sessão. **Save** e **Save as…** continuam escrevendo nos slots internos. O Chrome solicita acesso à pasta e a aplicação pede permissão de escrita ao salvar. A pasta deve ser escolhida novamente ao recarregar a página.
+1. Abra **Tone banks** ao lado do seletor de programas e use **Choose bank folder…**. A pasta permanece disponível enquanto a página estiver aberta. **Refresh folder** relê arquivos modificados fora do synth. **Open tone file…** permite abrir um arquivo avulso, inclusive em navegadores sem acesso a pastas.
+2. Em **Browse tones**, filtre por nome do timbre ou do arquivo. A seleção na lista permite explorar o banco enquanto a parte continua tocando o som atual. **Load into Part A** (B, C ou D) aplica o timbre à parte indicada em RAM e fecha a janela para tocar. Edições pendentes exigem confirmação. A carga precisa de transporte parado e parte silenciosa.
+3. Edite o som em **TONES** e abra **Save to bank…**, ou escolha **Create bank tone** na janela do banco. Confira a pasta, a parte e o nome e use **Create tone file**. Na primeira gravação, o navegador pode solicitar acesso de escrita. Cada criação gera um arquivo independente, mesmo com nome repetido. Para distinguir arquivos homônimos, a lista mostra a ordem e a data de modificação. A lista passa a selecionar o novo arquivo.
+4. Para gravar em um dos 99 programas do instrumento, use **Program → Save** ou **Save as…** em TONES. Um arquivo de banco guarda o timbre e a extensão FM quando presente. Os efeitos compartilhados, o mixer e o pattern pertencem à sessão.
 
 Cada arquivo `.wstone` é JSON UTF-8 de até 4 KiB. O formato usa `format: "waswan-tone"`, `version: 1`, o nome exibido em `name` e o snapshot portátil em `patch`. Uma pasta pode ser publicada em Git com um arquivo por timbre. [Formato do snapshot](fm-layer.md#armazenamento)
 
 A validação em Chrome conferiu a gravação e a recarga de um timbre FM, a abertura de arquivo avulso, a troca de pasta, a preservação dos 99 slots e dos efeitos compartilhados e o bloqueio do carregamento durante uma nota ativa. O teste automatizado usou uma pasta de teste no OPFS para exercitar a leitura e a escrita. A confirmação manual do seletor nativo do sistema operacional fica pendente. Evidências em `.local/validation/tone-banks/`.
 
 O usuário confirmou que os bancos locais estavam funcionando e aprovou a integração do commit `01e0445` à `main` por fast-forward.
+
+### Seleção e criação na interface
+
+A captura do fluxo anterior mostrou o nome do arquivo apenas na janela do banco. Depois de carregar um timbre, o cabeçalho ainda apresentava o nome do programa. A branch `feat/tone-bank-workflow` aproxima o banco do seletor global, identifica o arquivo carregado na parte e mantém o programa interno visível. Ao editar o som, o cabeçalho passa a identificar o último arquivo carregado. O editor agrupa as ações do programa e oferece acesso direto à criação em disco.
+
+O Chrome exercitou busca, arquivos homônimos, atualização da lista, confirmação de descarte, nota sustentada, carga nas partes A e B e arquivo avulso com o seletor de pastas desabilitado. As regressões cobriram FM, programas internos, persistência, áudio, MIDI e navegação. Capturas de antes e depois em `.local/validation/tone-bank-workflow/`. Próximo passo para aceite de uso é escolher uma pasta física, editar um timbre com o controlador e criar uma variante nessa pasta.

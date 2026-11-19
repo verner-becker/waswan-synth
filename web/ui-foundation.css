@@ -427,3 +427,21 @@
 .ww-fm-sources[hidden],.ww-fm-panel[hidden],.ww-fm-mix[hidden] {display:none;}
 @media(max-width:1050px){.ww-fm-fields {grid-template-columns:1fr;}}
 @media(max-width:760px){.ww-fm-panel {grid-template-columns:1fr;}.ww-fm-globals {grid-column:auto;}.ww-fm-fields {grid-template-columns:1fr 1fr;}}
+
+.ww-program-picker,.ww-program-actions,.ww-bank-heading,.ww-bank-location,.ww-bank-modes {display:flex;align-items:center;gap:8px;}
+.ww-program-picker .ww-tone-selector {flex:1;min-width:0;}
+.ww-program-picker button {white-space:nowrap;font-size:12px;min-height:30px;padding:4px 9px;}
+.ww-program-actions {font-size:13px;}
+.ww-tone-banks {max-width:540px;}
+.ww-bank-heading {justify-content:space-between;}
+.ww-bank-heading h2,.ww-tone-banks button {margin:0;}
+.ww-tone-banks .ww-bank-context {color:var(--ww-accent);margin:8px 0 16px;}
+.ww-bank-location {flex-wrap:wrap;background:var(--ww-bg);border:1px solid var(--ww-border);border-radius:8px;padding:12px;}
+.ww-bank-location strong {flex:1 0 100%;font-size:14px;}
+.ww-bank-modes {margin:16px 0;}
+.ww-tone-banks section>button {margin-right:8px;margin-bottom:4px;}
+.ww-tone-banks select {width:100%;min-width:0;}
+.ww-tone-banks option {padding:4px;}
+.ww-tone-banks button:disabled {opacity:.5;cursor:default;}
+.ww-tone-banks [role="status"]:empty {display:none;}
+.ww-bank-modes button[aria-pressed="true"] {background:#123c40;border-color:var(--ww-accent);color:var(--ww-text);}
