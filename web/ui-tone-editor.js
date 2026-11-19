@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action,Panel,RotaryKnob} from './ui-primitives.js';
-const GROUPS=[['Oscillators',[0,1,2,4,5,6,7,11,63,64,65,66,67,68,3,8,9,10]],['Filter',[12,13,14,15,16,17,18,19,51]],
+const GROUPS=[['Oscillators',[0,1,2,4,5,6,7,11,63,70,64,65,69,66,72,67,68,71,3,8,9,10]],['Filter',[12,13,14,15,16,17,18,19,51]],
   ['Envelopes',[20,21,22,23,24,25,26,27]],['Modulation',[28,29,30,31,32,33,34,35,36,37,46]],
   ['Voice',[38,39,40,41,42,43,44,45]],['Arpeggiator',[47,48,49,50]],['Shared effects',[52,53,54,55,56,57,58,59,60,61,62]]];
 const OSC_SECTIONS = new Map([[0,'Oscillator 1'],[4,'Oscillator 2'],[63,'Oscillator 3'],[66,'Oscillator 4'],[3,'Noise & modulation']]);
@@ -8,10 +8,10 @@ const LABELS={0:'OSC1 wave',1:'OSC1 pulse width / detune',2:'OSC1 level',3:'Nois
   20:'Filter attack',21:'Filter decay',22:'Filter sustain',23:'Filter release',24:'Amp attack',25:'Amp decay',26:'Amp sustain',27:'Amp release',
   32:'LFO → pitch',33:'LFO → PWM',34:'LFO → filter',35:'LFO → amp',36:'LFO pitch destination',37:'LFO PWM destination',39:'Unison voices',40:'Unison / dual detune',44:'Bend range',46:'Mod depth (legacy)',
   52:'Chorus rate',53:'Chorus depth',54:'Chorus return',55:'Delay time',56:'Delay feedback',57:'Delay tone',58:'Delay return',59:'Reverb size',60:'Reverb damping',61:'Reverb pre-delay',62:'Reverb return'};
-const OSC_LABELS = {0:'Wave',1:'PW / detune',2:'Level',3:'Noise',4:'Wave',5:'Pulse width',6:'Level',7:'Semitones',8:'Sync 1 → 2',9:'FM 2 → 1',10:'Env → pitch 2',11:'Fine',63:'Wave',64:'Level',65:'Semitones',66:'Wave',67:'Level',68:'Semitones'};
+const OSC_LABELS = {0:'Wave',1:'PW / detune',2:'Level',3:'Noise',4:'Wave',5:'Pulse width',6:'Level',7:'Semitones',8:'Sync 1 → 2',9:'FM 2 → 1',10:'Env → pitch 2',11:'Fine',63:'Wave',64:'Level',65:'Semitones',66:'Wave',67:'Level',68:'Semitones',69:'Fine',70:'Pulse width',71:'Fine',72:'Pulse width'};
 
 function oscillatorSlider(p,label,onInput){
-  const center=({7:24,10:64,11:64,65:15,68:15})[p.id]??0;
+  const center=({7:24,10:64,11:64,65:15,68:15,69:64,71:64})[p.id]??0;
   const node=el('div','ww-osc-field'),name=el('label','',OSC_LABELS[p.id]);
   const range=el('input'),number=el('input');
   range.type='range';number.type='number';
@@ -98,7 +98,7 @@ export class ToneEditor {
       this.groups.push({group,panel,button});this.content.append(panel);
     }
     const help=el('details','ww-osc-help');
-    help.append(el('summary','','Oscillator help'),el('p','','Select a waveform to enable an oscillator. Use the sliders or enter exact values. Edits sound immediately. Save writes the tone. X-MOD applies linear FM from OSC2 to OSC1. SUPER uses seven saws with a shared five-voice limit and bypasses sync and FM. Adjust SUPER mix in Instrument setup.'));
+    help.append(el('summary','','Oscillator help'),el('p','','Select a waveform to enable an oscillator. Choose PULSE on OSC3 or OSC4 to adjust its width. Fine adjusts pitch around the selected semitone. Use the sliders or enter exact values. Edits sound immediately. Save writes the tone. X-MOD applies linear FM from OSC2 to OSC1. SUPER uses seven saws with a shared five-voice limit and bypasses sync and FM. Adjust SUPER mix in Instrument setup.'));
     this.nav.append(help);
     this.selectGroup(this.selectedGroup??GROUPS[0][0]);
   }
@@ -141,7 +141,8 @@ export class ToneEditor {
     this.unavailable.textContent=!analog?'DRUM-X uses different parameter meanings. Edit this engine in Instrument setup.':!running?'Start audio to edit.':!available?'Editor temporarily unavailable during an instrument dialog, save or context change.':'';
     this.content.hidden=this.nav.hidden=this.hint.hidden=!analog;
     for(const p of this.catalog??[]){const v=f.editor.values[p.id];const bypass=f.editor.values[0].value===4&&[8,9].includes(p.id);
-      const fixedShape=(p.id===1&&f.editor.values[0].value>=5)||(p.id===5&&f.editor.values[4].value>=5);
+      const fixedShape=(p.id===1&&f.editor.values[0].value>=5)||(p.id===5&&f.editor.values[4].value>=5)
+        ||(p.id===70&&f.editor.values[63].value!==8)||(p.id===72&&f.editor.values[66].value!==8);
       this.controls.get(p.id)?.update({value:v.value,min:p.min,max:p.max,available:available&&!bypass&&!fixedShape},v.display,`${v.value} / ${p.max} · ${bypass?'Bypassed in SUPER':fixedShape?'Fixed shape':p.shared?'Shared FX':'Internal steps'}`);
     }
     if(f.editor?.edit?.applied===false&&!this.pending)this.status.textContent='Edit not applied: context changed or value unavailable. Try again.';

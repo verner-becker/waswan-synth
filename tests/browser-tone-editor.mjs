@@ -18,7 +18,7 @@ const selectTone=async program=>{const edited=await p.evaluate(()=>audit.frame.i
 try{
   await p.route('**/favicon.ico',r=>r.fulfill({status:204,body:''}));
   await p.goto('http://localhost:8737/simulator/');await p.locator('[data-workspace="tones"]').click();assert(await editor.getByRole('button',{name:'Save',exact:true}).isDisabled());await start();await selectTone(71);
-  assert.equal(await editor.locator('[data-param]').count(),69);assert.equal(await p.evaluate(()=>audit.catalog.length),69);
+  assert.equal(await editor.locator('[data-param]').count(),73);assert.equal(await p.evaluate(()=>audit.catalog.length),73);
   await group('Filter');await setNumber(12,40);assert(await p.getByRole('combobox',{name:'Tone program',exact:true}).getAttribute('title').then(t=>t.includes('INIT')));
   await p.waitForFunction(()=>document.querySelector('#ww-tone-detail').textContent.includes('Edited'));
   const knob=editor.locator('[data-param="12"] [role="slider"]');await knob.focus();await p.keyboard.press('ArrowUp');await p.waitForFunction(()=>audit.frame.editor.values[12].value===41);await p.keyboard.press('ArrowDown');await p.waitForFunction(()=>audit.frame.editor.values[12].value===40);
@@ -28,6 +28,12 @@ try{
   await setNumber(65,-12,3); // one octave down
   await editor.getByRole('combobox',{name:'OSC4 wave',exact:true}).selectOption({label:'REVERSE SAW'});
   await p.waitForFunction(()=>audit.frame.editor.values[66].display==='REVERSE SAW');
+  for(const [osc,width,fine,offset] of [[3,70,69,-8],[4,72,71,11]]){
+    const wave=editor.getByRole('combobox',{name:`OSC${osc} wave`,exact:true});
+    const control=editor.locator(`[data-param="${width}"] input[type="number"]`);
+    assert(await control.isDisabled());
+    await wave.selectOption({label:'PULSE'});await setNumber(width,osc*15);await setNumber(fine,offset,offset+64);
+  }
   const evidence='.local/validation/analog-four-oscillators';
   fs.mkdirSync(evidence,{recursive:true});
   await editor.screenshot({path:evidence+'/tones.png'});
@@ -73,15 +79,16 @@ try{
   await p.waitForFunction(()=>audit.frame.editor.available);await p.screenshot({path:`${root}/editor-desktop.png`,fullPage:true});await p.setViewportSize({width:390,height:844});assert(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:`${root}/editor-mobile.png`,fullPage:true});await p.setViewportSize({width:1560,height:1100});
   assert(!(await p.evaluate(()=>audit.sent.slice(audit.startMark).some(m=>['panic','reboot'].includes(m.t)))));
   await p.reload();await start();await selectTone(99);assert.equal(await p.evaluate(()=>audit.frame.instrument.name),'UX TEST');assert.equal(await p.evaluate(()=>audit.frame.editor.values[12].value),45);
-  assert.deepEqual(await p.evaluate(()=>[63,65,66].map(id=>audit.frame.editor.values[id].display)),['SINE','-12','REVERSE SAW']);
+  assert.deepEqual(await p.evaluate(()=>[63,65,66].map(id=>audit.frame.editor.values[id].display)),['PULSE','-12','PULSE']);
+  assert.deepEqual(await p.evaluate(()=>[69,70,71,72].map(id=>audit.frame.editor.values[id].value)),[56,45,75,60]);
   // Explicit Legacy-style reboot reuses the shell without duplicating the editor/catalog.
   const epoch=await p.evaluate(()=>audit.frame.ms);await send({t:'reboot'});await p.waitForFunction(epoch=>audit.frame.ms<epoch,epoch);await p.waitForFunction(()=>audit.frame.editor.available);await selectTone(99);
-  assert.equal(await editor.locator('[data-param]').count(),69);assert.equal(await editor.locator('.ww-editor-tabs button').count(),7);
+  assert.equal(await editor.locator('[data-param]').count(),73);assert.equal(await editor.locator('.ww-editor-tabs button').count(),7);
   await p.evaluate(()=>{audit.startMark=audit.sent.length;});
   // Part B is independent; shared FX explicitly resolve to part A.
   await send({t:'enc',e:5,steps:1});await p.waitForFunction(()=>audit.frame.track===1&&audit.frame.editor.available);await group('Filter');await setNumber(12,50);assert.equal(await p.evaluate(()=>audit.frame.instrument.controls[0].value),50);
   await group('Shared effects');await setNumber(53,30);assert.equal(await p.evaluate(()=>audit.frame.editor.values[53].value),30);
   await send({t:'drums',part:1,kit:0});await p.waitForFunction(()=>audit.frame.engines[1]===2);assert(await editor.getByText('DRUM-X uses different parameter meanings.',{exact:false}).isVisible());assert(await editor.getByRole('button',{name:'Save',exact:true}).isDisabled());
   assert.equal(await p.evaluate(()=>audit.contexts),1);assert.equal(await p.evaluate(()=>audit.context.state),'running');assert(!(await p.evaluate(()=>audit.sent.slice(audit.startMark).some(m=>['panic','reboot'].includes(m.t)))));assert.deepEqual(errors,[]);
-  const report={result:'PASS',chrome:await browser.version(),parameters:69,groups:7,unitKeyboard:true,pointer:true,cancel:true,saveAs:true,overwrite:true,staleGuard:true,browserPersistence:true,deniedStorageRecovery:true,reload:true,explicitRebootCatalog:true,partSync:true,sharedFx:true,drumBlocked:true,heldNotesNavigation:true,sameContext:true,profilePreserved:true,mobileOverflow:false,errors};fs.writeFileSync(`${root}/browser.json`,JSON.stringify(report,null,2));console.log(report);
+  const report={result:'PASS',chrome:await browser.version(),parameters:73,groups:7,unitKeyboard:true,pointer:true,cancel:true,saveAs:true,overwrite:true,staleGuard:true,browserPersistence:true,deniedStorageRecovery:true,reload:true,explicitRebootCatalog:true,partSync:true,sharedFx:true,drumBlocked:true,heldNotesNavigation:true,sameContext:true,profilePreserved:true,mobileOverflow:false,errors};fs.writeFileSync(`${root}/browser.json`,JSON.stringify(report,null,2));console.log(report);
 }catch(error){console.log(await p.evaluate(()=>({commands:audit.sent.filter(m=>m.t==='editor-save'),save:audit.frame?.editor?.save,state:audit.frame?.presetSave,status:document.querySelector('.ww-tone-editor [role="status"]')?.textContent})).catch(()=>null));throw error;}finally{await browser.close();}

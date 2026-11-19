@@ -121,4 +121,4 @@ Após as ondas, o usuário solicitou pesquisa de DAWs e reforma do SEQ, New proj
 
 ## Expansão do ANALOG
 
-O usuário autorizou um ciclo para quatro osciladores e formas adicionais, com preservação dos timbres anteriores. A implementação está na branch `feat/analog-four-oscillators`. [Plano, formato dos timbres e validação](analog-four-oscillators.md)
+O usuário autorizou um ciclo para quatro osciladores e formas adicionais, com preservação dos timbres anteriores. A implementação está na branch `feat/analog-four-oscillators`. Em 19/11/2026, o usuário autorizou Fine e Pulse width independentes em OSC3/4. A extensão passou pela comparação de áudio, pela gravação e recarga de timbres e pela validação do editor compacto em Chrome. [Plano, formato dos timbres e validação](analog-four-oscillators.md)

@@ -10,7 +10,7 @@ const edit=(e,id,value,scope=e.frame().instrument.scope)=>{e.input({t:'editor-se
 const choose=(e,program)=>{const f=e.frame();e.input({t:'program-select',request:++request,program,scope:f.instrument.scope,token:f.instrument.programToken,discard:true});e.advance(150);};
 const save=(e,program,name,extra={})=>{const f=e.frame();e.input({t:'editor-save',request:++request,program,name,scope:f.instrument.scope,token:f.instrument.programToken,targetToken:f.editor.targets[program-1],...extra});return e.frame().editor.save;};
 const e=fixture(),first=e.frame(),catalog=first.editorCatalog;
-assert.equal(catalog.length,69);assert.equal(new Set(catalog.map(p=>p.id)).size,69);assert.equal(first.editor.targets.length,99);assert.equal(e.frame().editorCatalog,undefined);
+assert.equal(catalog.length,73);assert.equal(new Set(catalog.map(p=>p.id)).size,73);assert.equal(first.editor.targets.length,99);assert.equal(e.frame().editorCatalog,undefined);
 for(let part=0;part<4;part++){
   if(part){e.input({t:'enc',e:5,steps:1});e.advance(150);}choose(e,71);
   for(const p of catalog){
@@ -48,5 +48,5 @@ let samples=0;for(let block=0;block<1000;block++){
   for(const channel of ['sim_out_l','sim_out_r']){assert.deepEqual(new Float32Array(old.ex.memory.buffer,old.ex[channel](),128),new Float32Array(fresh.ex.memory.buffer,fresh.ex[channel](),128));samples+=128;}
 }
 assert.deepEqual(fresh.store(true),old.store(true));
-const report={result:'PASS',parameters:69,parts:4,bounds:true,superBypass:true,staleGuards:true,saveAs:true,overwrite:true,cleanPeerPropagation:true,editedPeerPreserved:true,restore:true,drumBlocked:true,heldNoteAcrossSave:true,audioScalarSamples:samples,sessionUnchangedWithoutEdits:true};
+const report={result:'PASS',parameters:73,parts:4,bounds:true,superBypass:true,staleGuards:true,saveAs:true,overwrite:true,cleanPeerPropagation:true,editedPeerPreserved:true,restore:true,drumBlocked:true,heldNoteAcrossSave:true,audioScalarSamples:samples,sessionUnchangedWithoutEdits:true};
 fs.writeFileSync(`${root}/native.json`,JSON.stringify(report,null,2));console.log(report);

@@ -12,7 +12,22 @@ static void waswan_daw_sample(uint32_t index, uint32_t position);
 #include WASWAN_SIM_SOURCE
 #ifndef WASWAN_OSC_BANK
 #define analog_patch_max obv_param_max
+typedef patch_t wire_patch_t;
+static patch_t patch_unpack(const wire_patch_t *p) {return *p;}
+static wire_patch_t patch_pack(const patch_t *p) {return *p;}
 #endif
+
+static uint32_t patch_hash(uint32_t hash,const patch_t *patch) {
+    wire_patch_t wire=patch_pack(patch);
+    for(unsigned i=0;i<PATCH_BYTES;i++)hash=(hash^wire.v[i])*16777619u;
+    return hash;
+}
+static unsigned patch_byte(const patch_t *patch,unsigned byte) {
+#ifdef WASWAN_OSC_BANK
+    if(osc_payload(patch))return patch_pack(patch).v[byte];
+#endif
+    return patch->v[byte];
+}
 
 /* Optional dry outputs. The bus is captured at the same position as the final
  * stereo block, before part mixer/FX/master; 131072 converts its Q17 scale.
@@ -51,7 +66,7 @@ EXPORT float *waswan_daw_live_output(uint32_t part,uint32_t channel) {return par
 
 #ifdef WASWAN_DAW_RUNTIME
 /* Independent project slots and note ownership. No flash/preset writes. */
-static patch_t daw_staged[NPART];
+static wire_patch_t daw_staged[NPART];
 static uint32_t daw_slots;
 static uint8_t daw_export_active;
 EXPORT uint32_t waswan_daw_capacity(void) {return NPART;}
@@ -59,14 +74,14 @@ EXPORT uint32_t waswan_daw_drum_hits(void) {return sizeof drum_hit/sizeof drum_h
 EXPORT void waswan_daw_transport_guard(uint32_t active) {daw_transport_guard=!!active;}
 EXPORT uint32_t waswan_daw_stage_buffer(void) {return (uint32_t)(uintptr_t)daw_staged;}
 EXPORT uint32_t waswan_daw_program(uint32_t part,uint32_t program) {
-    if(part>=NPART||program>=NPROG)return 0;prog_get(program,&daw_staged[part]);return 1;
+    if(part>=NPART||program>=NPROG)return 0;patch_t patch;prog_get(program,&patch);daw_staged[part]=patch_pack(&patch);return 1;
 }
 EXPORT uint32_t waswan_daw_drum_kits(void) {return NDRUMKIT;}
 EXPORT uint32_t waswan_daw_drum_kit(uint32_t kit) {
     if(kit>=NDRUMKIT)return 0;
-    obv_drums_preset(&daw_staged[0],kit);return 1;
+    patch_t patch;obv_drums_preset(&patch,kit);daw_staged[0]=patch_pack(&patch);return 1;
 }
-EXPORT uint32_t waswan_daw_patch(uint32_t part,uint32_t byte) {return part<NPART&&byte<PATCH_BYTES?live_p[part].v[byte]:0;}
+EXPORT uint32_t waswan_daw_patch(uint32_t part,uint32_t byte) {return part<NPART&&byte<PATCH_BYTES?patch_byte(&live_p[part],byte):0;}
 static uint32_t daw_patch_valid(const patch_t *patch,uint32_t part) {
     uint32_t engine=obv_patch_engine(patch);
     if((engine!=OBV_ANALOG&&engine!=OBV_DRUMS)||(part>=NTRK&&engine!=OBV_ANALOG))return 0;
@@ -77,9 +92,13 @@ static uint32_t daw_patch_valid(const patch_t *patch,uint32_t part) {
     for(uint32_t p=NPARAM;p<NPARAM+PATCH_NAME;p++)if(patch->v[p]&&(patch->v[p]<32u||patch->v[p]>126u))return 0;
     return 1;
 }
-EXPORT int32_t waswan_daw_staged_engine(uint32_t part) {return part<NPART&&daw_patch_valid(&daw_staged[part],part)?(int32_t)obv_patch_engine(&daw_staged[part]):-1;}
+EXPORT int32_t waswan_daw_staged_engine(uint32_t part) {
+    if(part>=NPART)return -1;
+    patch_t patch=patch_unpack(&daw_staged[part]);
+    return daw_patch_valid(&patch,part)?(int32_t)obv_patch_engine(&patch):-1;
+}
 EXPORT uint32_t waswan_daw_token(void) {
-    uint32_t hash=2166136261u;for(uint32_t p=0;p<NPART;p++)for(uint32_t i=0;i<PATCH_BYTES;i++)hash=(hash^live_p[p].v[i])*16777619u;
+    uint32_t hash=2166136261u;for(uint32_t p=0;p<NPART;p++)hash=patch_hash(hash,&live_p[p]);
     return (hash^daw_slots)*16777619u;
 }
 EXPORT uint32_t waswan_daw_active_slots(void) {return daw_slots;}
@@ -91,11 +110,12 @@ static uint32_t daw_slot_busy(uint32_t part) {
 EXPORT uint32_t waswan_daw_apply(uint32_t mask,uint32_t token) {
     if(mask>>NPART||token!=waswan_daw_token()||mm_on||preset_ui||pb_confirm||save_armed||ctl_seq_run)return 0;
     for(uint32_t p=0;p<NPART;p++)if(mask>>p&1u){
-        if(!daw_patch_valid(&daw_staged[p],p))return 0;
-        if(memcmp(&live_p[p],&daw_staged[p],PATCH_BYTES)&&(daw_slot_busy(p)||daw_live_count(p)))return 0;
+        patch_t patch=patch_unpack(&daw_staged[p]);
+        if(!daw_patch_valid(&patch,p))return 0;
+        if(memcmp(&live_p[p],&patch,sizeof patch)&&(daw_slot_busy(p)||daw_live_count(p)))return 0;
     }
     for(uint32_t p=0;p<NPART;p++)if(mask>>p&1u){
-        live_p[p]=daw_staged[p];if(p<NTRK){trk_edited[p]=1;dirty_hdr=dirty_page=dirty_tags=1;}
+        live_p[p]=patch_unpack(&daw_staged[p]);if(p<NTRK){trk_edited[p]=1;dirty_hdr=dirty_page=dirty_tags=1;}
         else daw_extra_active|=1u<<p;
     }
     uint32_t retained=mask;for(uint32_t p=0;p<NPART;p++)if(daw_live_count(p))retained|=1u<<p;
@@ -387,9 +407,7 @@ EXPORT uint32_t waswan_program_catalog(void) {
     return h;
 }
 EXPORT uint32_t waswan_program_token(void) {
-    uint32_t h = 2166136261u;
-    for (uint32_t i = 0; i < PATCH_BYTES; i++) h = (h ^ live_p[seq_trk % NTRK].v[i]) * 16777619u;
-    return h;
+    return patch_hash(2166136261u,&live_p[seq_trk % NTRK]);
 }
 EXPORT uint32_t waswan_program_available(void) {
     return !mm_on && !preset_ui && !pb_confirm && !save_armed && !layer && step_held < 0 && !pat_queue;
@@ -408,11 +426,6 @@ EXPORT uint32_t waswan_program_select(uint32_t n, uint32_t scope, uint32_t token
 /* Tone Editor: metadata and commands on the host thread, never new DSP/state formats. */
 static char editor_text[32];
 static uint8_t editor_name[PATCH_NAME];
-static uint32_t editor_hash(const patch_t *p) {
-    uint32_t h=2166136261u;
-    for(uint32_t i=0;i<PATCH_BYTES;i++)h=(h^p->v[i])*16777619u;
-    return h;
-}
 static uint32_t editor_idle(void) {
     if(!waswan_program_available() || host_edges || host_rel || host_rel_next ||
        host_qw[0]!=host_qr[0] || host_enc[ENC_ALGORITHM] || host_enc[ENC_PRESETS] ||
@@ -432,13 +445,17 @@ EXPORT uint32_t waswan_editor_count(void) {
 }
 #ifdef WASWAN_OSC_BANK
 static const char *const extra_names[] = {"OSC3 wave", "OSC3 level", "OSC3 semitones",
-                                           "OSC4 wave", "OSC4 level", "OSC4 semitones"};
-static const unsigned extra_max[] = {7, 31, 30};
+                                           "OSC4 wave", "OSC4 level", "OSC4 semitones",
+    "OSC3 fine", "OSC3 pulse width", "OSC4 fine", "OSC4 pulse width"};
+static const unsigned extra_max[] = {8, 31, 30, 127, 127};
+/* IDs 63..68 are the original four-oscillator catalog. Append new controls. */
+static unsigned extra_osc(unsigned index) {return index<6 ? index/3 : (index-6)/2;}
+static unsigned extra_kind(unsigned index) {return index<6 ? index%3 : EXTRA_FINE+(index-6)%2;}
 #endif
 EXPORT uint32_t waswan_editor_meta(uint32_t p,uint32_t field) {
 #ifdef WASWAN_OSC_BANK
     if (p >= NPARAM && p < waswan_editor_count()) {
-        unsigned index = p - NPARAM, kind = index % EXTRA_FIELDS;
+        unsigned index = p - NPARAM, kind = extra_kind(index);
         if (field == 0) return (uintptr_t)extra_names[index];
         if (field == 1) return extra_max[kind];
         if (field == 3 && kind == EXTRA_WAVE) return K_WAVE;
@@ -460,7 +477,7 @@ EXPORT uint32_t waswan_editor_value(uint32_t p) {
 #ifdef WASWAN_OSC_BANK
     if (p >= NPARAM && p < waswan_editor_count()) {
         unsigned index = p - NPARAM;
-        return extra_field(ed_patch(0), index / EXTRA_FIELDS, index % EXTRA_FIELDS);
+        return extra_field(ed_patch(0), extra_osc(index), extra_kind(index));
     }
     if (p == P_O2_WAVE && ed_patch(p)->v[p] == W_SUPER) return W_SAW;
 #endif
@@ -470,11 +487,13 @@ EXPORT uint32_t waswan_editor_format(uint32_t p,uint32_t value) {
     editor_text[0]=0;
 #ifdef WASWAN_OSC_BANK
     if (p >= NPARAM && p < waswan_editor_count()) {
-        unsigned index = p - NPARAM, field = index % EXTRA_FIELDS;
+        unsigned index = p - NPARAM, field = extra_kind(index);
         if (value <= extra_max[field]) {
             if (field == EXTRA_WAVE) {
-                unsigned wave = extra_waves[index / EXTRA_FIELDS][value];
+                unsigned wave = extra_waves[extra_osc(index)][value];
                 scat(editor_text, wave < NWAVE ? WAVE_NAME[wave] : poly_wave_names[wave - O_TRI]);
+            } else if (field == EXTRA_FINE || field == EXTRA_WIDTH) {
+                param_value(editor_text,field == EXTRA_FINE ? P_O2_FINE : P_O2_PW,value);
             } else if (field == EXTRA_TUNE && value < EXTRA_CENTER) {
                 editor_text[0] = '-';
                 fmt_u(editor_text + 1, EXTRA_CENTER - value);
@@ -497,10 +516,11 @@ EXPORT uint32_t waswan_editor_set(uint32_t p,int32_t value,uint32_t scope) {
     if (!waswan_editor_available() || scope != waswan_ui_scope() || value < 0) return 0;
 #ifdef WASWAN_OSC_BANK
     if (p >= NPARAM && p < waswan_editor_count()) {
-        unsigned index = p - NPARAM, field = index % EXTRA_FIELDS;
+        unsigned index = p - NPARAM, field = extra_kind(index);
+        if (field == EXTRA_WIDTH && extra_field(ed_patch(0),extra_osc(index),EXTRA_WAVE)!=8) return 0;
         if ((unsigned)value > extra_max[field]) return 0;
         if ((unsigned)value == waswan_editor_value(p)) return 1;
-        extra_set(ed_patch(0), index / EXTRA_FIELDS, field, value);
+        extra_set(ed_patch(0), extra_osc(index), field, value);
         trk_edited[seq_trk % NTRK] = dirty_hdr = dirty_page = dirty_tags = 1;
         return 1;
     }
@@ -523,7 +543,7 @@ EXPORT uint32_t waswan_editor_set(uint32_t p,int32_t value,uint32_t scope) {
 }
 EXPORT uint32_t waswan_editor_slot_token(uint32_t n) {
     if(n>=NPROG)return 0;
-    patch_t p;prog_get(n,&p);return editor_hash(&p);
+    patch_t p;prog_get(n,&p);return patch_hash(2166136261u,&p);
 }
 EXPORT uint32_t waswan_editor_name_buffer(void) {return (uint32_t)(uintptr_t)editor_name;}
 EXPORT uint32_t waswan_editor_save(uint32_t n,uint32_t scope,uint32_t token,uint32_t target_token) {
@@ -561,7 +581,7 @@ EXPORT uint32_t waswan_studio_mix_set(uint32_t part,uint32_t field,int32_t value
     }
     mix_apply();set_dirty=1;set_t=fm1_ms;dirty_hdr=dirty_page=dirty_steps=1;return 1;
 }
-EXPORT uint32_t waswan_studio_patch(uint32_t part,uint32_t byte) {return part<NTRK&&byte<PATCH_BYTES?live_p[part].v[byte]:0;}
+EXPORT uint32_t waswan_studio_patch(uint32_t part,uint32_t byte) {return part<NTRK&&byte<PATCH_BYTES?patch_byte(&live_p[part],byte):0;}
 EXPORT uint32_t waswan_studio_tempo(uint32_t bpm) {
     if(bpm<40u||bpm>240u||mm_on)return 0;set.tempo=(uint16_t)bpm;ctl_tempo=bpm;set_dirty=1;set_t=fm1_ms;dirty_hdr=dirty_page=1;return 1;
 }
@@ -578,12 +598,12 @@ EXPORT uint32_t waswan_studio_expression_set(uint32_t field,int32_t value) {
     else {if(value<0||value>127)return 0;ctl_vib=value;}
     return 1;
 }
-static patch_t studio_context_patches[NTRK];
+static wire_patch_t studio_context_patches[NTRK];
 EXPORT uint32_t waswan_studio_context_buffer(void) {return (uint32_t)(uintptr_t)studio_context_patches;}
 EXPORT uint32_t waswan_studio_context_token(void) {
     uint32_t hash=2166136261u;
     for(uint32_t part=0;part<NTRK;part++){
-        for(uint32_t i=0;i<PATCH_BYTES;i++)hash=(hash^live_p[part].v[i])*16777619u;
+        hash=patch_hash(hash,&live_p[part]);
         hash=(hash^trk_prog[part])*16777619u;
         for(uint32_t field=0;field<8u;field++)hash=(hash^(uint32_t)waswan_studio_mix_value(part,field))*16777619u;
     }
@@ -599,7 +619,7 @@ EXPORT uint32_t waswan_studio_apply_patches(uint32_t token,uint32_t a,uint32_t b
     for(uint32_t q=mq_r;q!=mq_w;q++)if((mq[q%(sizeof mq/sizeof mq[0])][0]&0xF0u)==0xC0u)return 0;
     /* Validate every part before touching any live data. */
     for(uint32_t part=0;part<NTRK;part++){
-        patch_t *patch=&studio_context_patches[part];uint32_t engine=obv_patch_engine(patch);
+        patch_t decoded=patch_unpack(&studio_context_patches[part]);const patch_t *patch=&decoded;uint32_t engine=obv_patch_engine(patch);
         if(programs[part]>=NPROG||(engine!=OBV_ANALOG&&engine!=OBV_DRUMS))return 0;
         for(uint32_t p=0;p<NPARAM;p++){
             if(engine==OBV_DRUMS){if(patch->v[p]>127u)return 0;}
@@ -609,7 +629,7 @@ EXPORT uint32_t waswan_studio_apply_patches(uint32_t token,uint32_t a,uint32_t b
     }
     for(uint32_t part=0;part<NTRK;part++){
         patch_t stored;prog_get(programs[part],&stored);
-        live_p[part]=studio_context_patches[part];trk_prog[part]=programs[part];set.tprog[part]=(uint8_t)programs[part];
+        live_p[part]=patch_unpack(&studio_context_patches[part]);trk_prog[part]=programs[part];set.tprog[part]=(uint8_t)programs[part];
         trk_edited[part]=!!memcmp(&stored,&live_p[part],sizeof stored);
     }
     set.prog=(uint8_t)a;fx_sync();smk_controls_epoch++;set_dirty=1;set_t=fm1_ms;

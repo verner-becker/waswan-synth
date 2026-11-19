@@ -46,9 +46,13 @@ static inline __attribute__((always_inline)) void extra_render_shape(
     for (unsigned i = 0; i < CTL; i++)
         mix[i] += analog_step(osc, step, step >> 15, 0, wave, -65536, -1) * gain;
 }
-static void extra_render(osc_t *osc, uint32_t step, int gain, unsigned wave, int32_t *mix)
+static void extra_render(osc_t *osc, uint32_t step, int gain, unsigned wave, uint32_t pw, int32_t *mix)
 {
     switch (wave) {
+    case W_PLS:
+        for (unsigned i = 0; i < CTL; ++i)
+            mix[i] += osc_step(osc, step, step >> 15, pw, OSC_PLS, -65536, -1) * gain;
+        break;
     case W_SAW:     extra_render_shape(osc, step, gain, W_SAW, mix); break;
     case O_TRI:     extra_render_shape(osc, step, gain, O_TRI, mix); break;
     case O_SHARK:   extra_render_shape(osc, step, gain, O_SHARK, mix); break;

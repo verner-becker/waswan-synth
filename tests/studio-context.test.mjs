@@ -19,4 +19,10 @@ for(const p of [0,2,3])assert.deepEqual(snapshot(e).mixer[p],before[p]);
 assert(!x.waswan_studio_mix_set(4,0,100));assert(!x.waswan_studio_mix_set(1,1,65));assert(!x.waswan_studio_mix_set(1,0,128));
 e.input({t:'drums',part:1,kit:0});e.advance(200);const drum=snapshot(e);assert.equal(drum.parts[1].engine,2);assert(e.restoreStudioContext(drum,x.waswan_studio_context_token()));e.advance(100);
 assert.deepEqual(snapshot(e).parts[1].patch,drum.parts[1].patch);
+for(const [id,value] of [[63,8],[66,8],[69,0],[70,17],[71,127],[72,111]])
+  assert(x.waswan_editor_set(id,value,x.waswan_ui_scope()));
+const extended=snapshot(e),fresh=fixture();
+assert(fresh.restoreStudioContext(extended,fresh.ex.waswan_studio_context_token()));
+assert.deepEqual(snapshot(fresh).parts,extended.parts);
+assert.deepEqual([69,70,71,72].map(id=>fresh.ex.waswan_editor_value(id)),[0,17,127,111]);
 console.log('PASS Studio context: complete patch restore, stale-token and atomic validation guards, unchanged preset slots, independent mixer and DRUM-X roundtrip');

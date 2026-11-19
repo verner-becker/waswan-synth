@@ -1,0 +1,201 @@
+--- a/firmware/src/obv_params.h
++++ b/firmware/src/obv_params.h
+@@ -163,11 +163,13 @@
+     [PG_DSOUND] = {"DRUM SOUND", {-1,-1,-1,-1}},
+ };
+
+-typedef struct { uint8_t v[PATCH_BYTES]; } patch_t;   /* v[0..NPARAM) the parameters, v[NPARAM..] the name */
++typedef struct { uint8_t v[PATCH_BYTES]; } wire_patch_t;
++typedef struct { uint8_t v[PATCH_BYTES]; struct { uint8_t fine, width; } osc[2]; } patch_t;   /* v[0..NPARAM) the parameters, v[NPARAM..] the name */
+
+ static void patch_defaults(patch_t *p)
+ {
+     uint32_t i;
++    memset(p->osc, 0, sizeof p->osc);
+     for (i = 0; i < NPARAM; i++) p->v[i] = PDEF[i].def;
+     for (; i < PATCH_BYTES; i++) p->v[i] = ' ';
+ }
+--- a/firmware/src/obv_engine.h
++++ b/firmware/src/obv_engine.h
+@@ -204,6 +204,7 @@
+     int32_t cut_sm, reso_sm;                    /* CUTOFF and RESO slewed (Q8), ~25 ms: a CC sweep in semitone steps glides */
+     uint8_t extra_wave[2], extra_gain[2], extended;
+     int16_t extra_pitch[2];
++    uint32_t extra_pw[2];
+     uint32_t pw1_base, pw2_base, w1, w2, ftype, sync_on, xmod_q, glide_k;
+ } part_t;
+ static part_t pt[NPART] = {{&live_p[0], 0, 0, 0, 0, 60 << 16}, {&live_p[1], 0, 0, 0, 0, 60 << 16},
+@@ -874,6 +875,8 @@
+             unsigned level = extra_field(g->p, osc, EXTRA_LEVEL) * 127 / 31;
+             g->extra_gain[osc] = (level * level) >> 7;
+             g->extra_pitch[osc] = ((int)extra_field(g->p, osc, EXTRA_TUNE) - EXTRA_CENTER) * 256;
++            g->extra_pitch[osc] += ((int)extra_field(g->p, osc, EXTRA_FINE) - 64) * 2;
++            g->extra_pw[osc] = (extra_field(g->p, osc, EXTRA_WIDTH) << 25) + (1u << 24);
+             g->extended = 1;
+         }
+     }
+@@ -1040,7 +1043,7 @@
+     int32_t extra_mix[CTL] = {0};
+     for (unsigned osc = 0; osc < 2; osc++) {
+         if (g->extra_wave[osc])
+-            extra_render(&v->extra_osc[osc], v->extra_inc[osc], g->extra_gain[osc], g->extra_wave[osc], extra_mix);
++            extra_render(&v->extra_osc[osc], v->extra_inc[osc], g->extra_gain[osc], g->extra_wave[osc], pw_mod(g->extra_pw[osc], 0), extra_mix);
+     }
+     if (g->w1 >= O_TRI || g->w2 >= O_TRI) voice_render_bank(v, out, 1, extra_mix);
+     else voice_render_bank(v, out, 0, extra_mix);
+--- a/firmware/src/obervave.c
++++ b/firmware/src/obervave.c
+@@ -99,7 +99,7 @@
+     int8_t tune, oct;
+     uint8_t pat, click;
+     uint32_t used;
+-    patch_t user[32];
++    wire_patch_t user[32];
+ } set_v2_t;
+ static uint32_t set_dirty, set_t, manual_store_request;
+ #if BOARD_SMK37
+@@ -120,7 +120,7 @@
+ /* the user's programs: PS_N to a flash sector (psect_load / psect_save), all of them in RAM */
+ #define PS_N 50u
+ #define PS_TAG 0x50564F42u                      /* "BOVP" */
+-typedef struct { uint32_t tag; uint8_t used[PS_N], pad[2]; patch_t p[PS_N]; } psect_t;
++typedef struct { uint32_t tag; uint8_t used[PS_N], pad[2]; wire_patch_t p[PS_N]; } psect_t;
+ _Static_assert(sizeof(psect_t) <= SETTINGS_MAX, "a program sector outgrew its flash sector");
+ _Static_assert(NPSECT * PS_N >= NPROG, "too few program sectors");
+ static psect_t psect[NPSECT];
+@@ -243,14 +243,14 @@
+ static void prog_get(uint32_t n, patch_t *p)    /* program n: the user's, else the factory's (65-70: VIBE's, 71-99: INIT) */
+ {
+     n %= NPROG;
+-    if (psect[n / PS_N].used[n % PS_N]) *p = psect[n / PS_N].p[n % PS_N];
++    if (psect[n / PS_N].used[n % PS_N]) *p = patch_unpack(&psect[n / PS_N].p[n % PS_N]);
+     else patch_from_factory(p, n < NFACT ? &FACTORY[n] : n < NFACT + NVIBE ? &FACT_VIBE[n - NFACT] : &FACT_INIT);
+ }
+
+ static void prog_put(uint32_t n, const patch_t *p)   /* program n is the user's now; saved when quiet */
+ {
+     n %= NPROG;
+-    psect[n / PS_N].p[n % PS_N] = *p;
++    psect[n / PS_N].p[n % PS_N] = patch_pack(p);
+     psect[n / PS_N].used[n % PS_N] = 1;
+     ps_dirty |= 1u << (n / PS_N);
+     set_t = fm1_ms;
+@@ -391,6 +391,7 @@
+     uint8_t mute, solo, fx[NFXP], dv_type, dv_amt, dv_tone, dv_mix, m_vol, m_dj, m_drive, m_comp;
+ } mixset_t;
+ typedef struct { uint32_t magic; uint8_t prog[NTRK], edited[NTRK]; patch_t p[NTRK]; mixset_t mx; } psnd_t;
++typedef struct { uint32_t magic; uint8_t prog[NTRK], edited[NTRK]; wire_patch_t p[NTRK]; mixset_t mx; } wire_scene_t;
+ static psnd_t psnd[NPAT], psnd_tmp;
+ #if BOARD_SMK37
+ static uint32_t pb_write_target;
+@@ -525,21 +526,26 @@
+
+ /* Both layouts use the existing CRC-protected platform slot. The scene stays
+  * behind the correct prefix length; no raw flash writes or new addresses. */
+-_Static_assert(sizeof(pattern_t)+sizeof(psnd_t)<=SLOT_MAX,"DRUMS pattern exceeds slot");
++_Static_assert(sizeof(pattern_t)+sizeof(wire_scene_t)<=SLOT_MAX,"DRUMS pattern exceeds slot");
+ static int pattern_slot_load(uint32_t n,pattern_t *p,psnd_t *snd){
+- if(!slot_load(n,p,sizeof *p,snd,sizeof *snd)){
++ wire_scene_t wire;
++ if(!slot_load(n,p,sizeof *p,&wire,sizeof wire)){
+   if(p->keyboard2_magic!=KEYBOARD2_MAGIC||p->keyboard_selected>1u||!keyboard_valid(&p->keyboard_alt))return -1;
+   if(p->magic!=PAT_MAGIC||p->drum_magic!=DRUM_SEQ_MAGIC||p->keyboard_magic!=KEYBOARD_MAGIC||!keyboard_valid(&p->keyboard))return -1;
+- }else if(!slot_load(n,p,PAT_SL1_BYTES,snd,sizeof *snd)){
++ }else if(!slot_load(n,p,PAT_SL1_BYTES,&wire,sizeof wire)){
+   if(p->magic!=PAT_MAGIC||p->drum_magic!=DRUM_SEQ_MAGIC||p->keyboard_magic!=KEYBOARD_MAGIC||!keyboard_valid(&p->keyboard))return -1;
+   keyboard_second_init(p);
+- }else if(!slot_load(n,p,PAT_DRUM_BYTES,snd,sizeof *snd)){
++ }else if(!slot_load(n,p,PAT_DRUM_BYTES,&wire,sizeof wire)){
+   if(p->magic!=PAT_MAGIC||p->drum_magic!=DRUM_SEQ_MAGIC)return -1;keyboard_pattern_init(p);
+  }else{
+-  if(slot_load(n,p,PAT_LEGACY_BYTES,snd,sizeof *snd)||p->magic!=PAT_MAGIC)return -1;
++  if(slot_load(n,p,PAT_LEGACY_BYTES,&wire,sizeof wire)||p->magic!=PAT_MAGIC)return -1;
+   drum_pattern_init(p);keyboard_pattern_init(p);
+  }
+- for(unsigned t=0;t<NTRK;t++)if(p->drum_valid[t]>1u)return -1;
++ snd->magic=wire.magic; snd->mx=wire.mx;
++ for(unsigned t=0;t<NTRK;t++){
++     if(p->drum_valid[t]>1u)return -1;
++     snd->prog[t]=wire.prog[t]; snd->edited[t]=wire.edited[t]; snd->p[t]=patch_unpack(&wire.p[t]);
++ }
+  return 0;
+ }
+ static int pattern_slot_save(uint32_t n,const pattern_t *p,const psnd_t *snd){
+@@ -547,7 +553,11 @@
+  uint32_t extended=0;for(unsigned t=0;t<NTRK;t++){if(p->drum_valid[t]>1u)return -1;extended|=p->drum_valid[t];}
+  keyboard_cfg_t def;keyboard_defaults(&def);
+  uint32_t bytes=(p->keyboard_pad[0]==0xA3u||p->keyboard_selected||memcmp(&def,&p->keyboard_alt,sizeof def))?sizeof *p:memcmp(&def,&p->keyboard,sizeof def)?PAT_SL1_BYTES:extended?PAT_DRUM_BYTES:PAT_LEGACY_BYTES;
+- return slot_save(n,p,bytes,snd,sizeof *snd);
++ wire_scene_t wire = {.magic=snd->magic, .mx=snd->mx};
++ for(unsigned t=0;t<NTRK;t++){
++     wire.prog[t]=snd->prog[t]; wire.edited[t]=snd->edited[t]; wire.p[t]=patch_pack(&snd->p[t]);
++ }
++ return slot_save(n,p,bytes,&wire,sizeof wire);
+ }
+ static void pat_fetch(uint32_t n, pattern_t *p)   /* manual recall restores steps AND sounds from the saved slot */
+ {
+@@ -2705,7 +2715,7 @@
+                 set.prog = old.prog; set.tempo = old.tempo; set.midi_ch = old.midi_ch;
+                 set.tune = old.tune; set.oct = old.oct; set.pat = old.pat; set.click = old.click;
+                 for (n = 0; n < 32u; n++)
+-                    if (old.used >> n & 1u) prog_put(n, &old.user[n]);
++                    if (old.used >> n & 1u) { patch_t p = patch_unpack(&old.user[n]); prog_put(n, &p); }
+                 set_dirty = 1;                  /* (the programs are written first, then these) */
+             }
+         }
+--- a/firmware/src/obv_perf.h
++++ b/firmware/src/obv_perf.h
+@@ -4,7 +4,7 @@
+ #define PF_HOLD_MS 700u
+ #define PF_TAG_V1 0x31564650u /* PFV1: delay/reverb sends only */
+ #define PF_TAG 0x32564650u /* PFV2: all three sends; chorus 128 means legacy/unspecified */
+-typedef struct { patch_t patch; uint8_t prog, edited, dly, rev, colour, cho; } pf_slot_t;
++typedef struct { wire_patch_t patch; uint8_t prog, edited, dly, rev, colour, cho; } pf_slot_t;
+ typedef struct { uint32_t tag, generation, used; uint8_t last_send[2][NTRK]; pf_slot_t slot[8]; } pf_store_t;
+ _Static_assert(sizeof(pf_store_t) <= SETTINGS_MAX, "performance favourites exceed sector");
+ static pf_store_t pf_store;
+@@ -171,13 +171,14 @@
+     for(i=0;i<8;i++)if(s->used>>i&1u) {
+         const pf_slot_t *v=&s->slot[i];
+         if(v->prog>=NPROG||v->edited>1u||v->dly>127u||v->rev>127u||v->colour>=NTRK||v->cho>128u)return 0;
+-        for(p=0;p<NPARAM;p++)if(v->patch.v[p]>PDEF[p].max && v->patch.v[p]>analog_patch_max(&v->patch,p))return 0;
++        patch_t patch=patch_unpack(&v->patch);
++        for(p=0;p<NPARAM;p++)if(patch.v[p]>PDEF[p].max && patch.v[p]>analog_patch_max(&patch,p))return 0;
+     }
+     return 1;
+ }
+ /* Read either generation without writing during boot. Old favourites retain the
+  * current part's chorus send until explicitly saved again. */
+-typedef struct { patch_t patch; uint8_t prog, edited, dly, rev, colour; } pf_slot_v1_t;
++typedef struct { wire_patch_t patch; uint8_t prog, edited, dly, rev, colour; } pf_slot_v1_t;
+ typedef struct { uint32_t tag, generation, used; uint8_t last_send[2][NTRK]; pf_slot_v1_t slot[8]; } pf_store_v1_t;
+ static int pf_read(uint32_t bank, pf_store_t *out) {
+     static pf_store_v1_t old;
+@@ -214,12 +215,12 @@
+     else{pf_store.generation--;pf_t=fm1_ms;say("FAV SAVE RETRY");}
+ }
+ static void pf_snapshot(pf_slot_t *v,uint32_t t) {
+-    v->patch=live_p[t];v->prog=(uint8_t)trk_prog[t];v->edited=(uint8_t)trk_edited[t];
++    v->patch=patch_pack(&live_p[t]);v->prog=(uint8_t)trk_prog[t];v->edited=(uint8_t)trk_edited[t];
+     v->cho=set.mix_cho[t];v->dly=set.mix_dly[t];v->rev=set.mix_rev[t];v->colour=(uint8_t)t;
+ }
+ static void pf_recall(uint32_t i,uint32_t t) {
+     if(!(pf_store.used>>i&1u)){pf_message("FAV EMPTY ",i+1u);return;}
+-    const pf_slot_t *v=&pf_store.slot[i];patch_t p=v->patch;
++    const pf_slot_t *v=&pf_store.slot[i];patch_t p=patch_unpack(&v->patch);
+     if(!t)fx_keep(&p); /* preserve shared FX and their tails */
+     smk_controls_epoch++;
+     live_p[t]=p;trk_prog[t]=v->prog;trk_edited[t]=v->edited;set.tprog[t]=v->prog;
+@@ -319,7 +320,11 @@
+ }
+ static uint32_t pf_matches(uint32_t i,uint32_t t) {
+     const pf_slot_t *v=&pf_store.slot[i];
+-    return trk_prog[t]==v->prog && obv_patch_engine(&live_p[t])==obv_patch_engine(&v->patch) && !memcmp(live_p[t].v,v->patch.v,P_CHO_RATE) &&
++    patch_t stored=patch_unpack(&v->patch);
++    if(live_p[t].v[OBV_ENGINE_TAG_AT]==OSC_TAIL_TAG || stored.v[OBV_ENGINE_TAG_AT]==OSC_TAIL_TAG)
++        if(memcmp(live_p[t].v+OBV_ENGINE_TAG_AT,stored.v+OBV_ENGINE_TAG_AT,PATCH_BYTES-OBV_ENGINE_TAG_AT) ||
++           memcmp(live_p[t].osc,stored.osc,sizeof stored.osc))return 0;
++    return trk_prog[t]==v->prog && obv_patch_engine(&live_p[t])==obv_patch_engine(&stored) && !memcmp(live_p[t].v,stored.v,P_CHO_RATE) &&
+            !memcmp(live_p[t].v+NPARAM,v->patch.v+NPARAM,PATCH_NAME) && (v->cho==128u||set.mix_cho[t]==v->cho) && set.mix_dly[t]==v->dly && set.mix_rev[t]==v->rev;
+ }
+ static uint16_t pf_led(uint32_t p) {

@@ -21,10 +21,15 @@ export function pcm16(samples,target=new Int16Array(samples.length)) {
   }
   return target;
 }
+// A5 stores OSC3/4 fine and pulse settings above the two-bit ANALOG selectors.
+function snapshotParameter(patch,id) {
+  if(patch[74]===0xa5 && [8,31,36,37,38].includes(id))return patch[id]&3;
+  return patch[id];
+}
 export function validateContext(c) {
   if(!c||c.version!==1||!Array.isArray(c.parts)||c.parts.length!==4||typeof c.session!=='string'||![240300,415064,458752].includes(c.session.length)||!/^[A-Za-z0-9+/]*={0,2}$/.test(c.session)||!integer(c.master,0,1023)||!integer(c.tempo,40,240))throw Error('Invalid instrument context');
   for(const p of c.parts)if(!p||!integer(p.program,1,99)||![0,2].includes(p.engine)||!Array.isArray(p.parameters)||p.parameters.length!==63||!p.parameters.every(v=>integer(v,0,255)))throw Error('Invalid part context');
-  for(const p of c.parts)if(p.patch!==undefined&&(!Array.isArray(p.patch)||p.patch.length!==80||!p.patch.every(v=>integer(v,0,255))||!p.parameters.every((v,i)=>v===p.patch[i])))throw Error('Invalid full tone snapshot');
+  for(const p of c.parts)if(p.patch!==undefined&&(!Array.isArray(p.patch)||p.patch.length!==80||!p.patch.every(v=>integer(v,0,255))||!p.parameters.every((v,i)=>v===snapshotParameter(p.patch,i))))throw Error('Invalid full tone snapshot');
   if(c.mixer!==undefined){
     if(!Array.isArray(c.mixer)||c.mixer.length!==4)throw Error('Invalid saved mixer');
     for(const part of c.mixer)if(!Array.isArray(part)||part.length!==8||!part.every((v,f)=>integer(v,f===1?-64:0,f===1?64:f>=6?1:127)))throw Error('Invalid saved mixer values');
