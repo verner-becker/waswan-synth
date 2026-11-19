@@ -13,7 +13,7 @@ cp "$upstream"/web/simulator/* .local/www/simulator/
 cp ".local/build/waswan-$voices.wasm" .local/www/simulator/obervave-voice.wasm
 cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
 cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
-cp web/ui-*.js web/ui-foundation.css .local/www/simulator/
+cp web/fm-*.js web/ui-*.js web/ui-foundation.css .local/www/simulator/
 cp web/studio-*.js .local/www/simulator/
 cp web/daw-*.js web/daw-tab.html .local/www/simulator/
 mkdir -p .local/www/simulator/vendor
@@ -113,6 +113,8 @@ s=s.replace('<script src="../i18n.js', '<script>if(!new URLSearchParams(location
 p.write_text(s)
 PYHTML
 cp "$upstream/web/site/i18n.js" .local/www/i18n.js
+mkdir -p .local/www/simulator/vendor/sloopdx
+cp wasm/vendor/sloopdx/NOTICE.md wasm/vendor/sloopdx/Apache-2.0.txt .local/www/simulator/vendor/sloopdx/
 cp "$upstream/LICENSE" .local/www/LICENSE.txt
 cp "$upstream/LICENSING.md" "$upstream/CREDITS.md" .local/www/
 echo "Simulador de $voices vozes e perfil MIDI prontos em .local/www/simulator/"

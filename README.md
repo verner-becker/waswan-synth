@@ -64,6 +64,8 @@ O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binary
 
 Integrado à `main`, **TONES** apresenta os 63 parâmetros ANALOG em sete seções, com **Save** e **Save as…** na biblioteca existente de 99 programas. A gravação exige confirmação e informa a espera por silêncio e o resultado do armazenamento no navegador. Não há mudança no DSP ou nos formatos de presets/sessões. DRUM-X, SUPER mix e outros controles nativos ficam em **Instrument setup**. Veja [arquitetura, limites e validação](docs/tone-editor-v1.md). A implementação foi aprovada pelo usuário e integrada preservando o histórico.
 
+Na versão com o módulo FM, abra **TONES → + Add FM** para acrescentar seis operadores a um programa. **Mix** controla os níveis de Analog e FM. [Guia do módulo e referências do FM-1](docs/fm-layer.md).
+
 ## Controle fino de knobs v1
 
 O perfil MIDI, integrado à `main`, permite escolher **Normal / Fino** em cada mapeamento existente de K1–K4. Normal preserva os passos e a aceleração originais; Fino absoluto usa posição com captura suave; relativos finos alteram uma unidade interna por incremento lógico nos parâmetros diretos da tela. Presets e mapeamentos anteriores são preservados; o padrão continua Normal.

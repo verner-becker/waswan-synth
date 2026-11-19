@@ -2,6 +2,8 @@
 import {Engine as OriginalEngine} from './engine-original.js';
 import {validateContext} from './studio-format.js';
 
+import {FM_BYTES,stageTone} from './fm-patch.js';
+
 const setupActions={
   setting:['waswan_instrument_set',2], bank:['waswan_pad_bank',1], pattern:['waswan_pattern_action',3],
   favourite:['waswan_favourite_action',3], keyboard:['waswan_keyboard_setup',10], row:['waswan_keyboard_activate',2],
@@ -77,6 +79,12 @@ export class Engine extends OriginalEngine {
       if(Number.isInteger(message.part)&&message.part>=0&&message.part<4&&Number.isInteger(message.field)&&message.field>=0&&message.field<8&&Number.isInteger(message.value))this.ex.waswan_studio_mix_set?.(message.part,message.field,message.value);
       return;
     }
+    if(message.t==='fm-set'){
+      const {field,value,scope}=message;
+      if([field,value,scope].every(Number.isSafeInteger)&&field>=0&&field<FM_BYTES&&value>=0&&value<=127&&scope>=0&&scope<=0xffffffff)
+        this.editorEdit={field,applied:!!this.ex.waswan_fm_edit?.(field,value,scope)};
+      return;
+    }
     if(message.t==='editor-set'){
       if(Number.isInteger(message.id)&&message.id>=0&&message.id<(this.ex.waswan_editor_count?.() ?? this.ex.waswan_parameter_count())&&
          Number.isInteger(message.value)&&Number.isInteger(message.scope)&&message.scope>=0&&message.scope<=0xffffffff)
@@ -149,6 +157,10 @@ export class Engine extends OriginalEngine {
       frame.editor={available:!!x.waswan_editor_available(),values:this.editorValues,edit:this.editorEdit,save:this.editorSave,
         targets:Array.from({length:99},(_,n)=>x.waswan_editor_slot_token(n)>>>0)};
     }
+    if(x.waswan_fm_data){
+      const fm=new Uint8Array(x.memory.buffer,x.waswan_fm_data(frame.track),FM_BYTES);
+      frame.fm=fm[0]?{bytes:Array.from(fm),route:Array.from({length:6},(_,op)=>x.waswan_fm_route(fm[1],op))}:null;
+    }
     if(x.waswan_program_count){
       const catalog=x.waswan_program_catalog();
       if(catalog!==this.programCatalog){
@@ -219,8 +231,7 @@ export class Engine extends OriginalEngine {
   restoreStudioContext(context,token){
     validateContext(context);const x=this.ex;
     if(!x.waswan_studio_context_buffer||!context.parts.every(p=>p.patch))throw Error('This project predates full tone snapshots');
-    const bytes=new Uint8Array(x.memory.buffer,x.waswan_studio_context_buffer(),320);
-    context.parts.forEach((p,i)=>bytes.set(p.patch,i*80));
+    context.parts.forEach((p,i)=>stageTone(x,true,i,p.patch));
     if(!x.waswan_studio_apply_patches(token,...context.parts.map(p=>p.program-1)))throw Error('Instrument changed or is busy; saved context was not applied');
     if(context.mixer)for(let part=0;part<4;part++)for(let field=0;field<8;field++)x.waswan_studio_mix_set(part,field,context.mixer[part][field]);
     x.sim_master(context.master);x.waswan_studio_tempo(context.tempo);return true;

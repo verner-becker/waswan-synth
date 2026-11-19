@@ -25,10 +25,12 @@ subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / f'patche
 if args.daw:
     subprocess.run(['patch','--batch','--fuzz=0','-p1','-i',str(root/'patches/daw-runtime.patch')],cwd=target,check=True)
     subprocess.run(['patch','--batch','--fuzz=0','-p1','-i',str(root/'patches/daw-monitor.patch')],cwd=target,check=True)
-    for header in ['analog-oscillators.h', 'analog-waveforms.h']:
+    for header in ['analog-oscillators.h', 'analog-waveforms.h', 'fm-voice.h', 'fm-patch.h', 'fm-storage.h']:
         shutil.copy2(root / 'wasm' / header, target / 'firmware/src')
     subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / 'patches/analog-oscillators.patch')], cwd=target, check=True)
     subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / 'patches/analog-fine-pulse.patch')], cwd=target, check=True)
+    shutil.copytree(root/'wasm/vendor/sloopdx',target/'firmware/src/vendor/sloopdx')
+    subprocess.run(['patch','--batch','--fuzz=0','-p1','-i',str(root/'patches/fm-layer.patch')],cwd=target,check=True)
 # Optional host observation of the dry per-part bus, aligned with the buffered ISR.
 # No algorithm changes; the historical reference compiles with this hook absent.
 sim = target / 'web/sim/sim.c'

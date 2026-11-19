@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {validToneBytes,toneBytes,stageTone} from './fm-patch.js';
 import {OberVave} from './worklet-original.js';
 import {accumulator,block} from './dsp-stats.js';
 import {COMMANDS} from './studio-format.js';
@@ -33,10 +34,10 @@ class MonitoredOberVave extends OberVave {
       Object.assign(audioTransport,{playing:false,recording:false,planId:null,exportToken:null,exportPlan:null});
       x.waswan_daw_export_close();const previous=this.dawExport;this.dawExport=null;
       this.dawProject=previous.project;this.dawObserved=previous.observed;this.dawObservedToken=previous.observedToken;this.dawOutputs=previous.outputs;this.dawParts=previous.parts;result={closed:true};
-     }else if(m.t==='daw-state-request')result={capacity:x.waswan_daw_capacity(),token:x.waswan_daw_token()>>>0,slots:x.waswan_daw_active_slots?.()||0,liveHeld:Array.from({length:x.waswan_daw_capacity()},(_,p)=>x.waswan_daw_live_held?.(p)||0),patches:Array.from({length:x.waswan_daw_capacity()},(_,p)=>Array.from({length:80},(_,i)=>x.waswan_daw_patch(p,i)))};
+     }else if(m.t==='daw-state-request')result={capacity:x.waswan_daw_capacity(),token:x.waswan_daw_token()>>>0,slots:x.waswan_daw_active_slots?.()||0,liveHeld:Array.from({length:x.waswan_daw_capacity()},(_,p)=>x.waswan_daw_live_held?.(p)||0),patches:Array.from({length:x.waswan_daw_capacity()},(_,p)=>toneBytes(x,p))};
      else if(m.t==='daw-program'){
       if(!Number.isInteger(m.program)||m.program<0||m.program>98||!x.waswan_daw_program(0,m.program))throw Error('Invalid instrument program');
-      result={patch:Array.from(new Uint8Array(x.memory.buffer,x.waswan_daw_stage_buffer(),80)),engine:x.waswan_daw_staged_engine(0)};
+      result={patch:toneBytes(x,0,true),engine:x.waswan_daw_staged_engine(0)};
      }else if(m.t==='daw-drum-catalog'||m.t==='daw-drum-kit'){
       const count=x.waswan_daw_drum_kits?.()||0;
       const patch=kit=>{
@@ -48,10 +49,10 @@ class MonitoredOberVave extends OberVave {
      }else if(m.t==='daw-apply'){
       if(this.sequence?.active||this.daw?.active||x.waswan_ui_playing())throw Error('Stop the active transport before preparing DAW instruments');
       if(typeof m.projectId!=='string'||!/^[\w-]{1,80}$/.test(m.projectId)||!Number.isSafeInteger(m.revision)||m.revision<0||!Array.isArray(m.slots)||m.slots.length>x.waswan_daw_capacity())throw Error('Invalid instrument transaction');
-      let mask=0;const stage=new Uint8Array(x.memory.buffer,x.waswan_daw_stage_buffer(),80*x.waswan_daw_capacity());
+      let mask=0;
       for(const slot of m.slots){
-       if(!Number.isInteger(slot.part)||slot.part<0||slot.part>=x.waswan_daw_capacity()||mask>>slot.part&1||!['analog','super','drumx'].includes(slot.type)||!Array.isArray(slot.patch)||slot.patch.length!==80||!slot.patch.every(v=>Number.isInteger(v)&&v>=0&&v<=255))throw Error('Invalid instrument slot');
-       stage.set(slot.patch,slot.part*80);const engine=x.waswan_daw_staged_engine(slot.part);
+       if(!Number.isInteger(slot.part)||slot.part<0||slot.part>=x.waswan_daw_capacity()||mask>>slot.part&1||!['analog','super','drumx'].includes(slot.type)||!validToneBytes(slot.patch))throw Error('Invalid instrument slot');
+       stageTone(x,false,slot.part,slot.patch);const engine=x.waswan_daw_staged_engine(slot.part);
        if(engine<0||engine!==(slot.type==='drumx'?2:0))throw Error('Instrument snapshot is invalid or unavailable in this slot');mask|=1<<slot.part;
       }
       if(!Number.isInteger(m.token)||m.token<0||m.token>0xffffffff||!x.waswan_daw_apply(mask,m.token))throw Error('Instrument changed or notes are still sounding; release notes before applying a different sound');
@@ -135,7 +136,7 @@ class MonitoredOberVave extends OberVave {
      this.port.postMessage({t:'studio-context',request:m.request,context:{version:1,tempo:x.sim_tempo(),master:x.sim_master_current(),selectedPart:x.sim_track(),token:x.waswan_studio_context_token?.()>>>0,
       expression:x.waswan_studio_expression_value?Array.from({length:3},(_,f)=>x.waswan_studio_expression_value(f)):undefined,midiSustain:!!x.waswan_midi_sustain(),
       mixer:x.waswan_studio_mix_value?Array.from({length:4},(_,p)=>Array.from({length:8},(_,f)=>x.waswan_studio_mix_value(p,f))):undefined,
-      parts:Array.from({length:4},(_,part)=>({program:x.sim_program(part)+1,engine:x.sim_engine_patch(part),parameters:Array.from({length:x.waswan_parameter_count()},(_,p)=>x.sim_param(part,p)),patch:x.waswan_studio_patch?Array.from({length:80},(_,i)=>x.waswan_studio_patch(part,i)):undefined}))},store},[store]);
+      parts:Array.from({length:4},(_,part)=>({program:x.sim_program(part)+1,engine:x.sim_engine_patch(part),parameters:Array.from({length:x.waswan_parameter_count()},(_,p)=>x.sim_param(part,p)),patch:x.waswan_daw_patch?toneBytes(x,part):x.waswan_studio_patch?Array.from({length:80},(_,i)=>x.waswan_studio_patch(part,i)):undefined}))},store},[store]);
     }catch(error){this.port.postMessage({t:'studio-context',request:m.request,error:error.message});}
     return;
    }
@@ -179,7 +180,7 @@ class MonitoredOberVave extends OberVave {
     this.dawPoll=0;const x=this.engine.ex,token=x.waswan_daw_token()>>>0;
     if(token!==this.dawObservedToken){
      const changes=[];
-     for(const [part,previous] of this.dawObserved){const patch=Array.from({length:80},(_,i)=>x.waswan_daw_patch(part,i));if(patch.some((v,i)=>v!==previous[i])){changes.push({part,patch});this.dawObserved.set(part,patch);}}
+     for(const [part,previous] of this.dawObserved){const patch=toneBytes(x,part);if(patch.length!==previous.length||patch.some((v,i)=>v!==previous[i])){changes.push({part,patch});this.dawObserved.set(part,patch);}}
      this.dawObservedToken=token;if(changes.length)this.port.postMessage({t:'daw-instruments-changed',projectId:this.dawProject.id,changes});
     }
    }

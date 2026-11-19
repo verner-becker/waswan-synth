@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {validToneBytes} from './fm-patch.js';
 // Musical data only. Track IDs never encode firmware part numbers or UI layout.
 export const RATE=44100,PPQ=960;
 export const LIMITS={tracks:32,assets:32,clips:512,notes:65536,json:16*1024*1024,totalFrames:RATE*1800,sourceFrames:RATE*1200};
@@ -29,7 +30,7 @@ export function validateProject(p){
   for(const t of p.tracks){
     assert(['audio','midi'].includes(t.type)&&text(t.name,80)&&text(t.icon,32)&&/^#[a-fA-F0-9]{6}$/.test(t.color)&&number(t.volume,0,2)&&number(t.pan,-1,1)&&typeof t.mute==='boolean'&&typeof t.solo==='boolean'&&['in','auto','off'].includes(t.monitor),'Invalid track');
     if(t.arm!==undefined)assert(typeof t.arm==='boolean','Invalid track arm');
-    if(t.instrument!==null){assert(t.type==='midi'&&['analog','super','drumx'].includes(t.instrument?.type)&&Array.isArray(t.instrument.patch)&&t.instrument.patch.length===80&&t.instrument.patch.every(v=>int(v,0,255)),'Invalid instrument snapshot');}
+    if(t.instrument!==null){assert(t.type==='midi'&&['analog','super','drumx'].includes(t.instrument?.type)&&validToneBytes(t.instrument.patch),'Invalid instrument snapshot');}
     validateFx(t.fx);
   }
   assert(p.tracks.filter(t=>t.arm).length<=1,'Only one track can be armed');

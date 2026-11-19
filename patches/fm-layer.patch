@@ -1,0 +1,261 @@
+--- a/firmware/src/obv_params.h
++++ b/firmware/src/obv_params.h
+@@ -163,13 +163,15 @@
+     [PG_DSOUND] = {"DRUM SOUND", {-1,-1,-1,-1}},
+ };
+
++#include "fm-patch.h"
+ typedef struct { uint8_t v[PATCH_BYTES]; } wire_patch_t;
+-typedef struct { uint8_t v[PATCH_BYTES]; struct { uint8_t fine, width; } osc[2]; } patch_t;   /* v[0..NPARAM) the parameters, v[NPARAM..] the name */
++typedef struct { uint8_t v[PATCH_BYTES]; struct { uint8_t fine, width; } osc[2]; fm_patch_t fm; } patch_t;   /* v[0..NPARAM) the parameters, v[NPARAM..] the name */
+
+ static void patch_defaults(patch_t *p)
+ {
+     uint32_t i;
+     memset(p->osc, 0, sizeof p->osc);
++    memset(&p->fm, 0, sizeof p->fm);
+     for (i = 0; i < NPARAM; i++) p->v[i] = PDEF[i].def;
+     for (; i < PATCH_BYTES; i++) p->v[i] = ' ';
+ }
+--- a/firmware/src/obervave.c
++++ b/firmware/src/obervave.c
+@@ -124,6 +124,15 @@
+ _Static_assert(sizeof(psect_t) <= SETTINGS_MAX, "a program sector outgrew its flash sector");
+ _Static_assert(NPSECT * PS_N >= NPROG, "too few program sectors");
+ static psect_t psect[NPSECT];
++#include "fm-storage.h"
++static fm_patch_t fm_programs[NPSECT * PS_N];
++static void fm_program_bank(unsigned bank, int write) {
++    for (unsigned i=0; i<PS_N; i++) {
++        unsigned slot=bank*PS_N+i;
++        if (write) fm_write(FM_PROGRAMS,slot,&psect[bank].p[i],&fm_programs[slot]);
++        else fm_programs[slot]=fm_read(FM_PROGRAMS,slot,&psect[bank].p[i]);
++    }
++}
+ static uint32_t ps_dirty;                       /* bit i: program sector i to save */
+
+ static uint32_t page = PG_PERFORM, hold, save_armed, save_t, save_to;   /* save_to: SAVE's slot (PRESETS); hold: bit t = track t's HOLD */
+@@ -243,7 +252,7 @@
+ static void prog_get(uint32_t n, patch_t *p)    /* program n: the user's, else the factory's (65-70: VIBE's, 71-99: INIT) */
+ {
+     n %= NPROG;
+-    if (psect[n / PS_N].used[n % PS_N]) *p = patch_unpack(&psect[n / PS_N].p[n % PS_N]);
++    if (psect[n / PS_N].used[n % PS_N]) { *p = patch_unpack(&psect[n / PS_N].p[n % PS_N]); p->fm = fm_programs[n]; }
+     else patch_from_factory(p, n < NFACT ? &FACTORY[n] : n < NFACT + NVIBE ? &FACT_VIBE[n - NFACT] : &FACT_INIT);
+ }
+
+@@ -251,6 +260,7 @@
+ {
+     n %= NPROG;
+     psect[n / PS_N].p[n % PS_N] = patch_pack(p);
++    fm_programs[n]=p->fm;
+     psect[n / PS_N].used[n % PS_N] = 1;
+     ps_dirty |= 1u << (n / PS_N);
+     set_t = fm1_ms;
+@@ -545,6 +555,7 @@
+  for(unsigned t=0;t<NTRK;t++){
+      if(p->drum_valid[t]>1u)return -1;
+      snd->prog[t]=wire.prog[t]; snd->edited[t]=wire.edited[t]; snd->p[t]=patch_unpack(&wire.p[t]);
++     snd->p[t].fm=fm_read(FM_PATTERNS,n*NTRK+t,&wire.p[t]);
+  }
+  return 0;
+ }
+@@ -557,7 +568,9 @@
+  for(unsigned t=0;t<NTRK;t++){
+      wire.prog[t]=snd->prog[t]; wire.edited[t]=snd->edited[t]; wire.p[t]=patch_pack(&snd->p[t]);
+  }
+- return slot_save(n,p,bytes,&wire,sizeof wire);
++ if (slot_save(n,p,bytes,&wire,sizeof wire)) return -1;
++ for(unsigned t=0;t<NTRK;t++) fm_write(FM_PATTERNS,n*NTRK+t,&wire.p[t],&snd->p[t].fm);
++ return 0;
+ }
+ static void pat_fetch(uint32_t n, pattern_t *p)   /* manual recall restores steps AND sounds from the saved slot */
+ {
+@@ -2698,6 +2711,7 @@
+                 memset(&psect[n], 0, sizeof psect[n]);
+                 psect[n].tag = PS_TAG;
+             }
++        for (n=0; n<NPSECT; n++) fm_program_bank(n,0);
+         set.version = 0;
+         if (settings_load(&set, sizeof set) || set.version != SET_VERSION) {
+             static set_v2_t old __attribute__((section(".pool")));
+@@ -3220,7 +3234,7 @@
+         if ((set_dirty || ps_dirty) && (!OBV_MANUAL_STORAGE||manual_store_request) && !ctl_seq_run && engine_quiet() && fm1_ms - set_t > 2000u) {   /* when silent: an erase stalls the sound */
+             uint32_t i, bad=0;
+             for(i=0;i<NPSECT;i++)if(ps_dirty>>i&1u){
+-                if(psect_save(i,&psect[i],sizeof psect[i]))bad=1;else ps_dirty&=~(1u<<i);
++                if(psect_save(i,&psect[i],sizeof psect[i]))bad=1;else { fm_program_bank(i,1); ps_dirty&=~(1u<<i); }
+             }
+ #if BOARD_SMK37
+             if(set_dirty)smk_boot_volume_capture();
+--- a/firmware/src/obv_perf.h
++++ b/firmware/src/obv_perf.h
+@@ -13,6 +13,7 @@
+ static uint8_t pf_role[16], pf_fired[8], pf_target[8], pf_active[NTRK];
+ static uint32_t pf_down[8], pf_flash[16], pf_bank_t, pf_bank_down, pf_bank_held;
+ static pf_slot_t pf_capture[8];
++static fm_patch_t fm_capture[8], fm_favourites[8];
+ static void trk_select(uint32_t t);
+ static uint16_t smk_dim(uint16_t c, uint32_t k);
+ static void pf_redraw(void);
+@@ -206,21 +207,25 @@
+         if(!pf_store.last_send[0][t])pf_store.last_send[0][t]=set.mix_dly[t]?set.mix_dly[t]:127;
+         if(!pf_store.last_send[1][t])pf_store.last_send[1][t]=set.mix_rev[t]?set.mix_rev[t]:127;
+     }
++    for(unsigned i=0;i<8;i++) fm_favourites[i]=fm_read(FM_FAV_A+pf_saved_bank,i,&pf_store.slot[i].patch);
+     pf_dirty=0;pf_manual_write=0;pf_manual_seq=0;
+ }
+ static void pf_save_poll(void) {
+     if((OBV_MANUAL_STORAGE&&!pf_manual_write)||!pf_dirty||ctl_seq_run||!engine_quiet()||fm1_ms-pf_t<2000u)return;
+     uint32_t next=pf_saved_bank^1u;pf_store.generation++;
+-    if(perf_store_save(next,&pf_store,sizeof pf_store)==0){pf_saved_bank=next;pf_dirty=pf_pending=pf_manual_write=0;say("FAVOURITES SAVED");}
++    if(perf_store_save(next,&pf_store,sizeof pf_store)==0){
++        for(unsigned i=0;i<8;i++) fm_write(FM_FAV_A+next,i,&pf_store.slot[i].patch,&fm_favourites[i]);
++        pf_saved_bank=next;pf_dirty=pf_pending=pf_manual_write=0;say("FAVOURITES SAVED");}
+     else{pf_store.generation--;pf_t=fm1_ms;say("FAV SAVE RETRY");}
+ }
+ static void pf_snapshot(pf_slot_t *v,uint32_t t) {
++    fm_capture[v-pf_capture]=live_p[t].fm;
+     v->patch=patch_pack(&live_p[t]);v->prog=(uint8_t)trk_prog[t];v->edited=(uint8_t)trk_edited[t];
+     v->cho=set.mix_cho[t];v->dly=set.mix_dly[t];v->rev=set.mix_rev[t];v->colour=(uint8_t)t;
+ }
+ static void pf_recall(uint32_t i,uint32_t t) {
+     if(!(pf_store.used>>i&1u)){pf_message("FAV EMPTY ",i+1u);return;}
+-    const pf_slot_t *v=&pf_store.slot[i];patch_t p=patch_unpack(&v->patch);
++    const pf_slot_t *v=&pf_store.slot[i];patch_t p=patch_unpack(&v->patch); p.fm=fm_favourites[i];
+     if(!t)fx_keep(&p); /* preserve shared FX and their tails */
+     smk_controls_epoch++;
+     live_p[t]=p;trk_prog[t]=v->prog;trk_edited[t]=v->edited;set.tprog[t]=v->prog;
+@@ -242,6 +247,7 @@
+     say(effect?(send[t]?"REVERB SEND ON":"REVERB SEND OFF"):(send[t]?"DELAY SEND ON":"DELAY SEND OFF"));
+ }
+ static void pf_commit(uint32_t i) {
++    fm_favourites[i]=fm_capture[i];
+     pf_store.slot[i]=pf_capture[i];pf_store.used|=1u<<i;pf_fired[i]=1;pf_active[pf_target[i]]=(uint8_t)i;
+     pf_manual_write=1;
+     pf_flash[i+8u]=fm1_ms+300u;pf_pending|=1u<<i;pf_changed();pf_message("FAV CAPTURED ",i+1u);
+@@ -320,6 +326,7 @@
+ }
+ static uint32_t pf_matches(uint32_t i,uint32_t t) {
+     const pf_slot_t *v=&pf_store.slot[i];
++    if(memcmp(&fm_favourites[i],&live_p[t].fm,sizeof(fm_patch_t))) return 0;
+     patch_t stored=patch_unpack(&v->patch);
+     if(live_p[t].v[OBV_ENGINE_TAG_AT]==OSC_TAIL_TAG || stored.v[OBV_ENGINE_TAG_AT]==OSC_TAIL_TAG)
+         if(memcmp(live_p[t].v+OBV_ENGINE_TAG_AT,stored.v+OBV_ENGINE_TAG_AT,PATCH_BYTES-OBV_ENGINE_TAG_AT) ||
+--- a/firmware/src/obv_engine.h
++++ b/firmware/src/obv_engine.h
+@@ -63,6 +63,7 @@
+ typedef struct {
+     osc_t o1, o2, extra_osc[2];
+     uint32_t extra_inc[2];
++    int32_t fm_pitch8;
+     int32_t guard_l,guard_r;
+     uint32_t guard_in;
+     uint32_t noise;
+@@ -256,12 +257,14 @@
+     v->gr = PAN_Q12[pos];
+ }
+
++#include "fm-voice.h"
++
+ /* EM2: hard ceiling counts rendered SUPER cards, including release/DUAL/UNISON. */
+ #define SUPER_LIMIT 5u
+ #define STEAL_FADE 64u
+ static int32_t guard_tail[NPART][2];
+ static unsigned guard_left[NPART];
+-static unsigned super_part(unsigned p){return obv_patch_engine(pt[p].p)==OBV_ANALOG && pt[p].p->v[P_O1_WAVE]==W_SUPER;}
++static unsigned super_part(unsigned p){return pt[p].p->v[P_O1_WAVE]==W_SUPER && obv_patch_engine(pt[p].p)==OBV_ANALOG && (!pt[p].p->fm.bytes[0] || pt[p].p->fm.bytes[3]);}
+ static unsigned super_voice(unsigned v){return (vc[v].gate||vc[v].ae.stage!=E_IDLE)&&super_part(vc[v].part);}
+ static unsigned super_count(void){unsigned n=0;for(unsigned v=0;v<NV;v++)n+=super_voice(v);return n;}
+ static unsigned super_victim(void){unsigned pick=NV;for(unsigned v=0;v<NV;v++)if(super_voice(v)){
+@@ -284,6 +287,7 @@
+     v->note = (uint8_t)note;
+     v->vel = (uint8_t)vel;
+     v->gate = 1;
++    fm_voices[v-vc].started=0;
+     v->seq = ++vseq;
+     v->det8 = det8;
+     v->target16 = (int32_t)note << 16;
+@@ -884,6 +888,7 @@
+     g->morph_q = pv[P_FMORPH];                  /* SEM: 0 LP, 64 notch, 127 HP */
+     g->sync_on = pv[P_SYNC];
+     d = pv[P_XMOD]; g->xmod_q = (uint32_t)((d * d) >> 7);
++    if(g->p->fm.bytes[0]) fm_prepare(g-pt,&g->p->fm);
+     g->glide_k = GLIDE_K[pv[P_GLIDE]];
+ }
+
+@@ -940,6 +945,7 @@
+     else if (g == &pt[ctl_wheel_part % NPART]) p8 += (lfo * ctl_vib) >> 15;                /* the SMK-37's mod wheel: pitch only, gentle */
+ #endif
+     lfo_to = (lfo * g->lfo_pd * 24) >> 15;
++    v->fm_pitch8 = p8;
+     p1 = p8 + (pv[P_LFO_PITCH_TO] != TO_O2 ? lfo_to : 0);
+     p2 = p8 + (pv[P_LFO_PITCH_TO] != TO_O1 ? lfo_to : 0) + ((int32_t)pv[P_O2_SEMI] - 24) * 256 + g->det_fine8
+        + ((fenv * g->env_o2 * 97) >> 15);
+@@ -975,7 +981,14 @@
+
+ /* ---- the samples of one voice: oscillators -> mix -> drive -> filter -> amp -> pan */
+ #include "analog-waveforms.h"
+-static inline __attribute__((always_inline)) void voice_render_bank(voice_t *v, int32_t *out, int extended, const int32_t *extra_mix)
++static inline void voice_mix_sample(voice_t *v, int32_t y, int32_t *out)
++{
++        if(v->guard_in){y=(int32_t)((int64_t)y*(STEAL_FADE-v->guard_in)/STEAL_FADE);v->guard_in--;}
++        v->guard_l=(y*v->gl)>>12;v->guard_r=(y*v->gr)>>12;
++        out[0]+=v->guard_l;out[1]+=v->guard_r;
++}
++
++static inline __attribute__((always_inline)) void voice_render_bank(voice_t *v, int32_t *out, int extended, const int32_t *extra_mix, const int32_t *fm_mix)
+ {
+     uint32_t i, inc1 = v->inc1, inc2 = v->inc2, pw1 = v->pw1, pw2 = v->pw2, d1 = inc1 >> 15, d2 = inc2 >> 15;
+     int32_t amp0 = v->amp0, da = v->amp1 - v->amp0, gl = v->gl, gr = v->gr, o2n = v->o2.prev;
+@@ -1026,9 +1039,8 @@
+         y = clampi(y, -65000, 65000);
+         amp = amp0 + ((da * (int32_t)i) >> 4);
+         y = (y * amp) >> 16;
+-        if(v->guard_in){y=(int32_t)((int64_t)y*(STEAL_FADE-v->guard_in)/STEAL_FADE);v->guard_in--;}
+-        v->guard_l=(y*gl)>>12;v->guard_r=(y*gr)>>12;
+-        out[2u*i]+=v->guard_l;out[2u*i+1]+=v->guard_r;
++        if(fm_mix) y = (y * g->p->fm.bytes[3]) / 127 + fm_mix[i];
++        voice_mix_sample(v,y,out+2u*i);
+     }
+     (void)o2n;
+ }
+@@ -1036,8 +1048,26 @@
+ static void voice_render(voice_t *v, int32_t *out)
+ {
+     const part_t *g = &pt[v->part];
++    int32_t fm_samples[CTL] = {0};
++    int32_t *fm_mix = 0;
++    if (g->p->fm.bytes[0]) {
++        const uint8_t *levels = g->p->fm.bytes;
++        if (levels[4]) {
++            int sounding = fm_audio(v,v->fm_pitch8,fm_samples);
++            if (!v->gate && sounding && v->ae.stage==E_IDLE) v->ae.stage=E_REL;
++            int gain = (g->gain_q12 * levels[4]) / 127;
++            if (v->key_combined && !v->seq_owned) gain = gain * (int)keyboard_voice_gain(v) / 100;
++            for(unsigned i=0; i<CTL; i++) fm_samples[i]=(fm_samples[i]*gain)>>12;
++        } else fm_voices[v-vc].started=0;
++        if (!levels[3]) {
++            for(unsigned i=0;i<CTL;i++) voice_mix_sample(v,fm_samples[i],out+2*i);
++            if (!v->gate && (!levels[4] || !fm_voices[v-vc].fade)) v->ae.stage=E_IDLE;
++            return;
++        }
++        if (levels[3]!=127 || levels[4]) fm_mix=fm_samples;
++    } else fm_voices[v-vc].started=0;
+     if (!g->extended) {
+-        voice_render_bank(v, out, 0, 0);
++        voice_render_bank(v, out, 0, 0, fm_mix);
+         return;
+     }
+     int32_t extra_mix[CTL] = {0};
+@@ -1045,8 +1075,8 @@
+         if (g->extra_wave[osc])
+             extra_render(&v->extra_osc[osc], v->extra_inc[osc], g->extra_gain[osc], g->extra_wave[osc], pw_mod(g->extra_pw[osc], 0), extra_mix);
+     }
+-    if (g->w1 >= O_TRI || g->w2 >= O_TRI) voice_render_bank(v, out, 1, extra_mix);
+-    else voice_render_bank(v, out, 0, extra_mix);
++    if (g->w1 >= O_TRI || g->w2 >= O_TRI) voice_render_bank(v, out, 1, extra_mix, fm_mix);
++    else voice_render_bank(v, out, 0, extra_mix, fm_mix);
+ }
+
+ #include "obv_drums.h"

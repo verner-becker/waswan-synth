@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action,Panel,RotaryKnob} from './ui-primitives.js';
+import {FmEditor} from './ui-fm-editor.js';
 const GROUPS=[['Oscillators',[0,1,2,4,5,6,7,11,63,70,64,65,69,66,72,67,68,71,3,8,9,10]],['Filter',[12,13,14,15,16,17,18,19,51]],
   ['Envelopes',[20,21,22,23,24,25,26,27]],['Modulation',[28,29,30,31,32,33,34,35,36,37,46]],
   ['Voice',[38,39,40,41,42,43,44,45]],['Arpeggiator',[47,48,49,50]],['Shared effects',[52,53,54,55,56,57,58,59,60,61,62]]];
@@ -45,12 +46,24 @@ export class ToneEditor {
     this.node=Panel('Tone Editor','ANALOG');this.node.classList.add('ww-tone-editor');
     this.heading=el('p','','Start audio to inspect the selected tone.');
     this.save=action('Save',()=>this.openSave(false),'ww-primary');this.saveAs=action('Save as…',()=>this.openSave(true));this.save.disabled=this.saveAs.disabled=true;
-    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.save,this.saveAs);this.node.append(bar);
+    this.source='Analog';
+    const editFm=(field,value)=>{if(this.frame?.editor?.available)this.send({t:'fm-set',scope:this.frame.instrument.scope,field,value});};
+    this.fm=new FmEditor(editFm);
+    this.sources=el('div','ww-fm-sources');
+    this.analogSource=action('Analog',()=>{
+      if(this.frame?.fm?.bytes[3]===0)editFm(3,127);
+      this.selectSource('Analog');
+    });
+    this.fmSource=action('+ Add FM',()=>{if(!this.frame.fm)editFm(0,1);else this.selectSource('FM');});
+    this.mixSource=action('Mix',()=>this.selectSource('Mix'));
+    this.sources.append(this.analogSource,this.fmSource,this.mixSource);
+    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.sources,this.save,this.saveAs);this.node.append(bar);
     this.status=el('p','ww-muted');this.status.setAttribute('role','status');this.node.append(this.status);
     this.unavailable=el('p','ww-muted');this.node.append(this.unavailable);
     this.nav=el('nav','ww-editor-tabs');this.nav.setAttribute('aria-label','Tone parameter groups');this.node.append(this.nav);
     this.hint=el('p','ww-muted','Drag knobs vertically · Shift for fine adjustment · arrow keys for one step');this.hint.id='ww-tones-help';this.node.append(this.hint);
-    this.content=el('div');this.node.append(this.content);
+    this.content=el('div');this.node.append(this.content,this.fm.node,this.fm.mix);
+    this.sources.hidden=this.fm.node.hidden=this.fm.mix.hidden=true;
     this.dialog=el('dialog','ww-map-dialog ww-editor-save');this.dialog.setAttribute('aria-labelledby','ww-editor-save-title');
     this.form=el('form');const title=el('h2','','Save tone');title.id='ww-editor-save-title';
     const nameLabel=el('label','','Tone name');this.name=el('input');this.name.name='toneName';this.name.required=true;this.name.maxLength=10;this.name.pattern='(?:[ A-Z0-9]|-){1,10}';this.name.setAttribute('aria-label','Tone name');this.name.autocomplete='off';this.name.oninput=()=>{this.name.value=this.name.value.toUpperCase();this.refreshReview();};nameLabel.append(this.name);
@@ -108,6 +121,16 @@ export class ToneEditor {
     this.selectGroup(this.selectedGroup??GROUPS[0][0]);
   }
   selectGroup(group){this.selectedGroup=group;this.node.classList.toggle('ww-osc-editing',group==='Oscillators');for(const g of this.groups){g.panel.hidden=g.group!==group;g.button.setAttribute('aria-pressed',String(g.group===group));}this.onGroupChange(group);}
+  selectSource(source){
+    this.source=source;
+    const analog=this.frame?.engines[this.frame.track]===0;
+    this.content.hidden=this.nav.hidden=this.hint.hidden=!analog||source!=='Analog';
+    this.fm.node.hidden=!analog||source!=='FM';
+    this.fm.mix.hidden=!analog||source!=='Mix';
+    this.node.classList.toggle('ww-osc-editing',source!=='Analog'||this.selectedGroup==='Oscillators');
+    for(const [name,b] of [['Analog',this.analogSource],['FM',this.fmSource],['Mix',this.mixSource]])
+      b.setAttribute('aria-pressed',String(name===source));
+  }
   set(id,value){if(this.frame?.editor?.available)this.send({t:'editor-set',id,value,scope:this.frame.instrument.scope});}
   openSave(as){
     const f=this.frame;if(!f?.editor?.available)return;
@@ -144,7 +167,16 @@ export class ToneEditor {
     this.heading.textContent=`Part ${'ABCD'[f.track]} · Program ${f.programs[f.track]} · ${f.instrument.name}${f.instrument.edited?' · Edited':''}`;
     this.save.disabled=this.saveAs.disabled=!available;
     this.unavailable.textContent=!analog?'DRUM-X uses different parameter meanings. Edit this engine in Instrument setup.':!running?'Start audio to edit.':!available?'Editor temporarily unavailable during an instrument dialog, save or context change.':'';
-    this.content.hidden=this.nav.hidden=this.hint.hidden=!analog;
+    this.sources.hidden=!analog||f.fm===undefined;
+    this.analogSource.hidden=this.mixSource.hidden=!f.fm;
+    this.analogSource.textContent=f.fm?.bytes[3]===0?'+ Add Analog':'Analog';
+    this.analogSource.disabled=f.fm?.bytes[3]===0&&!available;
+    this.fmSource.textContent=f.fm?'FM':'+ Add FM';this.fmSource.disabled=!available&&!f.fm;
+    const scope=f.instrument.scope,added=!!f.fm&&!this.hadFm&&scope===this.sourceScope;
+    if(scope!==this.sourceScope||!f.fm||added)this.source=f.fm&&(added||f.fm.bytes[3]===0)?'FM':'Analog';
+    this.hadFm=!!f.fm;this.sourceScope=scope;
+    this.selectSource(this.source);
+    this.fm.update(f.fm,available);
     for(const p of this.catalog??[]){const v=f.editor.values[p.id];const bypass=f.editor.values[0].value===4&&[8,9].includes(p.id);
       const width=WIDTH_CONTROLS[p.id];
       const widthInactive=width && !width.waves.includes(f.editor.values[width.selector].value);

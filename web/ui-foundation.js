@@ -65,6 +65,7 @@ class Foundation {
     });
     const credits=el('div','ww-credits');credits.append(el('span','','Based on SMKSYNTH · OberVave / zvenson and contributors · DRUM-X / JIANT · '));
     const license=el('a','','GPL-3.0');license.href='../LICENSE.txt';credits.append(license);
+    const fmCredit=el('a','','FM / sloopDX');fmCredit.href='./vendor/sloopdx/NOTICE.md';credits.append(el('span','',' · '),fmCredit);
     const lame=el('a','','LAME / lamejs'),source=el('a','','source & license');lame.href='https://lame.sourceforge.net/';source.href='./vendor/lamejs/index.html';credits.append(el('span','',' · MP3: '),lame,el('span','',' · '),source);this.shell.append(credits);
     const previous=this.bridge.midi.profile.onChange;
     this.bridge.midi.onInputStateChange=()=>this.daw.refreshRecordingSummary();
@@ -331,7 +332,7 @@ class Foundation {
     const held=gate.filter(v=>v.part===part&&!v.sequenced).map(v=>v.note),chord=chordLabel(held);
     this.chord.textContent=m.engines[part]===2?'DRUM-X':chord.name;this.notes.textContent=m.engines[part]===2?'Chord view applies to ANALOG voices.':chord.notes;
     this.voiceState.textContent=`${gate.length} gated · ${active.length-gate.length} release · sustain included`;
-    this.performanceState.textContent=`Part ${'ABCD'[part]} · ${m.engines[part]===2?'DRUM-X':'ANALOG'}`;
+    this.performanceState.textContent=`Part ${'ABCD'[part]} · ${m.engines[part]===2?'DRUM-X':m.fm?(m.fm.bytes[3]?'ANALOG + FM':'FM'):'ANALOG'}`;
     this.patternState.textContent=`Pattern ${m.pattern} · ${f?.playing?'playing':'stopped'}${m.patternQueue?' · queued '+m.patternQueue:''}${m.patternPending?' · save pending':''}`;
     this.sustain.textContent=`Sustain MIDI · ${poly.midiSustain?'on':'off'}`;this.sustain.setAttribute('aria-pressed',String(poly.midiSustain));this.sustain.disabled=m.midiMode;this.transport.disabled=m.midiMode;
     this.updateBadges();

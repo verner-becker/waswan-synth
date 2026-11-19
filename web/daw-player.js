@@ -46,7 +46,7 @@ export class DawPlayer {
   synchronize(controller,changes){
     const project=controller.snapshot();if(this.projectId!==project.id)return 0;const commands=[];
     for(const change of changes){const id=[...this.slots].find(([,part])=>part===change.part)?.[0],track=project.tracks.find(t=>t.id===id),bound=this.boundPatches.get(id);if(!track?.instrument||!bound)continue;
-      const followsLive=track.instrument.patch.every((v,i)=>v===bound[i]),changed=change.patch.some((v,i)=>v!==bound[i]);this.boundPatches.set(id,[...change.patch]);
+      const followsLive=track.instrument.patch.length===bound.length&&track.instrument.patch.every((v,i)=>v===bound[i]),changed=change.patch.length!==bound.length||change.patch.some((v,i)=>v!==bound[i]);this.boundPatches.set(id,[...change.patch]);
       if(followsLive&&changed){const patch=change.patch,type=patch[74]===79&&patch[78]===2?'drumx':patch[0]===4?'super':'analog';commands.push({type:'track.update',payload:{id,changes:{instrument:{type,patch:[...patch]}}}});}
     }
     if(commands.length)controller.command('batch',{commands},{mergeKey:'live-timbres:'+project.id});return commands.length;
