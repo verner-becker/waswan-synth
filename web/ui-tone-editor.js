@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action,Panel,RotaryKnob} from './ui-primitives.js';
-const GROUPS=[['Oscillators',[0,1,2,3,4,5,6,7,8,9,10,11]],['Filter',[12,13,14,15,16,17,18,19,51]],
+const GROUPS=[['Oscillators',[0,1,2,4,5,6,7,11,63,64,65,66,67,68,3,8,9,10]],['Filter',[12,13,14,15,16,17,18,19,51]],
   ['Envelopes',[20,21,22,23,24,25,26,27]],['Modulation',[28,29,30,31,32,33,34,35,36,37,46]],
   ['Voice',[38,39,40,41,42,43,44,45]],['Arpeggiator',[47,48,49,50]],['Shared effects',[52,53,54,55,56,57,58,59,60,61,62]]];
+const OSC_SECTIONS = new Map([[0,'Oscillator 1'],[4,'Oscillator 2'],[63,'Oscillator 3'],[66,'Oscillator 4'],[3,'Noise and cross-modulation']]);
 const LABELS={0:'OSC1 wave',1:'OSC1 pulse width / detune',2:'OSC1 level',3:'Noise level',4:'OSC2 wave',5:'OSC2 pulse width',6:'OSC2 level',7:'OSC2 semitones',8:'OSC1 → OSC2 sync',9:'OSC2 → OSC1 FM',10:'Filter env → OSC2 pitch',11:'OSC2 fine',14:'Filter envelope amount',18:'Velocity → filter',19:'Velocity → amp',
   20:'Filter attack',21:'Filter decay',22:'Filter sustain',23:'Filter release',24:'Amp attack',25:'Amp decay',26:'Amp sustain',27:'Amp release',
   32:'LFO → pitch',33:'LFO → PWM',34:'LFO → filter',35:'LFO → amp',36:'LFO pitch destination',37:'LFO PWM destination',39:'Unison voices',40:'Unison / dual detune',44:'Bend range',46:'Mod depth (legacy)',
@@ -10,7 +11,7 @@ const LABELS={0:'OSC1 wave',1:'OSC1 pulse width / detune',2:'OSC1 level',3:'Nois
 export class ToneEditor {
   constructor(send,onGroupChange){
     this.send=send;this.onGroupChange=onGroupChange;this.request=0;this.controls=new Map();this.groups=[];
-    this.node=Panel('Tone Editor','ANALOG · original parameters');this.node.classList.add('ww-tone-editor');
+    this.node=Panel('Tone Editor','ANALOG');this.node.classList.add('ww-tone-editor');
     this.heading=el('p','','Start audio to inspect the selected tone.');
     this.save=action('Save',()=>this.openSave(false),'ww-primary');this.saveAs=action('Save as…',()=>this.openSave(true));this.save.disabled=this.saveAs.disabled=true;
     const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.save,this.saveAs);this.node.append(bar);
@@ -34,20 +35,26 @@ export class ToneEditor {
     for(const [group,ids] of GROUPS){
       const panel=el('section','ww-editor-group');panel.hidden=this.groups.length>0;const button=action(group,()=>this.selectGroup(group));button.dataset.group=group;button.setAttribute('aria-pressed',String(!this.groups.length));this.nav.append(button);panel.append(el('h3','',group));
       if(group==='Shared effects')panel.append(el('p','ww-muted','These returns are shared by all Synth parts. Use Performance for part levels and the chorus, delay and reverb sends.'));
-      if(group==='Oscillators')panel.append(el('p','ww-muted','X-MOD is linear FM: OSC2 → OSC1. SUPER uses seven saws in OSC1, with a shared five-voice limit; sync/FM are bypassed. Adjust SUPER mix in Instrument setup.'));
-      const grid=el('div','ww-editor-grid');panel.append(grid);
+      if(group==='Oscillators')panel.append(el('p','ww-muted','Choose a wave to enable OSC3 or OSC4. OFF skips that oscillator. X-MOD is linear FM: OSC2 → OSC1. SUPER uses seven saws in OSC1, with a shared five-voice limit; sync/FM are bypassed. Adjust SUPER mix in Instrument setup.'));
+      let grid=el('div','ww-editor-grid');if(group!=='Oscillators')panel.append(grid);
       for(const id of ids){
         const p=catalog.find(p=>p.id===id);if(!p)continue;const label=LABELS[id]??p.name;
+        if(group==='Oscillators' && OSC_SECTIONS.has(id)){
+          grid=el('div','ww-editor-grid');
+          panel.append(el('h4','',OSC_SECTIONS.get(id)),grid);
+        }
         let control;
         if(p.options){
           const node=el('label','ww-editor-choice');node.append(el('span','ww-control-name',label));const input=el('select');input.setAttribute('aria-label',label);
-          p.options.forEach((name,value)=>input.add(new Option(name,String(value))));input.onchange=()=>this.set(id,Number(input.value));node.append(input);
+          p.options.forEach((name,value)=>{if(name)input.add(new Option(name,String(value)));});input.onchange=()=>this.set(id,Number(input.value));node.append(input);
           control={node,update:(s,display)=>{input.disabled=!s.available;input.value=String(s.value);input.title=display;}};
         }else{
-          control=RotaryKnob({name:label,min:p.min,max:p.max,onInput:value=>this.set(id,value)});control.badge.hidden=true;control.dial.setAttribute('aria-describedby',this.hint.id);
-          const input=el('input','ww-editor-number');input.type='number';input.min=p.min;input.max=p.max;input.step=1;input.setAttribute('aria-label',`${label} internal value`);
-          input.onchange=()=>{if(input.checkValidity())this.set(id,Number(input.value));};control.node.append(input);const original=control.update;
-          control.update=(s,display,secondary)=>{original(s,display,secondary);input.disabled=!s.available;if(document.activeElement!==input)input.value=String(s.value);};
+          const tuning=id===65||id===68;
+          const center=tuning?15:0, min=p.min-center, max=p.max-center;
+          control=RotaryKnob({name:label,min,max,onInput:value=>this.set(id,value+center)});control.badge.hidden=true;control.dial.setAttribute('aria-describedby',this.hint.id);
+          const input=el('input','ww-editor-number');input.type='number';input.min=min;input.max=max;input.step=1;input.setAttribute('aria-label',`${label} internal value`);
+          input.onchange=()=>{if(input.checkValidity())this.set(id,Number(input.value)+center);};control.node.append(input);const original=control.update;
+          control.update=(s,display,secondary)=>{original({...s,min,max,value:s.value-center},display,tuning?'Semitones':secondary);input.disabled=!s.available;if(document.activeElement!==input)input.value=String(s.value-center);};
         }
         control.node.dataset.param=id;this.controls.set(id,control);grid.append(control.node);
       }
@@ -94,7 +101,8 @@ export class ToneEditor {
     this.unavailable.textContent=!analog?'DRUM-X uses different parameter meanings. Edit this engine in Instrument setup.':!running?'Start audio to edit.':!available?'Editor temporarily unavailable during an instrument dialog, save or context change.':'';
     this.content.hidden=this.nav.hidden=this.hint.hidden=!analog;
     for(const p of this.catalog??[]){const v=f.editor.values[p.id];const bypass=f.editor.values[0].value===4&&[8,9].includes(p.id);
-      this.controls.get(p.id)?.update({value:v.value,min:p.min,max:p.max,available:available&&!bypass},v.display,`${v.value} / ${p.max} · ${bypass?'Bypassed in SUPER':p.shared?'Shared FX':'Internal steps'}`);
+      const fixedShape=(p.id===1&&f.editor.values[0].value>=5)||(p.id===5&&f.editor.values[4].value>=5);
+      this.controls.get(p.id)?.update({value:v.value,min:p.min,max:p.max,available:available&&!bypass&&!fixedShape},v.display,`${v.value} / ${p.max} · ${bypass?'Bypassed in SUPER':fixedShape?'Fixed shape':p.shared?'Shared FX':'Internal steps'}`);
     }
     if(f.editor?.edit?.applied===false&&!this.pending)this.status.textContent='Edit not applied: context changed or value unavailable. Try again.';
     this.updateStatus();

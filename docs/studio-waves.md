@@ -118,3 +118,7 @@ Importar PCM16 WAV 44,1 kHz, quatro fontes/120 segundos, até 32 regiões, corte
 ## Continuidade — revisão de UX do SEQ
 
 Após as ondas, o usuário solicitou pesquisa de DAWs e reforma do SEQ, New project completo e C3 na captura, com advisor Sol 6.1 high. Implementação na branch `feat/studio-seq-ux`, preservando a dependência `c6e3c67` sem integrar na main. [Pesquisa, capturas, decisões e fechamento](studio-seq-ux.md). O roteiro de uso foi atualizado para New project → Record MIDI → Stop → Save project.
+
+## Expansão do ANALOG
+
+O usuário autorizou um ciclo para quatro osciladores e formas adicionais, com preservação dos timbres anteriores. A implementação está na branch `feat/analog-four-oscillators`. [Plano, formato dos timbres e validação](analog-four-oscillators.md)

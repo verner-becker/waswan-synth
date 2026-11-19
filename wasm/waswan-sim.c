@@ -10,6 +10,9 @@
 static void waswan_daw_sample(uint32_t index, uint32_t position);
 #define WASWAN_DAW_SAMPLE waswan_daw_sample
 #include WASWAN_SIM_SOURCE
+#ifndef WASWAN_OSC_BANK
+#define analog_patch_max obv_param_max
+#endif
 
 /* Optional dry outputs. The bus is captured at the same position as the final
  * stereo block, before part mixer/FX/master; 131072 converts its Q17 scale.
@@ -69,7 +72,7 @@ static uint32_t daw_patch_valid(const patch_t *patch,uint32_t part) {
     if((engine!=OBV_ANALOG&&engine!=OBV_DRUMS)||(part>=NTRK&&engine!=OBV_ANALOG))return 0;
     for(uint32_t p=0;p<NPARAM;p++){
         if(engine==OBV_DRUMS){if(patch->v[p]>127u)return 0;}
-        else if(patch->v[p]>obv_param_max(patch,p)||((p==P_UNI_N||p==P_ARP_OCT)&&!patch->v[p]))return 0;
+        else if(patch->v[p]>analog_patch_max(patch,p)||((p==P_UNI_N||p==P_ARP_OCT)&&!patch->v[p]))return 0;
     }
     for(uint32_t p=NPARAM;p<NPARAM+PATCH_NAME;p++)if(patch->v[p]&&(patch->v[p]<32u||patch->v[p]>126u))return 0;
     return 1;
@@ -420,7 +423,29 @@ static uint32_t editor_idle(void) {
 EXPORT uint32_t waswan_editor_available(void) {
     return editor_idle() && obv_patch_engine(&live_p[seq_trk%NTRK])==OBV_ANALOG;
 }
+EXPORT uint32_t waswan_editor_count(void) {
+#ifdef WASWAN_OSC_BANK
+    return NPARAM + 2 * EXTRA_FIELDS;
+#else
+    return NPARAM;
+#endif
+}
+#ifdef WASWAN_OSC_BANK
+static const char *const extra_names[] = {"OSC3 wave", "OSC3 level", "OSC3 semitones",
+                                           "OSC4 wave", "OSC4 level", "OSC4 semitones"};
+static const unsigned extra_max[] = {7, 31, 30};
+#endif
 EXPORT uint32_t waswan_editor_meta(uint32_t p,uint32_t field) {
+#ifdef WASWAN_OSC_BANK
+    if (p >= NPARAM && p < waswan_editor_count()) {
+        unsigned index = p - NPARAM, kind = index % EXTRA_FIELDS;
+        if (field == 0) return (uintptr_t)extra_names[index];
+        if (field == 1) return extra_max[kind];
+        if (field == 3 && kind == EXTRA_WAVE) return K_WAVE;
+        return 0;
+    }
+    if ((p == P_O1_WAVE || p == P_O2_WAVE) && field == 1) return O_SINE;
+#endif
     if(p>=NPARAM)return 0;
     switch(field){
     case 0:return (uint32_t)(uintptr_t)PDEF[p].name;
@@ -431,9 +456,36 @@ EXPORT uint32_t waswan_editor_meta(uint32_t p,uint32_t field) {
     default:return 0;
     }
 }
-EXPORT uint32_t waswan_editor_value(uint32_t p) {return p<NPARAM?ed_patch(p)->v[p]:0;}
+EXPORT uint32_t waswan_editor_value(uint32_t p) {
+#ifdef WASWAN_OSC_BANK
+    if (p >= NPARAM && p < waswan_editor_count()) {
+        unsigned index = p - NPARAM;
+        return extra_field(ed_patch(0), index / EXTRA_FIELDS, index % EXTRA_FIELDS);
+    }
+    if (p == P_O2_WAVE && ed_patch(p)->v[p] == W_SUPER) return W_SAW;
+#endif
+    return p<NPARAM?ed_patch(p)->v[p]:0;
+}
 EXPORT uint32_t waswan_editor_format(uint32_t p,uint32_t value) {
     editor_text[0]=0;
+#ifdef WASWAN_OSC_BANK
+    if (p >= NPARAM && p < waswan_editor_count()) {
+        unsigned index = p - NPARAM, field = index % EXTRA_FIELDS;
+        if (value <= extra_max[field]) {
+            if (field == EXTRA_WAVE) {
+                unsigned wave = extra_waves[index / EXTRA_FIELDS][value];
+                scat(editor_text, wave < NWAVE ? WAVE_NAME[wave] : poly_wave_names[wave - O_TRI]);
+            } else if (field == EXTRA_TUNE && value < EXTRA_CENTER) {
+                editor_text[0] = '-';
+                fmt_u(editor_text + 1, EXTRA_CENTER - value);
+            } else fmt_u(editor_text, field == EXTRA_TUNE ? value - EXTRA_CENTER : value);
+        }
+        return (uintptr_t)editor_text;
+    }
+    if ((p == P_O1_WAVE || p == P_O2_WAVE) && value >= O_TRI && value <= O_SINE)
+        return (uintptr_t)poly_wave_names[value - O_TRI];
+    if (p == P_O2_WAVE && value == W_SUPER) return (uintptr_t)"";
+#endif
     if(p==P_LFO_RATE&&value<=127u){
         char t[8];uint32_t hz=LFO_HZ_X100[value];
         fmt_u(editor_text,hz/100u);scat(editor_text,".");if(hz%100u<10u)scat(editor_text,"0");
@@ -442,7 +494,26 @@ EXPORT uint32_t waswan_editor_format(uint32_t p,uint32_t value) {
     return (uint32_t)(uintptr_t)editor_text;
 }
 EXPORT uint32_t waswan_editor_set(uint32_t p,int32_t value,uint32_t scope) {
-    if(p>=NPARAM||!waswan_editor_available()||scope!=waswan_ui_scope()||value<0||
+    if (!waswan_editor_available() || scope != waswan_ui_scope() || value < 0) return 0;
+#ifdef WASWAN_OSC_BANK
+    if (p >= NPARAM && p < waswan_editor_count()) {
+        unsigned index = p - NPARAM, field = index % EXTRA_FIELDS;
+        if ((unsigned)value > extra_max[field]) return 0;
+        if ((unsigned)value == waswan_editor_value(p)) return 1;
+        extra_set(ed_patch(0), index / EXTRA_FIELDS, field, value);
+        trk_edited[seq_trk % NTRK] = dirty_hdr = dirty_page = dirty_tags = 1;
+        return 1;
+    }
+    if ((p == P_O1_WAVE || p == P_O2_WAVE) && value >= O_TRI && value <= O_SINE) {
+        if (ed_patch(p)->v[p] != value) {
+            ed_patch(p)->v[p] = value;
+            trk_edited[seq_trk % NTRK] = dirty_hdr = dirty_page = dirty_tags = 1;
+            auto_rec(p);
+        }
+        return 1;
+    }
+#endif
+    if(p>=NPARAM||
        value>(int32_t)obv_param_max(ed_patch(p),p)||
        ((p==P_UNI_N||p==P_ARP_OCT)&&value<1))return 0;
     if(live_p[seq_trk%NTRK].v[P_O1_WAVE]==W_SUPER&&(p==P_SYNC||p==P_XMOD))return 0;
@@ -532,7 +603,7 @@ EXPORT uint32_t waswan_studio_apply_patches(uint32_t token,uint32_t a,uint32_t b
         if(programs[part]>=NPROG||(engine!=OBV_ANALOG&&engine!=OBV_DRUMS))return 0;
         for(uint32_t p=0;p<NPARAM;p++){
             if(engine==OBV_DRUMS){if(patch->v[p]>127u)return 0;}
-            else if(patch->v[p]>obv_param_max(patch,p)||((p==P_UNI_N||p==P_ARP_OCT)&&!patch->v[p]))return 0;
+            else if(patch->v[p]>analog_patch_max(patch,p)||((p==P_UNI_N||p==P_ARP_OCT)&&!patch->v[p]))return 0;
         }
         for(uint32_t p=NPARAM;p<NPARAM+PATCH_NAME;p++)if(patch->v[p]&&(patch->v[p]<32u||patch->v[p]>126u))return 0;
     }

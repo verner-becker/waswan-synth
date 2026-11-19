@@ -78,7 +78,7 @@ export class Engine extends OriginalEngine {
       return;
     }
     if(message.t==='editor-set'){
-      if(Number.isInteger(message.id)&&message.id>=0&&message.id<this.ex.waswan_parameter_count()&&
+      if(Number.isInteger(message.id)&&message.id>=0&&message.id<(this.ex.waswan_editor_count?.() ?? this.ex.waswan_parameter_count())&&
          Number.isInteger(message.value)&&Number.isInteger(message.scope)&&message.scope>=0&&message.scope<=0xffffffff)
         this.editorEdit={id:message.id,applied:!!this.ex.waswan_editor_set?.(message.id,message.value,message.scope)};
       return;
@@ -133,7 +133,7 @@ export class Engine extends OriginalEngine {
     if(x.waswan_editor_meta){
       const string=ptr=>{const bytes=new Uint8Array(x.memory.buffer);let s='';for(let i=ptr;i<ptr+64&&bytes[i];i++)s+=String.fromCharCode(bytes[i]);return s;};
       if(!this.editorCatalog){
-        this.editorCatalog=Array.from({length:x.waswan_parameter_count()},(_,id)=>({id,name:string(x.waswan_editor_meta(id,0)),
+        this.editorCatalog=Array.from({length:x.waswan_editor_count?.() ?? x.waswan_parameter_count()},(_,id)=>({id,name:string(x.waswan_editor_meta(id,0)),
           max:x.waswan_editor_meta(id,1),min:x.waswan_editor_meta(id,2),kind:x.waswan_editor_meta(id,3),shared:!!x.waswan_editor_meta(id,4)}));
         for(const p of this.editorCatalog)if([2,3,4,5,6,7,8,9,10,18].includes(p.kind))
           p.options=Array.from({length:p.max+1},(_,v)=>string(x.waswan_editor_format(p.id,v)));

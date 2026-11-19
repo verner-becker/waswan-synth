@@ -1,0 +1,160 @@
+--- a/firmware/src/obv_engine_patch.h
++++ b/firmware/src/obv_engine_patch.h
+@@ -35,6 +35,8 @@
+ static int patch_keyboard_octave(const patch_t*p){unsigned v=p->v[PATCH_KBO_AT];return v>=0xD0u&&v<=0xD4u?(int)v-0xD2:0;}
+ static void patch_keyboard_octave_set(patch_t*p,int oct){p->v[PATCH_KBO_AT]=(uint8_t)(0xD2+(oct < -2 ? -2 : oct > 2 ? 2 : oct));}
+
++#include "analog-oscillators.h"
++
+ /* SS1 extension occupies only the ANALOG engine's six trailing bytes.
+  * NPARAM, name, octave, PATCH_BYTES and every MIDI CC retain their offsets.
+  * Unknown/absent extension -> MIX 64. DRUM-X keeps its OVE tag unchanged.
+@@ -47,6 +49,7 @@
+ }
+ static uint32_t patch_super_mix(const patch_t *p, uint32_t osc)
+ {
++    if (p->v[OBV_ENGINE_TAG_AT] == OSC_TAIL_TAG) return p->v[OBV_ENGINE_TAG_AT + 1 + (osc & 1)] & 127;
+     return patch_super_valid(p) ? p->v[OBV_ENGINE_TAG_AT+3u+(osc&1u)] : 64u;
+ }
+ static void patch_super_mix_set(patch_t *p, uint32_t osc, uint32_t value)
+@@ -55,6 +58,11 @@
+     uint8_t *t=p->v+OBV_ENGINE_TAG_AT;
+     if(obv_patch_engine(p)!=OBV_ANALOG)return;
+     value=value>127u?127u:value;
++    if (t[0] == OSC_TAIL_TAG) {
++        unsigned index = 1 + (osc & 1);
++        t[index] = (t[index] & 128) | value;
++        return;
++    }
+     if(osc&1u)b=(uint8_t)value;else a=(uint8_t)value;
+ #ifndef OBV_HOST
+     uint32_t irq=fm1__lock();
+--- a/firmware/src/obervave.c
++++ b/firmware/src/obervave.c
+@@ -957,7 +957,7 @@
+     switch (PDEF[p].kind) {
+     case K_BIP: if (v < 64u) { scat(s, "-"); fmt_u(t, 64u - v); } else { scat(s, v > 64u ? "+" : ""); fmt_u(t, v - 64u); } scat(s, t); break;
+     case K_ONOFF: scat(s, v ? "ON" : "OFF"); break;
+-    case K_WAVE: scat(s, WAVE_NAME[v < NWAVE ? v : W_OFF]); break;
++    case K_WAVE: scat(s, v >= O_TRI && v <= O_SINE ? poly_wave_short[v - O_TRI] : WAVE_NAME[v < NWAVE ? v : W_OFF]); break;
+     case K_FTYPE: scat(s, FTYPE_NAME[v % NFTYPE]); break;
+     case K_MODE: scat(s, MODE_NAME[v & 3u]); break;
+     case K_LSHAPE: scat(s, LSHAPE_NAME[v % 6u]); break;
+--- a/firmware/src/obv_perf.h
++++ b/firmware/src/obv_perf.h
+@@ -171,7 +171,7 @@
+     for(i=0;i<8;i++)if(s->used>>i&1u) {
+         const pf_slot_t *v=&s->slot[i];
+         if(v->prog>=NPROG||v->edited>1u||v->dly>127u||v->rev>127u||v->colour>=NTRK||v->cho>128u)return 0;
+-        for(p=0;p<NPARAM;p++)if(v->patch.v[p]>PDEF[p].max)return 0;
++        for(p=0;p<NPARAM;p++)if(v->patch.v[p]>PDEF[p].max && v->patch.v[p]>analog_patch_max(&v->patch,p))return 0;
+     }
+     return 1;
+ }
+--- a/firmware/src/obv_engine.h
++++ b/firmware/src/obv_engine.h
+@@ -61,7 +61,8 @@
+ typedef struct { uint32_t stage; int32_t level; } env_t;   /* level Q24 */
+
+ typedef struct {
+-    osc_t o1, o2;
++    osc_t o1, o2, extra_osc[2];
++    uint32_t extra_inc[2];
+     int32_t guard_l,guard_r;
+     uint32_t guard_in;
+     uint32_t noise;
+@@ -201,6 +202,8 @@
+     int32_t fenv_amt, keytrk, velflt, lfo_pd, lfo_fd, lfo_pwd, lfo_ad, wheel_q, bend8, env_o2, det_fine8;
+     int32_t lvl1, lvl2, lvln, drive_q12, reso_k, vint, sus_f, sus_a, gain_q12, morph_q;
+     int32_t cut_sm, reso_sm;                    /* CUTOFF and RESO slewed (Q8), ~25 ms: a CC sweep in semitone steps glides */
++    uint8_t extra_wave[2], extra_gain[2], extended;
++    int16_t extra_pitch[2];
+     uint32_t pw1_base, pw2_base, w1, w2, ftype, sync_on, xmod_q, glide_k;
+ } part_t;
+ static part_t pt[NPART] = {{&live_p[0], 0, 0, 0, 0, 60 << 16}, {&live_p[1], 0, 0, 0, 0, 60 << 16},
+@@ -863,6 +866,17 @@
+     g->pw2_base = ((uint32_t)pv[P_O2_PW] << 25) + (1u << 24);
+     g->w1 = pv[P_O1_WAVE];
+     g->w2 = pv[P_O2_WAVE]==W_SUPER?W_SAW:pv[P_O2_WAVE]; /* old OSC2 SUPER is read as SAW; stored bytes stay intact */
++    g->extended = g->w1 >= O_TRI || g->w2 >= O_TRI;
++    for (unsigned osc = 0; osc < 2; osc++) {
++        unsigned wave = extra_field(g->p, osc, EXTRA_WAVE);
++        g->extra_wave[osc] = extra_waves[osc][wave];
++        if (wave) {
++            unsigned level = extra_field(g->p, osc, EXTRA_LEVEL) * 127 / 31;
++            g->extra_gain[osc] = (level * level) >> 7;
++            g->extra_pitch[osc] = ((int)extra_field(g->p, osc, EXTRA_TUNE) - EXTRA_CENTER) * 256;
++            g->extended = 1;
++        }
++    }
+     g->ftype = pv[P_FTYPE];
+     g->morph_q = pv[P_FMORPH];                  /* SEM: 0 LP, 64 notch, 127 HP */
+     g->sync_on = pv[P_SYNC];
+@@ -926,6 +940,9 @@
+     p1 = p8 + (pv[P_LFO_PITCH_TO] != TO_O2 ? lfo_to : 0);
+     p2 = p8 + (pv[P_LFO_PITCH_TO] != TO_O1 ? lfo_to : 0) + ((int32_t)pv[P_O2_SEMI] - 24) * 256 + g->det_fine8
+        + ((fenv * g->env_o2 * 97) >> 15);
++    if (g->extended)
++        for (unsigned osc = 0; osc < 2; osc++)
++            if (g->extra_wave[osc]) v->extra_inc[osc] = pitch_inc(p8 + g->extra_pitch[osc]);
+     v->inc1 = pitch_inc(p1);
+     v->inc2 = pitch_inc(p2);
+     tmp = (lfo * g->lfo_pwd);
+@@ -954,7 +971,8 @@
+ static super_plain_state_t super_plain_state[NV];
+
+ /* ---- the samples of one voice: oscillators -> mix -> drive -> filter -> amp -> pan */
+-static void voice_render(voice_t *v, int32_t *out)
++#include "analog-waveforms.h"
++static inline __attribute__((always_inline)) void voice_render_bank(voice_t *v, int32_t *out, int extended, const int32_t *extra_mix)
+ {
+     uint32_t i, inc1 = v->inc1, inc2 = v->inc2, pw1 = v->pw1, pw2 = v->pw2, d1 = inc1 >> 15, d2 = inc2 >> 15;
+     int32_t amp0 = v->amp0, da = v->amp1 - v->amp0, gl = v->gl, gr = v->gr, o2n = v->o2.prev;
+@@ -982,12 +1000,13 @@
+             ie = m < (int32_t)(inc1 >> 4) ? inc1 >> 4 : (uint32_t)m;
+             d1 = ie >> 15;
+         }
+-        s1 = buffered1 ? (l1 ? super_buf[0][i] : 0) : osc_step(&v->o1, ie, d1, pw1, ww1, hw1, -1);
++        s1 = buffered1 ? (l1 ? super_buf[0][i] : 0) : extended ? analog_step(&v->o1, ie, d1, pw1, ww1, hw1, -1) : osc_step(&v->o1, ie, d1, pw1, ww1, hw1, -1);
+         if (sy && v->o1.ph < ie && d1)
+             rt = (int32_t)(v->o1.ph / d1);
+-        s2 = buffered2 ? (l2 ? super_buf[1][i] : 0) : osc_step(&v->o2, inc2, d2, pw2, ww2, hw2, rt);
++        s2 = buffered2 ? (l2 ? super_buf[1][i] : 0) : extended ? analog_step(&v->o2, inc2, d2, pw2, ww2, hw2, rt) : osc_step(&v->o2, inc2, d2, pw2, ww2, hw2, rt);
+         o2n = v->o2.prev;
+         mix = s1 * l1 + s2 * l2;
++        if (extra_mix) mix += extra_mix[i];
+         if (ln) mix += ((int32_t)(xorshift(&v->noise) >> 16) - 32768) * ln;
+         mix >>= 7;
+         if (drv) mix = softclip(((mix >> 3) * drv) >> 9);
+@@ -1009,6 +1028,22 @@
+         out[2u*i]+=v->guard_l;out[2u*i+1]+=v->guard_r;
+     }
+     (void)o2n;
++}
++
++static void voice_render(voice_t *v, int32_t *out)
++{
++    const part_t *g = &pt[v->part];
++    if (!g->extended) {
++        voice_render_bank(v, out, 0, 0);
++        return;
++    }
++    int32_t extra_mix[CTL] = {0};
++    for (unsigned osc = 0; osc < 2; osc++) {
++        if (g->extra_wave[osc])
++            extra_render(&v->extra_osc[osc], v->extra_inc[osc], g->extra_gain[osc], g->extra_wave[osc], extra_mix);
++    }
++    if (g->w1 >= O_TRI || g->w2 >= O_TRI) voice_render_bank(v, out, 1, extra_mix);
++    else voice_render_bank(v, out, 0, extra_mix);
+ }
+
+ #include "obv_drums.h"
+@@ -1207,6 +1242,8 @@
+         vc[v].noise = 0x12345678u * (v + 1u) + 0x9E3779B9u;
+         vc[v].o1.ph = xorshift(&vc[v].noise);  /* free-running oscillators start anywhere */
+         vc[v].o2.ph = xorshift(&vc[v].noise);
++        vc[v].extra_osc[0] = (osc_t){.ph = ~vc[v].o1.ph};
++        vc[v].extra_osc[1] = (osc_t){.ph = ~vc[v].o2.ph};
+         vc[v].gl = vc[v].gr = 2896;
+     }
+     for (v = 0; v < NPART; v++) {

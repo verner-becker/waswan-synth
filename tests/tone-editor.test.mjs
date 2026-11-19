@@ -10,11 +10,11 @@ const edit=(e,id,value,scope=e.frame().instrument.scope)=>{e.input({t:'editor-se
 const choose=(e,program)=>{const f=e.frame();e.input({t:'program-select',request:++request,program,scope:f.instrument.scope,token:f.instrument.programToken,discard:true});e.advance(150);};
 const save=(e,program,name,extra={})=>{const f=e.frame();e.input({t:'editor-save',request:++request,program,name,scope:f.instrument.scope,token:f.instrument.programToken,targetToken:f.editor.targets[program-1],...extra});return e.frame().editor.save;};
 const e=fixture(),first=e.frame(),catalog=first.editorCatalog;
-assert.equal(catalog.length,63);assert.equal(new Set(catalog.map(p=>p.id)).size,63);assert.equal(first.editor.targets.length,99);assert.equal(e.frame().editorCatalog,undefined);
+assert.equal(catalog.length,69);assert.equal(new Set(catalog.map(p=>p.id)).size,69);assert.equal(first.editor.targets.length,99);assert.equal(e.frame().editorCatalog,undefined);
 for(let part=0;part<4;part++){
   if(part){e.input({t:'enc',e:5,steps:1});e.advance(150);}choose(e,71);
   for(const p of catalog){
-    for(const value of [p.min,p.max]){assert(edit(e,p.id,value).applied,`part ${part} param ${p.id} value ${value}`);assert.equal(e.ex.sim_param(p.shared?0:part,p.id),value);}
+    for(const value of [p.min,p.max]){assert(edit(e,p.id,value).applied,`part ${part} param ${p.id} value ${value}`);assert.equal(p.id<63?e.ex.sim_param(p.shared?0:part,p.id):e.ex.waswan_editor_value(p.id),value);}
     if(p.id===0)edit(e,0,1); // avoid SUPER bypass while testing other oscillator parameters
   }
   const f=e.frame();assert.equal(f.track,part);assert(f.instrument.edited);
@@ -36,7 +36,7 @@ const stored=Buffer.from(s.store(true)),r=fixture(undefined,stored);choose(r,99)
 // Save overwrites the same slot, and clean parts using that slot track the original propagation rule.
 r.input({t:'enc',e:5,steps:1});r.advance(150);choose(r,99);edit(r,12,42);save(r,99,'TEST TONE');r.advance(15000);assert.equal(r.frame().editor.save.state,'written');assert.equal(r.ex.sim_param(0,12),42);assert.equal(r.ex.sim_param(1,12),42);
 r.input({t:'enc',e:5,steps:-1});r.advance(150);edit(r,12,43);r.input({t:'enc',e:5,steps:1});r.advance(150);edit(r,12,44);save(r,99,'TEST TONE');r.advance(15000);assert.equal(r.ex.sim_param(0,12),43,'edited peer part is preserved');
-const drum=fixture();drum.input({t:'drums',part:0,kit:0});drum.advance(200);const drumFirst=drum.frame();assert.equal(drumFirst.editorCatalog[4].options.length,4,'ANALOG catalog is stable when bootstrapped on DRUM-X');assert(!drumFirst.editor.available);assert.equal(edit(drum,12,40).applied,false);assert.equal(save(drum,99,'NO DRUM').applied,false);
+const drum=fixture();drum.input({t:'drums',part:0,kit:0});drum.advance(200);const drumFirst=drum.frame();assert.equal(drumFirst.editorCatalog[4].options.filter(Boolean).length,10,'ANALOG catalog is stable when bootstrapped on DRUM-X');assert(!drumFirst.editor.available);assert.equal(edit(drum,12,40).applied,false);assert.equal(save(drum,99,'NO DRUM').applied,false);
 // Snapshots/metadata alone do not alter audio or the stored session.
 const old=fixture(`${root}/before-256.wasm`),fresh=fixture();
 for(const a of [old,fresh]){a.input({t:'voice-mode',part:0,mode:0});for(const n of [48,52,55,59])a.input({t:'midi',st:0x90,d1:n,d2:100});}
@@ -48,5 +48,5 @@ let samples=0;for(let block=0;block<1000;block++){
   for(const channel of ['sim_out_l','sim_out_r']){assert.deepEqual(new Float32Array(old.ex.memory.buffer,old.ex[channel](),128),new Float32Array(fresh.ex.memory.buffer,fresh.ex[channel](),128));samples+=128;}
 }
 assert.deepEqual(fresh.store(true),old.store(true));
-const report={result:'PASS',parameters:63,parts:4,bounds:true,superBypass:true,staleGuards:true,saveAs:true,overwrite:true,cleanPeerPropagation:true,editedPeerPreserved:true,restore:true,drumBlocked:true,heldNoteAcrossSave:true,audioScalarSamples:samples,sessionUnchangedWithoutEdits:true};
+const report={result:'PASS',parameters:69,parts:4,bounds:true,superBypass:true,staleGuards:true,saveAs:true,overwrite:true,cleanPeerPropagation:true,editedPeerPreserved:true,restore:true,drumBlocked:true,heldNoteAcrossSave:true,audioScalarSamples:samples,sessionUnchangedWithoutEdits:true};
 fs.writeFileSync(`${root}/native.json`,JSON.stringify(report,null,2));console.log(report);
