@@ -57,7 +57,7 @@ export class DawWorkspace {
     this.dirty=el('span','ww-chip','New project');this.recoveryStatus=el('span','ww-muted','Recovery updates after edits');
     transport.prepend(this.play,this.stop,this.position);transport.append(this.dirty,this.recoveryStatus);
     const trackTools=el('div','ww-studio-actions');this.addMidi=button('Add MIDI track',async()=>{
-      const t=makeTrack('midi','Instrument '+(this.controller.snapshot().tracks.filter(t=>t.type==='midi').length+1));if(this.running){const sound=await this.player.currentTone(this.frame?.track||0);t.instrument={type:sound.type,patch:sound.patch};}
+      const t=makeTrack('midi','Instrument '+(this.controller.snapshot().tracks.filter(t=>t.type==='midi').length+1));if(this.running){const sound=await this.player.currentTone(this.frame?.track||0);t.instrument=sound;}
       this.controller.command('track.create',t);this.selected=t.id;this.refresh();
     });
     this.keyboard=action('Show Synth keyboard',()=>{
@@ -254,11 +254,18 @@ export class DawWorkspace {
     }
   }
   instrumentOptions(label){
-    return [new Option(label,''),...this.programs.map(program=>new Option(program.number+' · '+program.name,String(program.number-1))),
+    return [new Option(label,''),new Option('Mellotron · loaded banks','mellotron'),...this.programs.map(program=>new Option(program.number+' · '+program.name,String(program.number-1))),
       ...this.drumKits.map(kit=>new Option('DRUM-X · '+kit.name,'drum:'+kit.kit))];
   }
   async selectInstrument(id,value){
     if(value==='')return;
+    if(value==='mellotron'){
+      const tape=this.bridge.tapeSnapshot?.();
+      if(!tape)throw Error('Open Mellotron in Performance and load both banks first.');
+      const instrument=await this.player.tapeInstrument(tape);
+      this.controller.command('track.update',{id,changes:{instrument}});
+      return;
+    }
     const sound=value.startsWith('drum:')?await this.player.drumKit(Number(value.slice(5))):await this.player.tone(Number(value));
     if(sound.engine<0)throw Error('This sound is not supported');
     this.controller.command('track.update',{id,changes:{instrument:{type:sound.engine===2?'drumx':sound.patch[0]===4?'super':'analog',patch:sound.patch}}});

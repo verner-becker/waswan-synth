@@ -457,3 +457,10 @@
   .ww-topbar {gap:6px;}
   .ww-topbar .ww-preset {flex-basis:210px;}
 }
+
+.ww-tapes summary { cursor: pointer; font-weight: 650; }
+.ww-tapes fieldset { border: 0; padding: .5rem 0; margin: 0; min-width: 0; }
+.ww-tapes label { display: inline-grid; gap: .25rem; margin: .35rem .6rem .35rem 0; }
+.ww-tapes button { margin: .25rem; }
+.ww-tape-controls { display: grid; grid-template-columns: repeat(auto-fit,minmax(8rem,1fr)); }
+.ww-tape-controls input { min-width: 0; max-width: 8rem; }

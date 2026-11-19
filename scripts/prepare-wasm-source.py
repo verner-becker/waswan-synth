@@ -40,6 +40,9 @@ if args.mellotron_probe:
     probe = root / 'tests/mellotron-a'
     shutil.copy2(probe / 'sample-head.h', target / 'firmware/src')
     subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(probe / 'voice.patch')], cwd=target, check=True)
+elif args.daw:
+    shutil.copy2(root / 'wasm/mellotron.h', target / 'firmware/src')
+    subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / 'patches/mellotron.patch')], cwd=target, check=True)
 # Optional host observation of the dry per-part bus, aligned with the buffered ISR.
 # No algorithm changes; the historical reference compiles with this hook absent.
 sim = target / 'web/sim/sim.c'

@@ -13,7 +13,7 @@ cp "$upstream"/web/simulator/* .local/www/simulator/
 cp ".local/build/waswan-$voices.wasm" .local/www/simulator/obervave-voice.wasm
 cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
 cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
-cp web/fm-*.js web/tone-bank.js web/ui-*.js web/ui-foundation.css .local/www/simulator/
+cp web/mellotron-*.js web/fm-*.js web/tone-bank.js web/ui-*.js web/ui-foundation.css .local/www/simulator/
 cp web/studio-*.js .local/www/simulator/
 cp web/daw-*.js web/daw-tab.html .local/www/simulator/
 mkdir -p .local/www/simulator/vendor

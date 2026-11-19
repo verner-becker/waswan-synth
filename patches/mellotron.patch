@@ -1,0 +1,14 @@
+--- a/firmware/src/obv_engine.h
++++ b/firmware/src/obv_engine.h
+@@ -1048,5 +1048,11 @@
++#include "mellotron.h"
++
+ static void voice_render(voice_t *v, int32_t *out)
+ {
+     const part_t *g = &pt[v->part];
++    if (mel_on(v)) {
++        mel_render(v,out);
++        return;
++    }
+     int32_t fm_samples[CTL] = {0};
+     int32_t *fm_mix = 0;

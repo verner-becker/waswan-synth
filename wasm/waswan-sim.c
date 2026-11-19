@@ -101,6 +101,18 @@ EXPORT uint32_t waswan_daw_program(uint32_t part,uint32_t program) {
     daw_fm_stage[part]=patch.fm;
     return 1;
 }
+EXPORT uint32_t waswan_mel_patch(void) {
+    patch_t patch;
+    patch_from_factory(&patch,&FACT_INIT);
+    patch.v[P_O1_WAVE]=W_SAW;
+    patch.v[P_VEL_AMP]=patch.v[P_VINTAGE]=patch.v[P_SPREAD]=patch.v[P_GLIDE]=0;
+    patch.v[P_MODE]=M_POLY;
+    patch.v[P_ARP_MODE]=A_OFF;
+    memcpy(patch.v+NPARAM,"Mellotron ",10);
+    daw_staged[0]=patch_pack(&patch);
+    daw_fm_stage[0]=patch.fm;
+    return 1;
+}
 EXPORT uint32_t waswan_daw_drum_kits(void) {return NDRUMKIT;}
 EXPORT uint32_t waswan_daw_drum_kit(uint32_t kit) {
     if(kit>=NDRUMKIT)return 0;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {CONTROLS,controlTarget,displayValue} from './ui-controls.js';
 import {TARGETS,fineTarget} from './midi-profile.js';
+import {MellotronPanel} from './ui-mellotron.js';
 import {ToneSelector} from './ui-tone-selector.js';
 import {ToneBanks} from './ui-tone-banks.js';
 import {ToneEditor} from './ui-tone-editor.js';
@@ -133,6 +134,10 @@ class Foundation {
     this.voiceModes=el('div','ww-performance-modes');this.voiceModes.setAttribute('role','group');this.voiceModes.setAttribute('aria-label','Voice mode');
     for(const mode of MODES){const button=action(mode.label,()=>selectVoiceMode(this.bridge.midi,this.frame,mode.id));button.dataset.performanceMode=mode.id;button.disabled=true;button.setAttribute('aria-pressed','false');this.voiceModes.append(button);}
     state.append(this.performanceState,this.patternState,this.transport,this.sustain,this.voiceModes,action('Instrument setup',()=>this.selectWorkspace('instrument')));
+    this.tapes=new MellotronPanel((...args)=>this.daw.player.requests().request(...args));
+    this.bridge.tapeSnapshot=()=>this.tapes.snapshot();
+    this.bridge.liveTape=part=>part===0&&this.tapes.live&&this.frame?.engines[part]===0?this.tapes.snapshot():null;
+    view.append(this.tapes.node);
     middle.append(this.outputMonitor.node,notes,state);this.performanceReadouts=middle;this.addView('perf',view);
   }
   buildDiagnostics() {
@@ -315,6 +320,7 @@ class Foundation {
     if(m.t==='daw-notice'){this.notice.textContent=m.message;return;}
     if(m.t==='tone-store'){this.toneEditor.stored(m.data,m.ok);return;}
     if(m.t==='ready'){
+      if(m.audio)void this.tapes.ready();
       this.failed=false;this.running=true;this.audio=!!m.audio;this.openDawTab.disabled=false;this.start.textContent=m.audio?'Audio running':'Silent UI mode';this.start.disabled=true;this.attachAudio();
       if(this.midiSetupPending){this.midiSetupPending=false;this.midiSetup.open({keyboard:this.workspace==='perf'});}
     }
@@ -335,7 +341,7 @@ class Foundation {
     const held=gate.filter(v=>v.part===part&&!v.sequenced).map(v=>v.note),chord=chordLabel(held);
     this.chord.textContent=m.engines[part]===2?'DRUM-X':chord.name;this.notes.textContent=m.engines[part]===2?'Chord view applies to ANALOG voices.':chord.notes;
     this.voiceState.textContent=`${gate.length} gated · ${active.length-gate.length} release · sustain included`;
-    this.performanceState.textContent=`Part ${'ABCD'[part]} · ${m.engines[part]===2?'DRUM-X':m.fm?(m.fm.bytes[3]?'ANALOG + FM':'FM'):'ANALOG'}`;
+    this.performanceState.textContent=`Part ${'ABCD'[part]} · ${m.engines[part]===2?'DRUM-X':part===0&&this.tapes.live?'Mellotron':m.fm?(m.fm.bytes[3]?'ANALOG + FM':'FM'):'ANALOG'}`;
     this.patternState.textContent=`Pattern ${m.pattern} · ${f?.playing?'playing':'stopped'}${m.patternQueue?' · queued '+m.patternQueue:''}${m.patternPending?' · save pending':''}`;
     this.sustain.textContent=`Sustain MIDI · ${poly.midiSustain?'on':'off'}`;this.sustain.setAttribute('aria-pressed',String(poly.midiSustain));this.sustain.disabled=m.midiMode;this.transport.disabled=m.midiMode;
     this.updateBadges();

@@ -2,7 +2,7 @@
 
 Novo desafio em análise: [WASWAN DAW MVP — controle, orientações de autonomia e branches empilhadas](daw-mvp-discovery/README.md). Série separada das ondas Studio abaixo; a autorização histórica do Studio não aprova automaticamente sua implementação.
 
-Em 19/11/2026 foi solicitado o [roadmap do Mellotron e do sampler tocável](mellotron-sampler-roadmap.md) e o usuário pediu prosseguimento. O [Marco A](mellotron-sampler-a.md) confirmou no host WASWAN e no Chrome a reprodução de um WAV externo, a gravação interna e a exportação por pista e master. Próxima entrega prevista: Mellotron de dois bancos. Validação física pendente.
+Em 19/11/2026 foi solicitado o [roadmap do Mellotron e do sampler tocável](mellotron-sampler-roadmap.md) e o usuário pediu prosseguimento. O [Marco A](mellotron-sampler-a.md) confirmou no host WASWAN e no Chrome a reprodução de um WAV externo, a gravação interna e a exportação por pista e master. O [Marco B](mellotron-sampler-b.md) entregou dois bancos, transporte de fita por tecla e atribuição por pista na branch `feat/mellotron-sampler-b`. O usuário priorizou o ensaio no instrumento. Aceite físico no SMK-37 Pro pendente.
 
 Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83db16d2fc` (main local). Branch de planejamento e investigação: `docs/studio-waves-plan`.
 

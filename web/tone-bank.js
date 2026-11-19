@@ -70,7 +70,7 @@ export async function libraryBanks(root){
   return banks;
 }
 
-export async function librarySetting(value){
+export async function librarySetting(value,key='library'){
   const db=await new Promise((resolve,reject)=>{
     const request=indexedDB.open('waswan-tone-library',1);
     request.onupgradeneeded=()=>request.result.createObjectStore('settings');
@@ -81,7 +81,7 @@ export async function librarySetting(value){
     return await new Promise((resolve,reject)=>{
       const tx=db.transaction('settings',value?'readwrite':'readonly');
       const store=tx.objectStore('settings');
-      const request=value?store.put(value,'library'):store.get('library');
+      const request=value?store.put(value,key):store.get(key);
       tx.oncomplete=()=>resolve(request.result);
       tx.onabort=()=>reject(tx.error||Error('Library storage unavailable.'));
     });

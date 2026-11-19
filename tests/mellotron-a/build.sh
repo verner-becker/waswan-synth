@@ -20,7 +20,8 @@ mkdir -p "$dest/simulator"
 cp -R .local/www/simulator/. "$dest/simulator/"
 "${WASM_OPT:-.tools/binaryen-version_133/bin/wasm-opt}" .local/build/mellotron-a-raw.wasm \
   --enable-bulk-memory --asyncify -O2 --strip-debug --strip-producers -o "$dest/simulator/obervave-voice.wasm"
-cp tests/mellotron-a/index.html tests/mellotron-a/wav.mjs "$dest/"
+cp tests/mellotron-a/index.html web/mellotron-wav.js "$dest/"
+sed "s|../../web/mellotron-wav.js|./mellotron-wav.js|" tests/mellotron-a/wav.mjs > "$dest/wav.mjs"
 python3 - <<'PY'
 from pathlib import Path
 base = Path('.local/www/mellotron-a/simulator')
