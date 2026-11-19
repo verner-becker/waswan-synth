@@ -24,6 +24,23 @@ try{
   const knob=editor.locator('[data-param="12"] [role="slider"]');await knob.focus();await p.keyboard.press('ArrowUp');await p.waitForFunction(()=>audit.frame.editor.values[12].value===41);await p.keyboard.press('ArrowDown');await p.waitForFunction(()=>audit.frame.editor.values[12].value===40);
   const box=await knob.boundingBox();await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.mouse.down();await p.mouse.move(box.x+box.width/2,box.y+box.height/2-10);await p.mouse.up();await p.waitForFunction(()=>audit.frame.editor.values[12].value>40);await setNumber(12,40);
   await group('Envelopes');await setNumber(27,0);await group('Oscillators');
+  for(const waveId of [0,4]){
+    const wave=editor.locator(`[data-param="${waveId}"] select`);
+    const width=editor.locator(`[data-param="${waveId+1}"] input`);
+    const original=await wave.inputValue();
+    await wave.selectOption({label:'PULSE'});
+    await setNumber(waveId+1,37);
+    for(const {value,label} of await wave.locator('option').evaluateAll(options=>options.map(o=>({value:o.value,label:o.label})))){
+      await wave.selectOption(value);
+      await p.waitForFunction(([id,value])=>audit.frame.editor.values[id].value===Number(value),[waveId,value]);
+      const active=['PULSE','SAW+PLS'].includes(label)||(waveId===0&&label==='SUPER');
+      for(const input of await width.all()){
+        assert.equal(await input.isEnabled(),active,`OSC${waveId===0?1:2} / ${label}`);
+        assert.equal(await input.inputValue(),'37');
+      }
+    }
+    await wave.selectOption(original);
+  }
   await editor.getByRole('combobox',{name:'OSC3 wave',exact:true}).selectOption({label:'SINE'});
   await setNumber(65,-12,3); // one octave down
   await editor.getByRole('combobox',{name:'OSC4 wave',exact:true}).selectOption({label:'REVERSE SAW'});

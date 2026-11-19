@@ -4,6 +4,11 @@ const GROUPS=[['Oscillators',[0,1,2,4,5,6,7,11,63,70,64,65,69,66,72,67,68,71,3,8
   ['Envelopes',[20,21,22,23,24,25,26,27]],['Modulation',[28,29,30,31,32,33,34,35,36,37,46]],
   ['Voice',[38,39,40,41,42,43,44,45]],['Arpeggiator',[47,48,49,50]],['Shared effects',[52,53,54,55,56,57,58,59,60,61,62]]];
 const OSC_SECTIONS = new Map([[0,'Oscillator 1'],[4,'Oscillator 2'],[63,'Oscillator 3'],[66,'Oscillator 4'],[3,'Noise & modulation']]);
+// Wave selector values follow each oscillator's catalog. OSC1 also uses PW for SUPER detune.
+const WIDTH_CONTROLS = {
+  1: {selector:0, waves:[2,3,4]}, 5: {selector:4, waves:[2,3]},
+  70: {selector:63, waves:[8]}, 72: {selector:66, waves:[8]}
+};
 const LABELS={0:'OSC1 wave',1:'OSC1 pulse width / detune',2:'OSC1 level',3:'Noise level',4:'OSC2 wave',5:'OSC2 pulse width',6:'OSC2 level',7:'OSC2 semitones',8:'OSC1 → OSC2 sync',9:'OSC2 → OSC1 FM',10:'Filter env → OSC2 pitch',11:'OSC2 fine',14:'Filter envelope amount',18:'Velocity → filter',19:'Velocity → amp',
   20:'Filter attack',21:'Filter decay',22:'Filter sustain',23:'Filter release',24:'Amp attack',25:'Amp decay',26:'Amp sustain',27:'Amp release',
   32:'LFO → pitch',33:'LFO → PWM',34:'LFO → filter',35:'LFO → amp',36:'LFO pitch destination',37:'LFO PWM destination',39:'Unison voices',40:'Unison / dual detune',44:'Bend range',46:'Mod depth (legacy)',
@@ -98,7 +103,7 @@ export class ToneEditor {
       this.groups.push({group,panel,button});this.content.append(panel);
     }
     const help=el('details','ww-osc-help');
-    help.append(el('summary','','Oscillator help'),el('p','','Select a waveform to enable an oscillator. Choose PULSE on OSC3 or OSC4 to adjust its width. Fine adjusts pitch around the selected semitone. Use the sliders or enter exact values. Edits sound immediately. Save writes the tone. X-MOD applies linear FM from OSC2 to OSC1. SUPER uses seven saws with a shared five-voice limit and bypasses sync and FM. Adjust SUPER mix in Instrument setup.'));
+    help.append(el('summary','','Oscillator help'),el('p','','Select a waveform to enable an oscillator. Pulse width adjusts PULSE on all four oscillators and SAW+PLS on OSC1 and OSC2. In SUPER, OSC1 uses the same slider for detune. Fine adjusts pitch around the selected semitone. Use the sliders or enter exact values. Edits sound immediately. Save writes the tone. X-MOD applies linear FM from OSC2 to OSC1. SUPER uses seven saws with a shared five-voice limit and bypasses sync and FM. Adjust SUPER mix in Instrument setup.'));
     this.nav.append(help);
     this.selectGroup(this.selectedGroup??GROUPS[0][0]);
   }
@@ -141,9 +146,9 @@ export class ToneEditor {
     this.unavailable.textContent=!analog?'DRUM-X uses different parameter meanings. Edit this engine in Instrument setup.':!running?'Start audio to edit.':!available?'Editor temporarily unavailable during an instrument dialog, save or context change.':'';
     this.content.hidden=this.nav.hidden=this.hint.hidden=!analog;
     for(const p of this.catalog??[]){const v=f.editor.values[p.id];const bypass=f.editor.values[0].value===4&&[8,9].includes(p.id);
-      const fixedShape=(p.id===1&&f.editor.values[0].value>=5)||(p.id===5&&f.editor.values[4].value>=5)
-        ||(p.id===70&&f.editor.values[63].value!==8)||(p.id===72&&f.editor.values[66].value!==8);
-      this.controls.get(p.id)?.update({value:v.value,min:p.min,max:p.max,available:available&&!bypass&&!fixedShape},v.display,`${v.value} / ${p.max} · ${bypass?'Bypassed in SUPER':fixedShape?'Fixed shape':p.shared?'Shared FX':'Internal steps'}`);
+      const width=WIDTH_CONTROLS[p.id];
+      const widthInactive=width && !width.waves.includes(f.editor.values[width.selector].value);
+      this.controls.get(p.id)?.update({value:v.value,min:p.min,max:p.max,available:available&&!bypass&&!widthInactive},v.display,`${v.value} / ${p.max} · ${bypass?'Bypassed in SUPER':widthInactive?'Unavailable for this waveform':p.shared?'Shared FX':'Internal steps'}`);
     }
     if(f.editor?.edit?.applied===false&&!this.pending)this.status.textContent='Edit not applied: context changed or value unavailable. Try again.';
     this.updateStatus();
