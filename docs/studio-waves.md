@@ -2,7 +2,7 @@
 
 Novo desafio em análise: [WASWAN DAW MVP — controle, orientações de autonomia e branches empilhadas](daw-mvp-discovery/README.md). Série separada das ondas Studio abaixo; a autorização histórica do Studio não aprova automaticamente sua implementação.
 
-Em 19/11/2026 foi solicitado o [roadmap do Mellotron e do sampler tocável](mellotron-sampler-roadmap.md). O planejamento registra os marcos A–D e a sondagem do binário de referência. A prova no host WASWAN e a validação física estão pendentes.
+Em 19/11/2026 foi solicitado o [roadmap do Mellotron e do sampler tocável](mellotron-sampler-roadmap.md) e o usuário pediu prosseguimento. O [Marco A](mellotron-sampler-a.md) confirmou no host WASWAN e no Chrome a reprodução de um WAV externo, a gravação interna e a exportação por pista e master. Próxima entrega prevista: Mellotron de dois bancos. Validação física pendente.
 
 Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83db16d2fc` (main local). Branch de planejamento e investigação: `docs/studio-waves-plan`.
 

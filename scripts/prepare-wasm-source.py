@@ -8,6 +8,7 @@ import subprocess
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--voices', type=int, choices=[16, 32, 64, 128, 256], default=16)
 parser.add_argument('--daw', action='store_true', help='Apply the isolated DAW runtime slots to the 256-voice build')
+parser.add_argument('--mellotron-probe', action='store_true', help='Prepare the isolated milestone A host')
 args=parser.parse_args()
 voices = args.voices
 if args.daw and voices!=256:
@@ -15,6 +16,10 @@ if args.daw and voices!=256:
 root = Path(__file__).resolve().parents[1]
 upstream = root / 'upstream/SMKSYNTH'
 target = root / f'.local/build/source-{voices}'
+if args.mellotron_probe:
+    if not args.daw:
+        parser.error('The Mellotron probe requires the DAW host')
+    target = root / '.local/build/source-mellotron-a'
 if target.exists():
     shutil.rmtree(target)
 for relative in ['firmware', 'web/sim']:
@@ -31,6 +36,10 @@ if args.daw:
     subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / 'patches/analog-fine-pulse.patch')], cwd=target, check=True)
     shutil.copytree(root/'wasm/vendor/sloopdx',target/'firmware/src/vendor/sloopdx')
     subprocess.run(['patch','--batch','--fuzz=0','-p1','-i',str(root/'patches/fm-layer.patch')],cwd=target,check=True)
+if args.mellotron_probe:
+    probe = root / 'tests/mellotron-a'
+    shutil.copy2(probe / 'sample-head.h', target / 'firmware/src')
+    subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(probe / 'voice.patch')], cwd=target, check=True)
 # Optional host observation of the dry per-part bus, aligned with the buffered ISR.
 # No algorithm changes; the historical reference compiles with this hook absent.
 sim = target / 'web/sim/sim.c'

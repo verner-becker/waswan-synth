@@ -1,0 +1,40 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="en"><meta charset="utf-8"><title>WASWAN sample playback probe</title>
+<style>body{font:1rem system-ui;margin:1rem}label,button,select{margin-right:.5rem}iframe{width:100%;height:88vh;border:0}</style>
+<h1>Sample playback probe</h1>
+<p>Select a mono PCM16 WAV at 44.1 kHz, up to two seconds. Start audio in the instrument below, then play Synth part 1.</p>
+<button id="folder">Open sample folder</button>
+<label>Or open WAV <input id="wav" type="file" accept=".wav"></label>
+<select id="files" aria-label="WAV in selected folder" hidden></select>
+<label>MIDI root <input id="root" type="number" min="0" max="127" value="60"></label>
+<button id="load">Load instrument</button>
+<p id="status" role="status"></p>
+<script type="module">
+import {readSample} from './wav.mjs';
+const el=id=>document.getElementById(id);
+let bank, sample;
+el('folder').onclick=async()=>{
+  try{
+    const dir=await showDirectoryPicker({mode:'read'}), names=[];
+    for await(const entry of dir.values()) if(entry.kind==='file' && /\.wav$/i.test(entry.name)) names.push(entry.name);
+    el('files').replaceChildren(...names.sort().map(name=>new Option(name,name)));
+    bank=dir; el('files').hidden=false; el('wav').value='';
+    el('status').textContent=names.length?'Choose a WAV and load the instrument.':'No WAV files in this folder.';
+  }catch(e){if(e.name!=='AbortError')el('status').textContent=e.message;}
+};
+el('wav').onchange=()=>{bank=null;el('files').hidden=true;};
+window.takeProbeSample=()=>{const selected=sample;sample=null;return selected;};
+el('load').onclick=async()=>{
+  el('load').disabled=true;
+  try{
+    const file=bank && el('files').value ? await (await bank.getFileHandle(el('files').value)).getFile() : el('wav').files[0];
+    if(!file)throw Error('Select a WAV first.');
+    sample=await readSample(file,el('root').valueAsNumber);
+    const frame=document.createElement('iframe');frame.title='WASWAN instrument';frame.src='simulator/?workspace=daw';
+    document.body.append(frame);
+    for(const id of ['folder','files','wav','root'])el(id).disabled=true;
+    el('status').textContent=file.name+' loaded. Reload this page to choose another file.';
+  }catch(e){el('status').textContent=e.message;el('load').disabled=false;}
+};
+</script></html>

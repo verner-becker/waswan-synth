@@ -4,14 +4,14 @@ Primeiro, abrir um banco de fitas, tocar um acorde no SMK-37 Pro e gravá-lo na 
 
 | Marco | O que o músico consegue fazer ao final | Dependência |
 |---|---|---|
-| A · Prova do núcleo | Tocar um WAV de teste em três alturas e reconhecer a frase no arquivo exportado | Diagnóstico já realizado. Falta a prova dentro do WASWAN. |
+| A · Prova do núcleo | Tocar um WAV de teste em três alturas e reconhecer a frase no arquivo exportado | [Concluído em software no host e no Chrome](mellotron-sampler-a.md) |
 | B · Mellotron tocável | Abrir fitas autorizadas, combinar dois bancos, tocar e gravar com o comportamento de fita | A confirma reprodução de amostra externa e roteamento |
 | C · Sampler tocável | Transformar gravações próprias em um instrumento polifônico, salvar e reabrir | B entrega reprodução, eventos e biblioteca física |
 | D · Aceite conjunto | Reabrir um projeto, tocar com FM e subtrativo e exportar a música e suas pistas | B e C disponíveis para ensaio integrado |
 
 ## Ponto de partida
 
-Base do planejamento em 19/11/2026: WASWAN `df82b4f` e SMKTRON `3428613` (ML1). Na sondagem anterior em Node, o binário original produziu um acorde por `web_key` a 44,1 kHz e liberou as três teclas. Velocities 32 e 112 produziram PCM idêntico no trecho comparado. No modo synth inicial, o mesmo acorde enviado por `web_midi` produziu a mesma saída do controle em repouso. Esses resultados descrevem o binário de referência. A integração, o desempenho em Chrome e o aceite físico estão pendentes. [Build ML1](https://github.com/4t59m4f784-creator/SMKTRON/blob/3428613/experiments/midi-layers/build.py) · [Worklet de referência](https://github.com/4t59m4f784-creator/SMKTRON/blob/3428613/web/worklet.js)
+Base do planejamento em 19/11/2026: WASWAN `df82b4f` e SMKTRON `3428613` (ML1). Na sondagem anterior em Node, o binário original produziu um acorde por `web_key` a 44,1 kHz e liberou as três teclas. Velocities 32 e 112 produziram PCM idêntico no trecho comparado. No modo synth inicial, o mesmo acorde enviado por `web_midi` produziu a mesma saída do controle em repouso. Esses resultados descrevem o binário de referência. Na data do planejamento, a integração, o desempenho em Chrome e o aceite físico estavam pendentes. Os ensaios posteriores constam no fechamento de cada marco. [Build ML1](https://github.com/4t59m4f784-creator/SMKTRON/blob/3428613/experiments/midi-layers/build.py) · [Worklet de referência](https://github.com/4t59m4f784-creator/SMKTRON/blob/3428613/web/worklet.js)
 
 **Arquitetura proposta.** Adaptar as cabeças de leitura, a seleção de zonas, a interpolação e o transporte de fita de `mel.c` para receber dados preparados pelo host. Manter um AudioContext e a instância atual do instrumento. O WASM publicado permite uma comparação sonora rápida, mas incorpora fitas e funções do firmware e não expõe carregamento de WAVs. Um worklet dedicado só merece reconsideração se o experimento revelar um impedimento concreto no host atual. Os arquivos `grain_audio.h` e `grain_render.h` implementam processamento granular opcional. [Motor de fita](https://github.com/4t59m4f784-creator/SMKTRON/blob/3428613/firmware/firmware/src/mel.c) · [Arquitetura FM e polifonia compartilhada](fm-layer.md)
 
@@ -55,6 +55,6 @@ Base do planejamento em 19/11/2026: WASWAN `df82b4f` e SMKTRON `3428613` (ML1). 
 
 ## Entrega e decisões
 
-Cada marco fecha com a revisão testada, resultado reproduzível, evidências em `.local/validation/`, limitações e próximo passo. Desenvolver em branch dedicada e integrar à `main` apenas com autorização explícita. A etapa atual entrega o planejamento. O próximo trabalho é executar a prova de A.
+Cada marco fecha com a revisão testada, resultado reproduzível, evidências em `.local/validation/`, limitações e próximo passo. Desenvolver em branch dedicada e integrar à `main` apenas com autorização explícita. O Marco A validou o núcleo adaptado com uma região mono. A próxima entrega é o Mellotron de dois bancos do Marco B.
 
 As decisões em aberto são quais gravações poderão acompanhar uma distribuição, qual carga o host sustenta e quais efeitos opcionais cabem nela. O aceite físico depende de tocar e ouvir o instrumento no equipamento. Editor avançado de waveform, slicing, time stretching, granular e IA ficam fora destas quatro entregas.
