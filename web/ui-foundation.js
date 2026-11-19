@@ -9,10 +9,11 @@ import {SequenceWorkspace} from './ui-studio-sequence.js';
 import {DawWorkspace} from './ui-daw.js';
 import {DawTab} from './ui-daw-tab.js';
 import {InstrumentSetup} from './ui-instrument-setup.js';
+import {OutputMonitor} from './ui-output-monitor.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
 import {trackIcon} from './daw-icons.js';
-import {el,action,AppShell,TopBar,Panel,StatusIndicator,CompactMeter,RotaryKnob,VerticalFader,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
+import {el,action,AppShell,TopBar,Panel,StatusIndicator,RotaryKnob,VerticalFader,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
 
 const SYNTH_VIEWS=[['perf','Performance','Performance'],['tones','TONES','Tone Editor'],['studio','Quick capture','Quick capture']];
 const WORKSPACES=[...SYNTH_VIEWS,['seq','Studio original','Original Studio composition'],['daw','DAW','DAW'],['diag','Diagnostics','Diagnostics'],['instrument','Instrument setup','Instrument setup']];
@@ -23,7 +24,7 @@ export function mountFoundation(bridge) {
 }
 class Foundation {
   constructor(bridge) {
-    this.bridge=bridge;this.frame=null;this.running=false;this.audio=false;this.workspace='perf';this.controls=[];this.lastDraw=0;
+    this.bridge=bridge;this.frame=null;this.running=false;this.audio=false;this.workspace='perf';this.controls=[];
     this.original=el('div','ww-original');
     for(const child of [...document.body.children])this.original.append(child);
     document.body.append(this.original);document.body.classList.add('ww-page');
@@ -71,7 +72,12 @@ class Foundation {
     addEventListener('focus',()=>this.focusMidiContext());
     this.shell.addEventListener('focusin',event=>{if(!event.target.closest('.ww-daw'))this.focusMidiContext();});
     this.bridge.panelBackend.append(this.original);
-    this.updateAssignments();this.selectWorkspace(new URLSearchParams(location.search).get('workspace')==='daw'?'daw':'perf');this.animate=()=>{this.drawAudio();this.animation=requestAnimationFrame(this.animate);};this.animate();
+    this.updateAssignments();this.selectWorkspace(new URLSearchParams(location.search).get('workspace')==='daw'?'daw':'perf');
+    this.animate=now=>{
+      if(this.workspace==='perf'&&!document.hidden)this.outputMonitor.draw(now);
+      this.animation=requestAnimationFrame(this.animate);
+    };
+    this.animation=requestAnimationFrame(this.animate);
   }
   buildNavigation() {
     const bar=el('div','ww-workspace-bar');
@@ -116,18 +122,14 @@ class Foundation {
     surface.append(knobs,faders);panel.append(surface);
     const help=el('p','ww-control-help','Drag knobs vertically · Shift for fine adjustment · arrow keys for one step');help.id='ww-performance-help';panel.append(help);view.append(panel);
     const middle=el('div','ww-musical-grid');
-    const output=Panel('Synth output','Post-master · mono');
-    const display=el('div','ww-output-display'),waveform=el('div'),levels=el('div');
-    this.scope=el('canvas','ww-scope');this.scope.width=640;this.scope.height=150;this.scope.setAttribute('aria-label','Main output waveform');this.scopeText=el('small','ww-muted','Waiting for audio');waveform.append(this.scope,this.scopeText);
-    this.rms=CompactMeter('RMS');this.peak=CompactMeter('Peak');this.rms.update(null);this.peak.update(null);levels.append(this.rms.node,this.peak.node);
-    display.append(waveform,levels);output.append(display);
+    this.outputMonitor=new OutputMonitor();
     const notes=Panel('Notes / chord','Selected part · gated voices');this.chord=el('strong','ww-chord','—');this.notes=el('p','ww-muted','No gated notes');this.voiceState=el('p','ww-muted','Allocated voices include release.');notes.append(this.chord,this.notes,this.voiceState);
     const state=Panel('Instrument','Pattern and voice mode');this.performanceState=el('p','','Waiting for instrument');this.patternState=el('p','ww-muted','Pattern —');
     this.transport=action('Play / stop pattern',()=>this.hardware(16));this.sustain=action('Sustain MIDI · off',()=>{if(this.frame)this.bridge.send({t:'voice-sustain',enabled:!this.frame.polyphony.midiSustain});});this.sustain.setAttribute('aria-pressed','false');
     this.voiceModes=el('div','ww-performance-modes');this.voiceModes.setAttribute('role','group');this.voiceModes.setAttribute('aria-label','Voice mode');
     for(const mode of MODES){const button=action(mode.label,()=>selectVoiceMode(this.bridge.midi,this.frame,mode.id));button.dataset.performanceMode=mode.id;button.disabled=true;button.setAttribute('aria-pressed','false');this.voiceModes.append(button);}
     state.append(this.performanceState,this.patternState,this.transport,this.sustain,this.voiceModes,action('Instrument setup',()=>this.selectWorkspace('instrument')));
-    middle.append(output,notes,state);this.performanceReadouts=middle;this.addView('perf',view);
+    middle.append(this.outputMonitor.node,notes,state);this.performanceReadouts=middle;this.addView('perf',view);
   }
   buildDiagnostics() {
     const view=Panel('Diagnostics','Existing tools · same live session');view.append(el('p','ww-muted','DSP timing is approximate. Exceeding the block budget does not prove a hardware underrun.'));
@@ -336,16 +338,7 @@ class Foundation {
   }
   attachAudio() {
     const {context,gain}=this.bridge.getAudio();if(!context||!gain||this.audioContext===context)return;
-    if(this.analyser&&this.audioGain)try{this.audioGain.disconnect(this.analyser);}catch{}
-    this.audioContext=context;context.addEventListener('statechange',()=>{if(!this.audio)return;this.start.disabled=context.state==='running';this.start.textContent=context.state==='running'?'Audio running':'Resume audio';if(context.state!=='running')this.notice.textContent=`Audio context · ${context.state}`;});this.audioGain=gain;this.analyser=context.createAnalyser();this.analyser.fftSize=1024;gain.connect(this.analyser);this.wave=new Float32Array(this.analyser.fftSize);
-  }
-  drawAudio() {
-    if(!this.analyser||this.workspace!=='perf'||document.hidden||performance.now()-this.lastDraw<50)return;
-    this.lastDraw=performance.now();this.analyser.getFloatTimeDomainData(this.wave);
-    let sum=0,peak=0;for(const value of this.wave){sum+=value*value;peak=Math.max(peak,Math.abs(value));}
-    this.rms.update(Math.sqrt(sum/this.wave.length));this.peak.update(peak);this.scopeText.textContent=this.audioContext.state==='running'?'Live waveform':`Audio context · ${this.audioContext.state}`;
-    const canvas=this.scope,c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);c.strokeStyle='#233338';c.lineWidth=1;
-    for(let x=0;x<=w;x+=w/10){c.beginPath();c.moveTo(x,0);c.lineTo(x,h);c.stroke();}for(let y=0;y<=h;y+=h/4){c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke();}
-    c.strokeStyle='#27e3dd';c.lineWidth=2;c.beginPath();for(let i=0;i<this.wave.length;i++){const x=i*w/(this.wave.length-1),y=h/2-this.wave[i]*h*.45;i?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();
+    this.audioContext=context;context.addEventListener('statechange',()=>{if(!this.audio)return;this.start.disabled=context.state==='running';this.start.textContent=context.state==='running'?'Audio running':'Resume audio';if(context.state!=='running')this.notice.textContent=`Audio context · ${context.state}`;});
+    this.outputMonitor.attach(context,gain);
   }
 }
