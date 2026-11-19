@@ -68,7 +68,7 @@ Na versão com o módulo FM, abra **TONES → + Add FM** para acrescentar seis o
 
 No cabeçalho, **Bank** escolhe o banco e **Tone** escolhe o timbre. **Internal** abre os 99 programas do instrumento. Use **Bank → Choose library folder…** uma vez para cadastrar a pasta que contém os bancos. Por exemplo, `Meus bancos/DX7/Electric Piano.wstone` aparece como **DX7 → Electric Piano** quando esse é o nome do timbre no arquivo. O Chrome guarda a referência da pasta. Para gravar um timbre novo no banco selecionado, use **TONES → Save to bank…**. [Uso e armazenamento dos bancos locais](docs/studio-waves.md#bancos-locais-de-timbres)
 
-O projeto inclui **DX7 - Aquanode**, com 32 timbres em disco. Em **Bank → Choose library folder…**, abra a pasta `banks` deste projeto. Selecione **DX7 - Aquanode** e experimente **SBass**. O importador também converte outros cartuchos e vozes avulsas do DX7. [Comando de importação, origem do banco e limites sonoros](assets/dx7/README.md)
+O projeto inclui **DX7 - Aquanode**, com 32 timbres em disco. Em **Bank → Choose library folder…**, abra a pasta `banks` deste projeto. Selecione **DX7 - Aquanode** e experimente **SBass**. Em **TONES → Import DX7…**, você pode converter outro cartucho ou uma voz avulsa e gravar os timbres em um banco existente ou em uma pasta nova da biblioteca. [Guia de importação, origem do banco e limites sonoros](assets/dx7/README.md)
 
 ## Controle fino de knobs v1
 

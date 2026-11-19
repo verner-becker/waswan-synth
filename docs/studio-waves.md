@@ -156,4 +156,10 @@ Em 19/11/2026, o usuário confirmou que voltou a tocar com o teclado do computad
 
 Em 19/11/2026, o usuário solicitou um banco DX7 em disco e a conversão para o formato WASWAN. A branch `feat/dx7-tone-bank` inclui o cartucho Aquanode Presets 1 sob CC0, o importador SysEx e 32 timbres para a biblioteca de pastas. A conversão usa o módulo FM existente. [Como tocar, converter e conferir a procedência](../assets/dx7/README.md)
 
-O teste de importação reproduziu os arquivos distribuídos e mediu áudio em cada programa no WASM de 256 vozes. No Chrome, foi possível abrir o banco, tocar **SBass** pelo teclado e salvar uma variante na pasta de teste. Evidências em `.local/validation/dx7/`. A comparação auditiva com o DX7 físico segue pendente. A integração à `main` depende de aprovação.
+O teste de importação reproduziu os arquivos distribuídos e mediu áudio em cada programa no WASM de 256 vozes. No Chrome, foi possível abrir o banco, tocar **SBass** pelo teclado e salvar uma variante na pasta de teste. Evidências em `.local/validation/dx7/`. A comparação auditiva com o DX7 físico segue pendente. Em 19/11/2026, o usuário autorizou a integração de `c4dd7d4` e o commit foi publicado na `main` por fast-forward.
+
+### Importação DX7 no TONES
+
+A pedido do usuário, a branch `feat/tones-dx7-import` acrescenta **TONES → Import DX7…**. O navegador e o terminal usam o mesmo decodificador. O usuário confere o número de timbres e escolhe um banco existente ou uma nova subpasta da biblioteca antes da gravação.
+
+No Chrome com uma biblioteca de teste em OPFS, a importação do cartucho Aquanode produziu os mesmos 32 timbres do terminal e manteve o programa em execução. O ensaio também importou uma voz avulsa para um banco com um nome de timbre repetido, verificou o checksum e exercitou a recuperação de uma falha de escrita. Evidências em `.local/validation/dx7/`. A seleção da pasta física pelo diálogo nativo fica para o aceite manual da interface.

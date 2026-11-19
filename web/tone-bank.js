@@ -31,10 +31,11 @@ export async function readToneFolder(directory){
   return {tones,skipped};
 }
 
-export async function saveToneFile(directory,name,patch){
+export async function saveToneFile(directory,name,patch,slot){
   const tone=toneFile(name,patch);
   const slug=tone.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9_-]+/gi,'-').slice(0,48);
-  const fileName=`${slug||'tone'}-${crypto.randomUUID()}${TONE_FILE_EXTENSION}`;
+  const prefix=slot===undefined?'':String(slot).padStart(2,'0')+'-';
+  const fileName=`${prefix}${slug||'tone'}-${crypto.randomUUID()}${TONE_FILE_EXTENSION}`;
   const handle=await directory.getFileHandle(fileName,{create:true});
   try{
     const writer=await handle.createWritable();
@@ -46,7 +47,10 @@ export async function saveToneFile(directory,name,patch){
       throw error;
     }
   }catch(error){
-    await directory.removeEntry(fileName).catch(()=>{});
+    try{await directory.removeEntry(fileName);}
+    catch(cleanup){
+      if(cleanup.name!=='NotFoundError')throw Error(`Write failed. Check “${fileName}” in “${directory.name}” before retrying. ${error.message}`);
+    }
     throw error;
   }
   return fileName;

@@ -436,7 +436,7 @@
 .ww-tone-banks .ww-bank-context {color:var(--ww-accent);margin:8px 0 16px;}
 .ww-bank-location {flex-wrap:wrap;background:var(--ww-bg);border:1px solid var(--ww-border);border-radius:8px;padding:12px;}
 .ww-bank-location strong {flex:1 0 100%;font-size:14px;}
-.ww-bank-modes {margin:16px 0;}
+.ww-bank-modes {margin:16px 0;flex-wrap:wrap;}
 .ww-tone-banks section>button {margin-right:8px;margin-bottom:4px;}
 .ww-tone-banks select {width:100%;min-width:0;}
 .ww-tone-banks option {padding:4px;}

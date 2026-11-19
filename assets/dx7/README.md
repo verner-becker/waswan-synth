@@ -4,13 +4,17 @@ O cartucho tem 32 programas, entre eles **SBass**, **Blow** e **Sweep**. Para to
 
 ## Importar outro arquivo
 
-Execute o comando na raiz do projeto com Node.js.
+No Chrome, abra **TONES → Import DX7…**. Em **Choose library folder…**, escolha a pasta que contém seus bancos. Se a biblioteca já estiver aberta, selecione o banco de destino na lista. Para criar uma subpasta, escolha **New bank folder…** e dê um nome a ela.
+
+Selecione o arquivo `.syx` em **DX7 SysEx file**. Confira o destino e a quantidade de timbres, clique em **Import tones** e conceda a permissão de escrita se o navegador pedir. Cada voz recebe um arquivo `.wstone` próprio, inclusive quando já existe um timbre com o mesmo nome. O banco abre na lista para você escolher qual timbre carregar na parte.
+
+Para converter pelo terminal, execute o comando na raiz do projeto com Node.js.
 
 ```sh
 node scripts/import-dx7.mjs "/caminho/cartucho.syx" "banks/Meu DX7"
 ```
 
-O importador aceita um dump Yamaha DX7 por arquivo, de uma voz (VCED, 163 bytes) ou de 32 vozes (VMEM, 4.104 bytes). Confere cabeçalho, tamanho, dados de 7 bits e checksum antes de criar a pasta. Use um nome novo para o destino. Cada arquivo recebe o número da posição original, inclusive quando dois timbres têm o mesmo nome. [Descrição dos formatos SysEx](https://github.com/francoiswnel/DX7Dump/blob/master/sysex-format.txt)
+O comando de terminal cria um banco em uma pasta nova. Os dois importadores aceitam um dump Yamaha DX7 por arquivo, de uma voz (VCED, 163 bytes) ou de 32 vozes (VMEM, 4.104 bytes). Ambos conferem cabeçalho, tamanho, dados de 7 bits e checksum e numeram os arquivos pela posição original. [Descrição dos formatos SysEx](https://github.com/francoiswnel/DX7Dump/blob/master/sysex-format.txt)
 
 Cada timbre abre em FM puro. A conversão preserva o algoritmo, o feedback e, nos seis operadores, o modo ratio/fixed, frequência coarse/fine, detune, nível, sensibilidade à velocidade e os quatro pares de rate/level do envelope. O formato do WASWAN não representa a transposição do programa, o envelope de pitch, o LFO do DX7, o sincronismo dos osciladores, a sensibilidade à modulação de amplitude e o escalonamento de nível e velocidade de envelope pelo teclado. Esses ajustes podem mudar a altura, o ataque e a evolução do som em relação ao original. [Formato FM no WASWAN](../../docs/fm-layer.md)
 

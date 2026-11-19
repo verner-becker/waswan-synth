@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action} from './ui-primitives.js';
 import {TONE_FILE_EXTENSION,readToneFile,readToneFolder,saveToneFile,libraryBanks,librarySetting} from './tone-bank.js';
+import {decodeDx7,writeDx7Bank} from './fm-dx7.js';
 
 export class ToneBanks {
   constructor(send,internal){
@@ -40,6 +41,7 @@ export class ToneBanks {
     head.append(title,action('Close',()=>this.dialog.close()));
     this.context=el('p','ww-bank-context');
     this.folder=el('strong','',globalThis.showDirectoryPicker?'No bank folder open':'Folder access unavailable in this browser');
+    this.libraryLabel=el('strong');
     this.choose=action('Choose library folder…',()=>this.run(()=>this.chooseFolder()));
     this.refresh=action('Refresh folder',()=>this.run(()=>this.scan()));
     const location=el('div','ww-bank-location');
@@ -47,16 +49,24 @@ export class ToneBanks {
     this.destination.setAttribute('aria-label','Library bank');
     this.destination.onchange=()=>{
       const key=this.destination.value;
-      this.destination.value=this.bankKey;
-      this.run(()=>this.changeBank(key));
+      if(key==='new'){this.updateButtons();this.newFolder.focus();return;}
+      this.run(async()=>{
+        try{await this.changeBank(key);}
+        catch(error){
+          this.destination.value=this.importPanel.hidden?this.bankKey:'internal';
+          throw error;
+        }
+      });
     };
-    location.append(this.folder,this.destination,this.choose,this.refresh);
+    location.append(this.folder,this.libraryLabel,this.destination,this.choose,this.refresh);
     this.browseButton=action('Browse tones',()=>this.setMode('browse'));
     this.createButton=action('Create bank tone',()=>this.setMode('create'));
+    this.importButton=action('Import DX7',()=>this.setMode('import'));
+    this.importButton.hidden=!globalThis.showDirectoryPicker;
     const modes=el('div','ww-bank-modes');
     modes.setAttribute('role','group');
     modes.setAttribute('aria-label','Bank action');
-    modes.append(this.browseButton,this.createButton);
+    modes.append(this.browseButton,this.createButton,this.importButton);
     this.browse=el('section');
     this.create=el('section');
     this.openFile=action('Open tone file…',()=>this.file.click());
@@ -94,13 +104,27 @@ export class ToneBanks {
     nameLabel.append(this.name);
     this.save=action('Create tone file',()=>this.run(()=>this.saveTone()),'ww-primary');
     this.create.append(nameLabel,el('p','ww-muted','Capture the current sound as a new .wstone file in this folder. Existing files and instrument programs are preserved.'),this.save);
+    this.importPanel=el('section');
+    const dx7Label=el('label','','DX7 SysEx file');
+    this.dx7File=el('input');
+    this.dx7File.type='file';
+    this.dx7File.accept='.syx';
+    this.dx7File.onchange=()=>this.run(()=>this.previewDx7());
+    dx7Label.append(this.dx7File);
+    this.newFolderLabel=el('label','','New bank folder name');
+    this.newFolder=el('input');
+    this.newFolder.maxLength=80;
+    this.newFolder.oninput=()=>this.updateButtons();
+    this.newFolderLabel.append(this.newFolder);
+    this.preview=el('p','ww-muted');
+    this.importSave=action('Import tones',()=>this.run(()=>this.importDx7()),'ww-primary');
+    this.importPanel.append(dx7Label,this.newFolderLabel,this.preview,this.importSave);
     this.status=el('p','ww-muted');
     this.status.setAttribute('role','status');
-    this.dialog.append(head,this.context,location,modes,this.browse,this.create,this.status);
+    this.dialog.append(head,this.context,location,modes,this.browse,this.create,this.importPanel,this.status);
     document.body.append(this.dialog);
     this.renderTones();
     this.setMode('browse');
-    this.renderBanks();
     if(globalThis.showDirectoryPicker)this.restoreLibrary();
   }
   async restoreLibrary(){
@@ -121,8 +145,10 @@ export class ToneBanks {
       this.bank.add(new Option(bank.name,bank.key));
       this.destination.add(new Option(bank.name,bank.key));
     }
+    if(this.library&&!this.importPanel.hidden)this.destination.add(new Option('New bank folder…','new'));
     this.destination.hidden=!this.library;
-    this.destination.value=this.bankKey;
+    this.destination.value=this.bankKey==='internal'&&this.library&&!this.importPanel.hidden?'new':this.bankKey;
+    this.libraryLabel.textContent=this.library?`Library “${this.library.root.name}”`:'Choose a library folder for the imported tones.';
     if(globalThis.showDirectoryPicker)this.bank.add(new Option('Choose library folder…','choose'));
     if(this.library)this.bank.add(new Option('Refresh banks','refresh'));
     this.bank.add(new Option('Manage tones…','manage'));
@@ -150,12 +176,12 @@ export class ToneBanks {
     }
     this.renderBanks();
   }
-  async configureLibrary(root,preferred){
+  async configureLibrary(root,preferred,selectedFile){
     const banks=await libraryBanks(root);
     const bank=banks.find(item=>item.key===preferred)||banks[0];
     if(preferred!=='internal'){
       const directory=bank.key==='root'?root:await root.getDirectoryHandle(bank.name);
-      await this.scan(directory);
+      await this.scan(directory,selectedFile);
       this.bankKey=bank.key;
     }
     this.library={root,banks};
@@ -169,7 +195,8 @@ export class ToneBanks {
   open(mode){
     this.setMode(mode);
     this.dialog.showModal();
-    if(!this.directory){
+    if(mode==='import')this.dx7File.focus();
+    else if(!this.directory){
       (this.library?this.destination:globalThis.showDirectoryPicker?this.choose:this.openFile).focus();
     }else if(mode==='create')this.name.focus();
     else (this.search.disabled?this.createButton:this.search).focus();
@@ -178,10 +205,16 @@ export class ToneBanks {
     this.status.textContent='';
     const create=mode==='create';
     if(create&&!this.name.value)this.name.value=this.name.placeholder;
-    this.browse.hidden=create;
+    const importing=mode==='import';
+    this.browse.hidden=mode!=='browse';
     this.create.hidden=!create;
-    this.browseButton.setAttribute('aria-pressed',String(!create));
+    this.importPanel.hidden=!importing;
+    this.folder.hidden=this.context.hidden=importing;
+    this.libraryLabel.hidden=!importing;
+    this.browseButton.setAttribute('aria-pressed',String(mode==='browse'));
     this.createButton.setAttribute('aria-pressed',String(create));
+    this.importButton.setAttribute('aria-pressed',String(importing));
+    this.renderBanks();
     this.updateButtons();
   }
   sourceLabel(frame){
@@ -214,6 +247,12 @@ export class ToneBanks {
     if(this.quickTone.selectedIndex<0)this.quickTone.selectedIndex=0;
     this.choose.disabled=this.restoring||this.busy||!globalThis.showDirectoryPicker;
     this.openFile.disabled=!!this.busy;
+    this.importButton.disabled=this.dx7File.disabled=this.newFolder.disabled=!!this.busy;
+    const newBank=this.destination.value==='new';
+    this.newFolderLabel.hidden=!newBank;
+    const hasDestination=newBank?this.library&&this.newFolder.value.trim():
+      this.directory&&this.destination.value===this.bankKey;
+    this.importSave.disabled=this.busy||!this.dx7Tones||!hasDestination;
     this.refresh.disabled=this.busy||!this.directory;
     this.search.disabled=this.busy||(!this.tones.length&&!this.openedTone);
     this.select.disabled=this.busy||!this.select.value;
@@ -221,7 +260,7 @@ export class ToneBanks {
     this.createButton.disabled=this.busy||!globalThis.showDirectoryPicker;
     this.browseButton.disabled=this.name.disabled=!!this.busy;
     this.save.disabled=this.busy||!ready||!this.directory||!this.name.value.trim();
-    this.refresh.hidden=!this.directory;
+    this.refresh.hidden=!this.directory||!this.importPanel.hidden;
     this.choose.hidden=!globalThis.showDirectoryPicker;
     const part=this.frame?'Part '+'ABCD'[this.frame.track]:'part';
     const label='Load into '+part;
@@ -258,8 +297,44 @@ export class ToneBanks {
   async chooseFolder(){
     const directory=await globalThis.showDirectoryPicker({id:'waswan-tone-banks',mode:'read'});
     await this.configureLibrary(directory);
+    if(!this.importPanel.hidden)return this.dx7File;
     if(!this.create.hidden)return this.name;
     return this.items.length?this.select:this.createButton;
+  }
+  async previewDx7(){
+    this.dx7Tones=null;
+    this.preview.textContent='';
+    const [file]=this.dx7File.files;
+    if(!file)return;
+    if(file.size>4104)throw Error('Expected a single DX7 voice or a 32-voice cartridge.');
+    this.dx7Tones=decodeDx7(new Uint8Array(await file.arrayBuffer()));
+    const count=this.dx7Tones.length;
+    this.preview.textContent=`${count} ${count===1?'tone':'tones'} ready to import as .wstone.`;
+    const suggestion=file.name.replace(/\.syx$/i,'').replace(/[\\/:*?"<>|]/g,'-').slice(0,80);
+    if(!this.newFolder.value||this.newFolder.value===this.newFolder.placeholder)this.newFolder.value=suggestion;
+    this.newFolder.placeholder=suggestion;
+  }
+  async importDx7(){
+    const root=this.library.root,tones=this.dx7Tones;
+    const newBank=this.destination.value==='new';
+    const name=newBank?this.newFolder.value.trim():'';
+    if(newBank&&(!name||name==='.'||name==='..'||/[\\/:*?"<>|\u0000-\u001f]/.test(name)))
+      throw Error('Enter a valid folder name.');
+    const {target,first}=await writeDx7Bank(newBank?root:this.directory,tones,name);
+    this.dx7Tones=null;
+    this.dx7File.value=this.newFolder.value=this.preview.textContent='';
+    const summary=`Imported ${tones.length} ${tones.length===1?'tone':'tones'} into “${target.name}”.`;
+    try{
+      this.search.value='';
+      if(newBank){
+        await this.configureLibrary(root,'folder:'+name,first);
+      }else{
+        await this.scan(target,first);
+      }
+      this.setMode('browse');
+      this.report(summary);
+      return this.select;
+    }catch(error){this.report(summary+' Refresh banks to browse them. '+error.message);}
   }
   async scan(directory=this.directory,selectedFile){
     const previous=this.items[Number(this.select.value)];

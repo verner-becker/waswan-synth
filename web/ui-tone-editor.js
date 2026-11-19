@@ -61,9 +61,11 @@ export class ToneEditor {
     const programs=el('div','ww-program-actions');
     programs.append(el('span','ww-muted','Program'),this.save,this.saveAs);
     const create=action('Save to bank…',()=>this.banks.open('create'));
-    create.hidden=!globalThis.showDirectoryPicker;
+    const importDx7=action('Import DX7…',()=>this.banks.open('import'));
+    create.hidden=importDx7.hidden=!globalThis.showDirectoryPicker;
     create.setAttribute('aria-haspopup','dialog');
-    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.sources,programs,create);this.node.append(bar);
+    importDx7.setAttribute('aria-haspopup','dialog');
+    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.sources,programs,create,importDx7);this.node.append(bar);
     this.status=el('p','ww-muted');this.status.setAttribute('role','status');this.node.append(this.status);
     this.unavailable=el('p','ww-muted');this.node.append(this.unavailable);
     this.nav=el('nav','ww-editor-tabs');this.nav.setAttribute('aria-label','Tone parameter groups');this.node.append(this.nav);
