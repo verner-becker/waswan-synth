@@ -58,7 +58,7 @@ Para ouvir os exemplos, use **Play / stop pattern**. Para tocar pela entrada MID
 
 As ferramentas ficam em `.tools/` e os resultados em `.local/`, ambos ignorados pelo Git. O servidor usa apenas o loopback e serve o simulador, a tradução e os avisos de licença. Os instaladores de firmware não são publicados por esse servidor. Os links originais de instalação no rodapé não possuem destino nesta execução local.
 
-O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binaryen 133, e compila separadamente a extensão host em `wasm/waswan-sim.c`. É possível fornecer executáveis próprios pelas variáveis `ZIG` e `WASM_OPT`. Não há npm install para executar o sintetizador; Node é utilizado somente na verificação.
+O build usa o script original `tools/build_controls_sim.sh`, Zig 0.15.1 e Binaryen 133, e compila separadamente a extensão host em `wasm/waswan-sim.c`. É possível fornecer executáveis próprios pelas variáveis `ZIG` e `WASM_OPT`. O sintetizador roda no navegador. Os testes e o importador de timbres usam Node.js.
 
 ## Tone Editor v1
 
@@ -67,6 +67,8 @@ Integrado à `main`, **TONES** apresenta os 63 parâmetros ANALOG em sete seçõ
 Na versão com o módulo FM, abra **TONES → + Add FM** para acrescentar seis operadores a um programa. **Mix** controla os níveis de Analog e FM. [Guia do módulo e referências do FM-1](docs/fm-layer.md).
 
 No cabeçalho, **Bank** escolhe o banco e **Tone** escolhe o timbre. **Internal** abre os 99 programas do instrumento. Use **Bank → Choose library folder…** uma vez para cadastrar a pasta que contém os bancos. Por exemplo, `Meus bancos/DX7/Electric Piano.wstone` aparece como **DX7 → Electric Piano** quando esse é o nome do timbre no arquivo. O Chrome guarda a referência da pasta. Para gravar um timbre novo no banco selecionado, use **TONES → Save to bank…**. [Uso e armazenamento dos bancos locais](docs/studio-waves.md#bancos-locais-de-timbres)
+
+O projeto inclui **DX7 - Aquanode**, com 32 timbres em disco. Em **Bank → Choose library folder…**, abra a pasta `banks` deste projeto. Selecione **DX7 - Aquanode** e experimente **SBass**. O importador também converte outros cartuchos e vozes avulsas do DX7. [Comando de importação, origem do banco e limites sonoros](assets/dx7/README.md)
 
 ## Controle fino de knobs v1
 

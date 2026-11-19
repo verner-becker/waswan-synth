@@ -151,3 +151,9 @@ O fluxo aprovado usa dois combos no cabeçalho e uma única pasta de biblioteca.
 Após a confirmação de um programa interno, o foco voltava ao combo **Tone** e o navegador consumia as letras usadas para tocar. O Chrome reproduziu a falha com a tecla A. Agora os atalhos musicais também funcionam com **Bank** ou **Tone** fechado e focado. O teste mediu sinal após o master ao tocar A antes da troca, no banco de pasta e de volta ao programa interno, incluindo a soltura da nota. Também verificou navegação por seta e digitação do nome de um timbre. Evidência em `.local/validation/tone-bank-workflow/audio-fixed.log`.
 
 Em 19/11/2026, o usuário confirmou que voltou a tocar com o teclado do computador após trocar de timbre e aprovou a integração. A `main` avançou por fast-forward até `022555d`. Após recompilar o simulador, o teste de bancos e teclado passou novamente no Chrome. Evidência em `.local/validation/tone-bank-workflow/integration-browser.log`. O aceite manual com um controlador MIDI físico e com o diálogo nativo de seleção de pasta segue pendente.
+
+### Banco DX7 da comunidade
+
+Em 19/11/2026, o usuário solicitou um banco DX7 em disco e a conversão para o formato WASWAN. A branch `feat/dx7-tone-bank` inclui o cartucho Aquanode Presets 1 sob CC0, o importador SysEx e 32 timbres para a biblioteca de pastas. A conversão usa o módulo FM existente. [Como tocar, converter e conferir a procedência](../assets/dx7/README.md)
+
+O teste de importação reproduziu os arquivos distribuídos e mediu áudio em cada programa no WASM de 256 vozes. No Chrome, foi possível abrir o banco, tocar **SBass** pelo teclado e salvar uma variante na pasta de teste. Evidências em `.local/validation/dx7/`. A comparação auditiva com o DX7 físico segue pendente. A integração à `main` depende de aprovação.

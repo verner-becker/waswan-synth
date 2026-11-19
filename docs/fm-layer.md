@@ -16,7 +16,7 @@ As duas fontes compartilham a nota, o pool de 256 vozes, o panorama e os envios 
 
 Os timbres existentes continuam usando os 80 bytes do patch. Um snapshot portátil com FM acrescenta 89 bytes identificados pela versão 0xF1. O motor valida essa extensão antes de aplicar o projeto. Na sessão binária do navegador os parâmetros FM de programas, patterns e favoritos ocupam áreas reservadas, associados ao patch e protegidos por checksum. O tamanho da sessão continua em 21 × 16 KiB. Para reabrir timbres híbridos, use uma versão web com o módulo FM.
 
-O ciclo cobre o instrumento web. Compatibilidade sonora exata com o DX7 físico, importação de .syx e instalação em hardware estão fora do aceite desta versão.
+O instrumento web pode carregar os timbres convertidos de um cartucho SysEx pela biblioteca de pastas. [Banco DX7, importador e parâmetros compatíveis](../assets/dx7/README.md)
 
 ## Validação
 

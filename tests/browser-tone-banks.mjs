@@ -130,21 +130,25 @@ try{
   await page.screenshot({path:evidence+'/mobile.png'});
   await page.keyboard.press('Escape');
   // Configure one library with named subfolders and independent tone files.
-  await page.evaluate(async text=>{
+  const dx7Bank='banks/DX7 - Aquanode';
+  const bankFiles=fs.readdirSync(dx7Bank).map(name=>[name,fs.readFileSync(dx7Bank+'/'+name,'utf8')]);
+  await page.evaluate(async ({bankFiles,otherTone})=>{
     window.testBank='My banks';
     const root=await showDirectoryPicker();
-    for(const [name,tone] of [['DX7','Electric Piano'],['Poly-D','Bass']]){
+    for(const [name,entries] of [['DX7 - Aquanode',bankFiles],['Poly-D',[['sample.wstone',otherTone]]]]){
       const folder=await root.getDirectoryHandle(name,{create:true});
-      const file=await folder.getFileHandle('sample.wstone',{create:true});
-      const writer=await file.createWritable();
-      await writer.write(JSON.stringify({...JSON.parse(text),name:tone}));
-      await writer.close();
+      for(const [filename,text] of entries){
+        const file=await folder.getFileHandle(filename,{create:true});
+        const writer=await file.createWritable();
+        await writer.write(text);
+        await writer.close();
+      }
     }
-  },files[0].text);
+  },{bankFiles,otherTone:JSON.stringify({...tone,name:'Bass'})});
   await banks.selectOption('choose');
-  await tones.getByRole('option',{name:'Electric Piano'}).waitFor({state:'attached'});
+  await tones.getByRole('option',{name:'SBass',exact:true}).waitFor({state:'attached'});
   await banks.selectOption({label:'Poly-D'});
-  await tones.getByRole('option',{name:'Bass'}).waitFor({state:'attached'});
+  await tones.getByRole('option',{name:'Bass',exact:true}).waitFor({state:'attached'});
   await page.reload();
   await startSynth(page);
   assert.equal(await banks.inputValue(),'internal');
@@ -186,15 +190,15 @@ try{
       return Promise.resolve('denied');
     };
   });
-  await banks.selectOption({label:'DX7'});
+  await banks.selectOption({label:'DX7 - Aquanode'});
   await page.getByText('Folder access denied.',{exact:false}).waitFor();
   assert.equal(await banks.inputValue(),'internal');
-  await banks.selectOption({label:'DX7'});
-  await tones.getByRole('option',{name:'Electric Piano'}).waitFor({state:'attached'});
+  await banks.selectOption({label:'DX7 - Aquanode'});
+  await tones.getByRole('option',{name:'SBass',exact:true}).waitFor({state:'attached'});
   assert.equal(await page.evaluate(()=>audit.frame.instrument.programToken),playing);
   if(await page.evaluate(()=>audit.frame.instrument.edited))page.once('dialog',dialog=>dialog.accept());
-  await tones.selectOption({label:'Electric Piano'});
-  await page.getByText('Bank tone · Electric Piano · Program',{exact:false}).waitFor();
+  await tones.selectOption({label:'SBass'});
+  await page.getByText('Bank tone · SBass · Program',{exact:false}).waitFor();
   await tones.focus();
   audioPeaks.folder=await playKey();
   await page.locator('.ww-topbar').scrollIntoViewIfNeeded();
@@ -206,11 +210,11 @@ try{
   await newName.pressSequentially('sad');
   assert.equal(await newName.inputValue(),'sad');
   assert(await page.evaluate(()=>audit.frame.polyphony.slots.every(voice=>!voice.gate)));
-  await newName.fill('Electric Piano soft');
+  await newName.fill('SBass soft');
   await bank.getByRole('button',{name:'Create tone file'}).click();
-  await bank.getByText('Saved “Electric Piano soft” to disk.').waitFor();
+  await bank.getByText('Saved “SBass soft” to disk.').waitFor();
   await bank.getByRole('button',{name:'Close',exact:true}).click();
-  assert(await tones.getByRole('option',{name:'Electric Piano soft'}).count());
+  assert(await tones.getByRole('option',{name:'SBass soft',exact:true}).count());
   await banks.selectOption('internal');
   const program=await page.evaluate(()=>audit.frame.programs[audit.frame.track]);
   await page.getByRole('combobox',{name:'Tone program'}).selectOption(String(program));

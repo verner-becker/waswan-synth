@@ -3,7 +3,7 @@ import {validToneBytes} from './fm-patch.js';
 
 export const TONE_FILE_EXTENSION='.wstone';
 
-function toneFile(name,patch){
+export function toneFile(name,patch){
   const cleanName=typeof name==='string'?name.trim():'';
   if(!cleanName||cleanName.length>80||/[\u0000-\u001f\u007f]/.test(cleanName)||!validToneBytes(patch))
     throw Error('Invalid WASWAN tone file');
