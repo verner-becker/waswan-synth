@@ -125,4 +125,4 @@ O usuário autorizou um ciclo para quatro osciladores e formas adicionais, com p
 
 ## Módulo FM
 
-Em 19/11/2026 o usuário autorizou criar o módulo DX7-like por timbre e pediu pesquisa nos repositórios do FM-1. A branch `feat/dx7-fm` incorpora o DSP do sloopDX, integra a edição dos seis operadores e mistura FM e Analog dentro da mesma voz. O aceite musical físico e a decisão de integrar na main ficam com o usuário. [Uso, referências, testes e carga de áudio](fm-layer.md)
+Em 19/11/2026 o usuário autorizou criar o módulo DX7-like por timbre e pediu pesquisa nos repositórios do FM-1. O commit `5709a3e`, desenvolvido na branch `feat/dx7-fm`, incorpora o DSP do sloopDX, integra a edição dos seis operadores e mistura FM e Analog dentro da mesma voz. O usuário aprovou a integração à `main` e a remoção da branch. O aceite musical com controlador e saída físicos segue pendente. [Uso, referências, testes e carga de áudio](fm-layer.md)
