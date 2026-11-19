@@ -351,3 +351,54 @@
 .ww-native-parameter button {margin:0}
 .ww-instrument-expression {margin-top:6px}
 .ww-instrument-expression .wheels {margin:8px 0 0}
+
+/* Oscillator bank: four signal sources and their shared modulation controls. */
+.ww-osc-editing {padding:12px 16px;}
+.ww-osc-editing>.ww-section-header {float:left;margin:0 16px 0 0;padding:0;height:36px;align-items:center;border:0;}
+.ww-osc-editing>.ww-section-header .ww-muted,.ww-osc-editing>#ww-tones-help {display:none;}
+.ww-osc-editing .ww-editor-toolbar {min-height:36px;}
+.ww-osc-editing .ww-editor-toolbar p {margin:0;color:var(--ww-muted);}
+.ww-tone-editor>p:empty {display:none;}
+.ww-osc-editing .ww-editor-tabs {clear:both;margin:8px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--ww-border);}
+.ww-osc-editing .ww-editor-tabs button {min-height:30px;padding:4px 10px;}
+.ww-osc-bank {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0 16px;align-items:start;}
+.ww-osc-channel {min-width:0;border-left:1px solid var(--ww-border);padding-left:14px;}
+.ww-osc-channel:first-of-type {border:0;padding-left:0;}
+.ww-osc-channel h3 {font-size:14px;margin:0 0 7px;color:var(--ww-text);}
+.ww-osc-channel .ww-editor-choice,.ww-osc-field {display:grid;align-items:center;gap:6px;min-height:30px;margin:0;padding:0;font-size:12px;}
+.ww-osc-channel .ww-editor-choice {grid-template-columns:auto minmax(0,1fr);}
+.ww-osc-channel .ww-control-name {font-size:12px;font-weight:400;text-align:left;color:var(--ww-muted);}
+.ww-osc-field {grid-template-columns:minmax(62px,.85fr) minmax(32px,1.3fr) 47px;}
+.ww-osc-field label {color:var(--ww-muted);}
+.ww-osc-field input[type=range] {width:100%;min-width:0;height:24px;margin:0;padding:0;accent-color:var(--ww-accent);cursor:pointer;}
+.ww-osc-channel .ww-editor-choice select,.ww-osc-field input[type=number],.ww-osc-picker {background:var(--ww-bg);color:var(--ww-text);border:1px solid var(--ww-border);border-radius:5px;font:inherit;font-size:12px;min-width:0;max-width:100%;height:26px;padding:2px 5px;}
+.ww-osc-field input[type=number] {width:100%;text-align:center;font-variant-numeric:tabular-nums;}
+.ww-osc-field input:disabled {opacity:.5;cursor:default;}
+.ww-osc-help {display:none;margin-inline-start:auto;align-self:center;color:var(--ww-muted);font-size:12px;}
+.ww-osc-editing .ww-osc-help {display:block;}.ww-osc-help[open] {flex-basis:100%;}
+.ww-osc-help summary {cursor:pointer;width:fit-content;padding:3px 0;}
+.ww-osc-picker {display:none;}
+@media(max-width:1100px) and (min-width:961px){
+  .ww-osc-bank {gap:0 8px;}.ww-osc-channel {padding-left:8px;}.ww-osc-field {gap:4px;grid-template-columns:auto minmax(22px,1fr) 43px;}
+}
+@media(max-width:960px){
+  .ww-osc-bank {display:block;}.ww-osc-picker {display:block;width:100%;height:36px;margin-bottom:8px;}
+  .ww-osc-channel {display:none;border:0;padding:0;}.ww-osc-channel h3 {display:none;}
+  .ww-osc-channel.ww-osc-selected {display:block;}
+  .ww-osc-field,.ww-osc-channel .ww-editor-choice {min-height:38px;}
+  .ww-osc-field input[type=number],.ww-osc-channel .ww-editor-choice select {height:32px;}
+  .ww-osc-editing>.ww-section-header {float:none;height:auto;margin-bottom:6px;}
+}
+@media(min-width:961px) and (max-height:820px){
+  .ww-shell[data-active-workspace="tones"]:has(.ww-osc-editing) {
+    padding-top:10px;padding-bottom:4px;
+    .ww-workspace-bar {margin:4px 0 6px;}
+    .ww-osc-editing .ww-editor-tabs {margin:4px 0 8px;}
+    .ww-osc-editing {padding-block:10px;}
+    .ww-dock {padding:10px 16px;margin-top:8px;}
+    .ww-dock .ww-section-header {margin-bottom:5px;padding-bottom:5px;}
+    .ww-play-actions {margin-bottom:5px;}
+    .ww-dock #keys {height:84px;}
+    .ww-dock .instrumentfoot {padding:2px 0;margin:0;}
+  }
+}

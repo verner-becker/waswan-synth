@@ -37,3 +37,9 @@ Chrome 157.0.8103.78 headless local, AudioWorklet a 44,1 kHz, blocos de 128 fram
 | 256 | 0,74 ms | 0,84 ms | 10 | 34 |
 
 Na primeira implementação, quatro osciladores a 256 vozes excederam o prazo em 422 blocos. A versão final seleciona uma rotina por forma antes de renderizar o bloco de OSC3/4. O DSP Monitor usa `Date.now` no worklet deste Chrome, com resolução nominal de 1 ms. As ultrapassagens medem duração do processamento e não contam falhas audíveis na saída física. O ensaio cobre um timbre e uma máquina. O aceite musical em controlador e saída físicos e a integração em `main` ficam pendentes.
+
+## Apresentação de Oscillators
+
+O painel reúne quatro colunas de osciladores e uma de ruído e modulação. Sliders horizontais aceitam as setas do teclado, e os campos adjacentes permitem digitação exata. A afinação aparece centrada em zero. Em janelas de até 960 px de largura, um seletor alterna entre os quatro osciladores e a modulação.
+
+Em Chrome, a 1366 × 768, a altura do editor passou de 1486 para 286 px. Com a ajuda e as opções de expressão recolhidas, o editor, o teclado e os pads couberam na janela a 1024 × 768, 1280 × 720, 1366 × 768 e 1536 × 750. A 390 × 844 a página permite rolagem vertical até o teclado. O teste de interface percorre as cinco seções móveis com uma nota sustentada e verifica que a troca de seção não envia comandos ao instrumento. Capturas e medições em `.local/validation/oscillator-layout/`.

@@ -3,11 +3,37 @@ import {el,action,Panel,RotaryKnob} from './ui-primitives.js';
 const GROUPS=[['Oscillators',[0,1,2,4,5,6,7,11,63,64,65,66,67,68,3,8,9,10]],['Filter',[12,13,14,15,16,17,18,19,51]],
   ['Envelopes',[20,21,22,23,24,25,26,27]],['Modulation',[28,29,30,31,32,33,34,35,36,37,46]],
   ['Voice',[38,39,40,41,42,43,44,45]],['Arpeggiator',[47,48,49,50]],['Shared effects',[52,53,54,55,56,57,58,59,60,61,62]]];
-const OSC_SECTIONS = new Map([[0,'Oscillator 1'],[4,'Oscillator 2'],[63,'Oscillator 3'],[66,'Oscillator 4'],[3,'Noise and cross-modulation']]);
+const OSC_SECTIONS = new Map([[0,'Oscillator 1'],[4,'Oscillator 2'],[63,'Oscillator 3'],[66,'Oscillator 4'],[3,'Noise & modulation']]);
 const LABELS={0:'OSC1 wave',1:'OSC1 pulse width / detune',2:'OSC1 level',3:'Noise level',4:'OSC2 wave',5:'OSC2 pulse width',6:'OSC2 level',7:'OSC2 semitones',8:'OSC1 → OSC2 sync',9:'OSC2 → OSC1 FM',10:'Filter env → OSC2 pitch',11:'OSC2 fine',14:'Filter envelope amount',18:'Velocity → filter',19:'Velocity → amp',
   20:'Filter attack',21:'Filter decay',22:'Filter sustain',23:'Filter release',24:'Amp attack',25:'Amp decay',26:'Amp sustain',27:'Amp release',
   32:'LFO → pitch',33:'LFO → PWM',34:'LFO → filter',35:'LFO → amp',36:'LFO pitch destination',37:'LFO PWM destination',39:'Unison voices',40:'Unison / dual detune',44:'Bend range',46:'Mod depth (legacy)',
   52:'Chorus rate',53:'Chorus depth',54:'Chorus return',55:'Delay time',56:'Delay feedback',57:'Delay tone',58:'Delay return',59:'Reverb size',60:'Reverb damping',61:'Reverb pre-delay',62:'Reverb return'};
+const OSC_LABELS = {0:'Wave',1:'PW / detune',2:'Level',3:'Noise',4:'Wave',5:'Pulse width',6:'Level',7:'Semitones',8:'Sync 1 → 2',9:'FM 2 → 1',10:'Env → pitch 2',11:'Fine',63:'Wave',64:'Level',65:'Semitones',66:'Wave',67:'Level',68:'Semitones'};
+
+function oscillatorSlider(p,label,onInput){
+  const center=({7:24,10:64,11:64,65:15,68:15})[p.id]??0;
+  const node=el('div','ww-osc-field'),name=el('label','',OSC_LABELS[p.id]);
+  const range=el('input'),number=el('input');
+  range.type='range';number.type='number';
+  range.id=`ww-osc-slider-${p.id}`;name.htmlFor=range.id;
+  for(const input of [range,number]){
+    input.min=p.min-center;input.max=p.max-center;input.step=1;
+  }
+  range.setAttribute('aria-label',label);number.setAttribute('aria-label',`${label} exact value`);
+  range.oninput=()=>onInput(range.valueAsNumber+center);
+  number.onchange=()=>{
+    if(number.value!==''&&number.checkValidity())onInput(number.valueAsNumber+center);
+  };
+  node.append(name,range,number);
+  return {node,update(s,display,detail){
+    const value=String(s.value-center);
+    if(range.value!==value)range.value=value;
+    if(document.activeElement!==number)number.value=value;
+    number.disabled=range.disabled=!s.available;
+    range.setAttribute('aria-valuetext',display);node.title=`${display} · ${detail}`;
+  }};
+}
+
 export class ToneEditor {
   constructor(send,onGroupChange){
     this.send=send;this.onGroupChange=onGroupChange;this.request=0;this.controls=new Map();this.groups=[];
@@ -15,7 +41,7 @@ export class ToneEditor {
     this.heading=el('p','','Start audio to inspect the selected tone.');
     this.save=action('Save',()=>this.openSave(false),'ww-primary');this.saveAs=action('Save as…',()=>this.openSave(true));this.save.disabled=this.saveAs.disabled=true;
     const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.save,this.saveAs);this.node.append(bar);
-    this.status=el('p','ww-muted','Edits apply immediately. Saving remains explicit.');this.status.setAttribute('role','status');this.node.append(this.status);
+    this.status=el('p','ww-muted');this.status.setAttribute('role','status');this.node.append(this.status);
     this.unavailable=el('p','ww-muted');this.node.append(this.unavailable);
     this.nav=el('nav','ww-editor-tabs');this.nav.setAttribute('aria-label','Tone parameter groups');this.node.append(this.nav);
     this.hint=el('p','ww-muted','Drag knobs vertically · Shift for fine adjustment · arrow keys for one step');this.hint.id='ww-tones-help';this.node.append(this.hint);
@@ -33,36 +59,50 @@ export class ToneEditor {
   build(catalog){
     this.catalog=catalog;this.controls.clear();this.groups=[];this.nav.replaceChildren();this.content.replaceChildren();
     for(const [group,ids] of GROUPS){
-      const panel=el('section','ww-editor-group');panel.hidden=this.groups.length>0;const button=action(group,()=>this.selectGroup(group));button.dataset.group=group;button.setAttribute('aria-pressed',String(!this.groups.length));this.nav.append(button);panel.append(el('h3','',group));
+      const panel=el('section','ww-editor-group');panel.hidden=this.groups.length>0;const button=action(group,()=>this.selectGroup(group));button.dataset.group=group;button.setAttribute('aria-pressed',String(!this.groups.length));this.nav.append(button);if(group!=='Oscillators')panel.append(el('h3','',group));
       if(group==='Shared effects')panel.append(el('p','ww-muted','These returns are shared by all Synth parts. Use Performance for part levels and the chorus, delay and reverb sends.'));
-      if(group==='Oscillators')panel.append(el('p','ww-muted','Choose a wave to enable OSC3 or OSC4. OFF skips that oscillator. X-MOD is linear FM: OSC2 → OSC1. SUPER uses seven saws in OSC1, with a shared five-voice limit; sync/FM are bypassed. Adjust SUPER mix in Instrument setup.'));
-      let grid=el('div','ww-editor-grid');if(group!=='Oscillators')panel.append(grid);
+      const oscillators=group==='Oscillators';
+      let grid=el('div','ww-editor-grid');
+      if(oscillators){
+        panel.classList.add('ww-osc-bank');
+        this.oscPicker=el('select','ww-osc-picker');this.oscPicker.setAttribute('aria-label','Oscillator section');
+        this.oscPicker.onchange=()=>{
+          for(const section of panel.querySelectorAll('.ww-osc-channel'))section.classList.toggle('ww-osc-selected',section.dataset.section===this.oscPicker.value);
+        };
+        panel.append(this.oscPicker);
+      }else panel.append(grid);
       for(const id of ids){
         const p=catalog.find(p=>p.id===id);if(!p)continue;const label=LABELS[id]??p.name;
-        if(group==='Oscillators' && OSC_SECTIONS.has(id)){
-          grid=el('div','ww-editor-grid');
-          panel.append(el('h4','',OSC_SECTIONS.get(id)),grid);
+        if(oscillators && OSC_SECTIONS.has(id)){
+          grid=el('section','ww-osc-channel');grid.dataset.section=id;grid.classList.toggle('ww-osc-selected',id===0);
+          const title=OSC_SECTIONS.get(id);
+          grid.append(el('h3','',title));panel.append(grid);
+          this.oscPicker.add(new Option(title,String(id)));
         }
         let control;
         if(p.options){
-          const node=el('label','ww-editor-choice');node.append(el('span','ww-control-name',label));const input=el('select');input.setAttribute('aria-label',label);
+          const node=el('label','ww-editor-choice');node.append(el('span','ww-control-name',oscillators?OSC_LABELS[id]:label));const input=el('select');input.setAttribute('aria-label',label);
           p.options.forEach((name,value)=>{if(name)input.add(new Option(name,String(value)));});input.onchange=()=>this.set(id,Number(input.value));node.append(input);
           control={node,update:(s,display)=>{input.disabled=!s.available;input.value=String(s.value);input.title=display;}};
+        }else if(oscillators){
+          control=oscillatorSlider(p,label,value=>this.set(id,value));
         }else{
-          const tuning=id===65||id===68;
-          const center=tuning?15:0, min=p.min-center, max=p.max-center;
-          control=RotaryKnob({name:label,min,max,onInput:value=>this.set(id,value+center)});control.badge.hidden=true;control.dial.setAttribute('aria-describedby',this.hint.id);
+          const {min,max}=p;
+          control=RotaryKnob({name:label,min,max,onInput:value=>this.set(id,value)});control.badge.hidden=true;control.dial.setAttribute('aria-describedby',this.hint.id);
           const input=el('input','ww-editor-number');input.type='number';input.min=min;input.max=max;input.step=1;input.setAttribute('aria-label',`${label} internal value`);
-          input.onchange=()=>{if(input.checkValidity())this.set(id,Number(input.value)+center);};control.node.append(input);const original=control.update;
-          control.update=(s,display,secondary)=>{original({...s,min,max,value:s.value-center},display,tuning?'Semitones':secondary);input.disabled=!s.available;if(document.activeElement!==input)input.value=String(s.value-center);};
+          input.onchange=()=>{if(input.checkValidity())this.set(id,Number(input.value));};control.node.append(input);const original=control.update;
+          control.update=(s,display,secondary)=>{original(s,display,secondary);input.disabled=!s.available;if(document.activeElement!==input)input.value=String(s.value);};
         }
         control.node.dataset.param=id;this.controls.set(id,control);grid.append(control.node);
       }
       this.groups.push({group,panel,button});this.content.append(panel);
     }
+    const help=el('details','ww-osc-help');
+    help.append(el('summary','','Oscillator help'),el('p','','Select a waveform to enable an oscillator. Use the sliders or enter exact values. Edits sound immediately. Save writes the tone. X-MOD applies linear FM from OSC2 to OSC1. SUPER uses seven saws with a shared five-voice limit and bypasses sync and FM. Adjust SUPER mix in Instrument setup.'));
+    this.nav.append(help);
     this.selectGroup(this.selectedGroup??GROUPS[0][0]);
   }
-  selectGroup(group){this.selectedGroup=group;for(const g of this.groups){g.panel.hidden=g.group!==group;g.button.setAttribute('aria-pressed',String(g.group===group));}this.onGroupChange(group);}
+  selectGroup(group){this.selectedGroup=group;this.node.classList.toggle('ww-osc-editing',group==='Oscillators');for(const g of this.groups){g.panel.hidden=g.group!==group;g.button.setAttribute('aria-pressed',String(g.group===group));}this.onGroupChange(group);}
   set(id,value){if(this.frame?.editor?.available)this.send({t:'editor-set',id,value,scope:this.frame.instrument.scope});}
   openSave(as){
     const f=this.frame;if(!f?.editor?.available)return;

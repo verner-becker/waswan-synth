@@ -32,6 +32,26 @@ try{
   fs.mkdirSync(evidence,{recursive:true});
   await editor.screenshot({path:evidence+'/tones.png'});
   const held=60;await send({t:'midi',st:0x90,d1:held,d2:100});await p.waitForFunction(()=>audit.frame.polyphony.slots.some(v=>v.gate));
+  // A complete edit/play workspace must fit a notebook at normal browser zoom.
+  for(const [width,height] of [[1366,768],[1536,750],[1024,768],[1280,720]]){
+    await p.setViewportSize({width,height});
+    assert(await p.evaluate(()=>document.documentElement.scrollHeight<=innerHeight&&document.documentElement.scrollWidth<=innerWidth));
+    assert.equal(await editor.locator('.ww-osc-channel:visible').count(),5);
+  }
+  const oscLevel=editor.getByRole('slider',{name:'OSC3 level',exact:true});
+  await oscLevel.focus();await p.keyboard.press('Home');await p.keyboard.press('ArrowRight');
+  await p.waitForFunction(()=>audit.frame.editor.values[64].value===1);
+  const editsBeforePicker=await p.evaluate(()=>audit.sent.length);
+  await p.setViewportSize({width:390,height:844});
+  for(const [section,id] of [[4,4],[63,63],[66,66],[3,8],[0,0]]){
+    await editor.getByLabel('Oscillator section').selectOption(String(section));
+    assert.equal(await editor.locator('.ww-osc-channel:visible').count(),1);
+    assert(await editor.locator(`[data-param="${id}"] select`).isVisible());
+    assert(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  }
+  assert.equal(await p.evaluate(()=>audit.sent.length),editsBeforePicker);
+  assert(await p.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate)));
+  await p.setViewportSize({width:1560,height:1100});
   const mark=await p.evaluate(()=>audit.sent.length);for(const name of ['Filter','Envelopes','Modulation','Voice','Arpeggiator','Shared effects','Oscillators'])await group(name);
   await p.locator('[data-workspace="perf"]').click();await p.locator('[data-workspace="tones"]').click();
   assert(await p.evaluate(()=>audit.frame.polyphony.slots.some(v=>v.gate)));assert.equal(await p.evaluate(()=>audit.contexts),1);assert.equal(await p.evaluate(mark=>audit.sent.length-mark,mark),0);
