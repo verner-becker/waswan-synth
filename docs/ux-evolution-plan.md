@@ -6,6 +6,8 @@ Em 18/11/2026, o usuário autorizou registrar este plano, integrar o MVP à `mai
 
 Na revisão seguinte, o usuário autorizou a execução das etapas mapeadas em sequência e pediu nova revisão com Astra após as mudanças, reforçando a remoção do Legacy SMK.
 
+Após a revisão e o aceite do usuário, as seis etapas foram integradas à `main` em `ff10191`. Os commits de fechamento das branches temporárias, da etapa 1 à 6, são `645d0b4`, `5b0f19c`, `6686a1f`, `2454662`, `21d6b29` e `ff10191`. [Parecer de seguimento do Astra](ux-evolution-astra-followup.md)
+
 ## 1. Synth e navegação principal
 
 Aprovada pelo usuário em 18/11/2026 na branch `feat/ux-stage-1-synth-shell`. [Fechamento e evidências](ux-stage-1.md)

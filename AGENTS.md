@@ -2,7 +2,7 @@
 
 ## Current Baseline
 
-`main` is the official functional reference: UI Foundation v0.3 with the tone selector and ANALOG Tone Editor (TONES, Save/Save as), 256 voices, DSP Monitor, MIDI diagnostics, knob soft takeover, Studio waves 0–5, the revised SEQ project/recording workflow, the root Portuguese PDF manual, and the DAW MVP through `21bd5bc`. The user approved the Studio integration and branch cleanup on 2026-11-17 and the DAW MVP integration and branch cleanup on 2026-11-18. Historical branch names are not checkout instructions; use commit SHAs or tags.
+`main` is the official functional reference. It includes the approved Synth and DAW UX evolution through `ff10191`, with Performance, TONES, Instrument setup, Quick capture, the original Studio project editor, linked DAW tabs, and the Portuguese PDF manual. The instrument retains 256 voices, DSP Monitor, MIDI diagnostics, and knob soft takeover. Use commit SHAs or tags to locate historical branches.
 
 ## Studio Evolution
 

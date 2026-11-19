@@ -1,6 +1,6 @@
 # WASWAN Synth
 
-Sintetizador web em desenvolvimento a partir do [SMKSYNTH](https://github.com/4t59m4f784-creator/SMKSYNTH), com áudio e execução pelo SMK-37 Pro validados localmente. Preserva o DSP, a interface, a autoria e o histórico originais. Sem alterações de firmware ou grandes refatorações.
+Sintetizador web e DAW baseados no SMKSYNTH, com áudio e execução pelo SMK-37 Pro validados localmente na base do instrumento. Preserva o DSP, a autoria e o histórico do projeto original. [SMKSYNTH](https://github.com/4t59m4f784-creator/SMKSYNTH)
 
 O código original está em `upstream/SMKSYNTH`, como submódulo fixado no commit `3f751bc2be066414f204cf44e1aa05d9c7467d7f` (release declarada: 1.2.0). A árvore original permanece intacta.
 
@@ -12,7 +12,7 @@ Fonte editável: [docs/manual-waswan-synth.html](docs/manual-waswan-synth.html).
 
 ## UI Foundation v0.3
 
-A `main` reúne a UI Foundation v0.3 com seletor de timbres, MIDI Setup e modos de voz na Performance, o motor de 256 vozes, o DSP Monitor, as correções de knobs e o WASWAN Studio com SEQ revisado. A interface, baseada na versão funcional `7dc36c8`, abre o novo cockpit em inglês: Performance, oito knobs reais, quatro níveis de partes, MIDI Learn por controle e navegação por workspaces. Abra **Instrument setup** pela Performance para acessar as funções nativas do motor.
+A `main` abre a interface em inglês com **Synth** e **DAW**. Em Performance, use os oito knobs, os quatro níveis das partes, os modos de voz e as atribuições MIDI. Abra **Instrument setup** para acessar os controles nativos. O motor usa 256 vozes. O DSP Monitor e o diagnóstico MIDI ficam em Settings.
 
 ```sh
 git switch main
@@ -30,7 +30,7 @@ Em **DAW → File → Open DAW project**, arquivos Studio podem ser abertos no e
 
 ## WASWAN DAW
 
-A `main` inclui o MVP da DAW aprovado para integração em 18/11/2026. Use **DAW** para montar o Arrangement, editar clipes, gravar MIDI e áudio, mixar e exportar. **Open DAW in new tab** usa o mesmo projeto e a sessão de áudio hospedada no Synth. Consulte o [aceite do MVP](docs/daw-mvp-discovery/acceptance.md), o [parecer do Astra](docs/ux-evolution-astra.md) e o [plano de evolução de UX](docs/ux-evolution-plan.md).
+Use **DAW** para montar o Arrangement, editar clipes, gravar MIDI e áudio, mixar e exportar. **Open DAW in new tab** usa o mesmo projeto e a sessão de áudio hospedada no Synth. Em ultrawide, o menu **View panels** oferece **Dock editor on right**. Consulte o [aceite do MVP](docs/daw-mvp-discovery/acceptance.md), o [plano de evolução de UX](docs/ux-evolution-plan.md) e o [parecer de seguimento do Astra](docs/ux-evolution-astra-followup.md).
 
 ## Executar no Ubuntu
 
