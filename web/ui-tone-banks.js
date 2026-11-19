@@ -18,7 +18,20 @@ export class ToneBanks {
     this.quickTone.setAttribute('aria-label','Folder tone');
     this.quickTone.onchange=()=>{
       const tone=this.tones[this.quickTone.selectedIndex-1];
-      if(tone)this.run(()=>this.loadTone(tone));
+      if(!tone)return;
+      if(this.pickingTone){this.pickingTone.tone=tone;return;}
+      if(this.busy)return;
+      const pick=this.pickingTone={tone,scope:this.frame.instrument.scope};
+      this.run(async()=>{
+        try{
+          let requested;
+          do{
+            requested=pick.tone;
+            await this.loadTone(requested);
+          }while(requested!==pick.tone&&pick.scope===this.frame.instrument.scope);
+        }
+        finally{this.pickingTone=null;}
+      });
     };
     this.bank.onchange=()=>{
       const key=this.bank.value;
@@ -220,7 +233,13 @@ export class ToneBanks {
   sourceLabel(frame){
     const loaded=this.loaded.get(frame.track);
     if(!loaded)return '';
-    return (loaded.token===frame.instrument.programToken?'Bank tone · ':'Last file loaded · ')+loaded.name;
+    return (this.hasUnsavedEdits(frame)?'Last file loaded · ':'Bank tone · ')+loaded.name;
+  }
+  hasUnsavedEdits(frame){
+    const {instrument,track}=frame,loaded=this.loaded.get(track);
+    // Loading a disk tone sets the internal slot's edit flag. Its load receipt
+    // fingerprints the applied patch, including FM and the part's shared effects.
+    return instrument.edited&&(loaded?.scope!==instrument.scope||loaded?.token!==instrument.programToken);
   }
   async run(task){
     if(this.busy)return;
@@ -239,10 +258,16 @@ export class ToneBanks {
     this.destination.disabled=this.bank.disabled=!!(this.restoring||this.busy);
     this.internal.hidden=this.bankKey!=='internal';
     this.quickTone.hidden=!this.internal.hidden;
-    this.quickTone.disabled=this.busy||!ready||!this.tones.length;
+    this.quickTone.disabled=(this.busy&&!this.pickingTone)||!ready||!this.tones.length;
     const loaded=this.loaded.get(this.frame?.track);
     const inBank=loaded&&loaded.root===this.library?.root&&loaded.bank===this.bankKey;
-    const current=inBank&&loaded.token===this.frame.instrument.programToken?loaded.fileName:'';
+    const editedFile=inBank&&loaded.fileName&&this.hasUnsavedEdits(this.frame);
+    const hint=editedFile?`${loaded.name} · Edited`:this.tones.length?'Choose a tone…':'Empty bank';
+    const placeholder=this.quickTone.options[0];
+    if(placeholder&&placeholder.text!==hint)placeholder.text=hint;
+    const pending=this.pickingTone;
+    const current=pending&&pending.scope===this.frame.instrument.scope?pending.tone.fileName:
+      inBank&&!editedFile?loaded.fileName:'';
     if(this.quickTone.value!==current)this.quickTone.value=current||'';
     if(this.quickTone.selectedIndex<0)this.quickTone.selectedIndex=0;
     this.choose.disabled=this.restoring||this.busy||!globalThis.showDirectoryPicker;
@@ -267,7 +292,7 @@ export class ToneBanks {
     if(this.load.textContent!==label)this.load.textContent=label;
     const context=!this.running?'Start audio to load or capture a tone.':
       part+' · Program '+this.frame.programs[this.frame.track]+' · '+(this.sourceLabel(this.frame)||this.frame.instrument.name)+
-      (this.frame.instrument.edited?' · Edited':'')+(ready?'':' · Instrument unavailable');
+      (this.hasUnsavedEdits(this.frame)?' · Edited':'')+(ready?'':' · Instrument unavailable');
     if(this.context.textContent!==context)this.context.textContent=context;
   }
   renderTones(preferred=this.items?.[Number(this.select.value)]){
@@ -381,7 +406,7 @@ export class ToneBanks {
   async loadTone(tone=this.items[Number(this.select.value)]){
     const {instrument,track}=this.frame;
     const part='ABCD'[track];
-    if(instrument.edited&&!globalThis.confirm(`Discard the current edits in Part ${part} and load “${tone.name}”?`))return;
+    if(this.hasUnsavedEdits(this.frame)&&!globalThis.confirm(`Discard the current edits in Part ${part} and load “${tone.name}”?`))return;
     const {token}=await this.command('tone-bank-load',instrument,{patch:tone.patch,discard:instrument.edited});
     this.loaded.set(track,{name:tone.name,scope:instrument.scope,token,root:this.library?.root,bank:this.bankKey,
       fileName:tone===this.openedTone?'':tone.fileName});

@@ -111,7 +111,6 @@ try{
   await bank.locator('input[accept=".wstone"]').setInputFiles({name:'download.wstone',mimeType:'application/json',buffer:Buffer.from(files[0].text)});
   await bank.getByText('Tone file opened. Load it into the selected part to play it.').waitFor();
   assert.equal(await bank.getByLabel('Bank tone').locator('option:checked').textContent(),'Baixo híbrido · opened file');
-  page.once('dialog',dialog=>dialog.accept());
   await bank.getByRole('button',{name:'Load into Part A',exact:true}).click();
   await bank.waitFor({state:'hidden'});
   await open();
@@ -209,6 +208,8 @@ try{
   single.write('Bass      ',151,'ascii');
   single[161]=-single.subarray(6,161).reduce((sum,b)=>sum+b,0)&127;
   single[162]=0xf7;
+  await bank.getByText('Library “My banks”').waitFor();
+  await page.waitForFunction(()=>!document.querySelector('.ww-tone-banks input[accept=".syx"]').disabled);
   await source.setInputFiles({name:'Bass.syx',mimeType:'application/octet-stream',buffer:single});
   await bank.getByText('1 tone ready to import as .wstone.').waitFor();
   assert(await bank.evaluate(node=>node.scrollWidth<=node.clientWidth+1));
@@ -271,6 +272,45 @@ try{
   await page.getByText('Bank tone · SBass · Program',{exact:false}).waitFor();
   await tones.focus();
   audioPeaks.folder=await playKey();
+  // Audition successive disk tones without editing the part in between.
+  const verifyFolderTone=async name=>{
+    const tone=imported.find(([,tone])=>tone.name===name)[1];
+    await page.waitForFunction(({name,bytes})=>
+      document.querySelector('[aria-label="Folder tone"]').selectedOptions[0]?.text===name&&
+      audit.frame.instrument.name===name&&String(audit.frame.fm?.bytes)===String(bytes),
+      {name,bytes:tone.patch.slice(80)},{timeout:4000});
+  };
+  await verifyFolderTone('SBass');
+  assert(!(await page.locator('#ww-tone-detail').innerText()).includes('Edited'));
+  await tones.click();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await verifyFolderTone('SBass2');
+  await tones.selectOption({label:'Blow'});
+  await verifyFolderTone('Blow');
+  assert(await tones.evaluate(node=>document.activeElement===node));
+  audioPeaks.blow=await playKey();
+  const level=await page.evaluate(()=>audit.frame.fm.bytes[4]-10);
+  await page.evaluate(value=>audit.post({t:'fm-set',scope:audit.frame.instrument.scope,field:4,value}),level);
+  await page.waitForFunction(value=>audit.frame.fm.bytes[4]===value,level);
+  page.once('dialog',dialog=>dialog.dismiss());
+  await tones.selectOption({label:'SBass'});
+  assert.equal(await page.evaluate(()=>audit.frame.instrument.name),'Blow');
+  assert.equal(await page.evaluate(()=>audit.frame.fm.bytes[4]),level);
+  assert.equal(await tones.locator('option:checked').textContent(),'Blow · Edited');
+  page.once('dialog',dialog=>dialog.accept());
+  await tones.selectOption({label:'SBass'});
+  await verifyFolderTone('SBass');
+  // Send both choices in one event-loop turn, before the first engine receipt.
+  await tones.evaluate(select=>{
+    for(const label of ['Blow','DX 1']){
+      select.value=Array.from(select.options).find(option=>option.text===label).value;
+      select.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+  });
+  await verifyFolderTone('DX 1');
+  await tones.selectOption({label:'SBass'});
+  await verifyFolderTone('SBass');
   await page.locator('.ww-topbar').scrollIntoViewIfNeeded();
   await page.screenshot({path:evidence+'/bank-tone-combos.png'});
   await page.locator('[data-workspace="tones"]').click();
@@ -287,11 +327,11 @@ try{
   assert(await tones.getByRole('option',{name:'SBass soft',exact:true}).count());
   await banks.selectOption('internal');
   const program=await page.evaluate(()=>audit.frame.programs[audit.frame.track]);
-  await page.getByRole('combobox',{name:'Tone program'}).selectOption(String(program));
-  await page.getByRole('button',{name:'Discard and load'}).click();
+  await internal.focus();
+  await internal.selectOption(String(program));
   await page.waitForFunction(()=>!audit.frame.instrument.edited);
   assert.equal(await page.evaluate(()=>audit.frame.instrument.programToken),playing);
-  // Play immediately after confirming. The dialog returns focus to Tone.
+  // Returning from an unmodified disk tone keeps the internal selector playable.
   assert(await internal.evaluate(node=>document.activeElement===node));
   audioPeaks.restored=await playKey();
   audioPeaks.midi=await playMidi();

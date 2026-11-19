@@ -173,7 +173,7 @@ export class ToneEditor {
     this.banks.update(f,running);
     this.frame=f;if(f.programLibrary)this.library=f.programLibrary;if(f.editorCatalog)this.build(f.editorCatalog);
     const analog=f.engines[f.track]===0,available=running&&!!f.editor?.available;
-    this.heading.textContent=`Part ${'ABCD'[f.track]} · Program ${f.programs[f.track]} · ${this.banks.sourceLabel(f)||f.instrument.name}${f.instrument.edited?' · Edited':''}`;
+    this.heading.textContent=`Part ${'ABCD'[f.track]} · Program ${f.programs[f.track]} · ${this.banks.sourceLabel(f)||f.instrument.name}${this.banks.hasUnsavedEdits(f)?' · Edited':''}`;
     this.save.disabled=this.saveAs.disabled=!available;
     this.unavailable.textContent=!analog?'DRUM-X uses different parameter meanings. Edit this engine in Instrument setup.':!running?'Start audio to edit.':!available?'Editor temporarily unavailable during an instrument dialog, save or context change.':'';
     this.sources.hidden=!analog||f.fm===undefined;

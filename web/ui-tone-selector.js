@@ -23,17 +23,18 @@ export class ToneSelector {
     if((program===current&&!this.bankSource)||!this.library?.some(p=>p.number===program))return;
     this.failure=false;
     const intent={program,reloadCurrent:program===current,scope:f.instrument.scope,token:f.instrument.programToken};
-    if(f.instrument.edited){
+    if(this.edited){
       this.intent=intent;const next=this.library.find(p=>p.number===program);
       this.question.textContent=`Part ${'ABCD'[f.track]} · Program ${current} (${f.instrument.name}) has unsaved edits. Loading Program ${program} (${next.name}) replaces them. Save the tone first if you want to keep them.`;
       this.dialog.showModal();
-    }else this.commit(intent,false);
+    }else this.commit(intent,f.instrument.edited);
   }
   commit(intent,discard) {
     this.pending=++this.request;this.send({t:'program-select',...intent,discard,request:this.pending});
   }
-  update(frame,running,bankSource='') {
+  update(frame,running,bankSource='',edited=frame.instrument?.edited) {
     this.bankSource=bankSource;
+    this.edited=edited;
     this.frame=frame;const f=frame.instrument,current=frame.programs[frame.track];
     if(frame.programLibrary){
       this.library=frame.programLibrary;this.currentKey=null;this.previousOption=null;this.node.replaceChildren();
@@ -57,7 +58,7 @@ export class ToneSelector {
     this.node.disabled=!running||!f?.programAvailable||!this.library;
     this.node.title=this.node.selectedOptions[0]?.label||'Tone program';
     if(this.pending&&frame.programSelection?.request===this.pending){this.failure=!frame.programSelection.applied;this.pending=null;}
-    const detail=`${bankSource?bankSource+' · ':''}Program ${current}${f?.edited?' · Edited · save in TONES':''}${this.failure?' · Selection not applied; retry':''}`;
+    const detail=`${bankSource?bankSource+' · ':''}Program ${current}${edited?' · Edited · save in TONES':''}${this.failure?' · Selection not applied; retry':''}`;
     if(this.detail.textContent!==detail)this.detail.textContent=detail;
   }
 }

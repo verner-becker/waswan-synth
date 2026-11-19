@@ -323,7 +323,7 @@ class Foundation {
     const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
     this.instrumentSetup.update(m,this.running);
-    this.toneEditor.update(m,this.running);this.toneSelector.update(m,this.running,this.banks.sourceLabel(m));
+    this.toneEditor.update(m,this.running);this.toneSelector.update(m,this.running,this.banks.sourceLabel(m),this.banks.hasUnsavedEdits(m));
     this.part.textContent=`Part ${'ABCD'[part]}`;const connected=!!this.bridge.midi.input;
     this.midiStatus.textContent=connected?'MIDI · Connected':'MIDI · Not connected';this.midiStatus.dataset.state=connected?'on':'off';
     this.mode.textContent=m.engines[part]===2?'DRUM-X':['POLY','DUAL','UNISON','MONO'][poly.parts[part].mode];
