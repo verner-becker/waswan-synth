@@ -63,7 +63,7 @@ export class DawWorkspace {
     this.keyboard=action('Show Synth keyboard',()=>{
       const visible=toggleKeyboard();
       if(!this.linked)this.keyboard.textContent=visible?'Hide Synth keyboard':'Show Synth keyboard';
-    });trackTools.append(this.addMidi,this.keyboard,action('Open Sampler Studio',openSampler));
+    });this.compactSampler=el('span');trackTools.append(this.addMidi,this.keyboard,action('Open Sampler Studio',openSampler),this.compactSampler);
     this.trackScroll=el('div','ww-daw-track-scroll');this.trackList=el('div','ww-daw-tracks');this.trackScroll.append(this.trackList);
     const editor=Panel('Clip editor');this.editor=editor;
     this.notes=el('select');this.notes.size=5;this.notes.setAttribute('aria-label','DAW notes');this.notes.onchange=()=>{this.selectedNote=this.notes.value;this.inspectNote();};editor.append(this.notes);

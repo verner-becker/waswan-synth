@@ -6,6 +6,8 @@ import {ToneSelector} from './ui-tone-selector.js';
 import {ToneBanks} from './ui-tone-banks.js';
 import {ToneEditor} from './ui-tone-editor.js';
 import {MidiSetup} from './ui-midi-setup.js';
+import {SamplerPlayerPanel} from './ui-sampler-player.js';
+import {SamplerWindow} from './ui-sampler-window.js';
 import {SamplerStudio} from './ui-sampler-studio.js';
 import {StudioWorkspace} from './ui-studio.js';
 import {SequenceWorkspace} from './ui-studio-sequence.js';
@@ -46,7 +48,7 @@ class Foundation {
     this.buildDiagnostics();this.buildSettings();this.buildDock();this.shell.append(this.performanceReadouts);this.buildMidiDialog();
     this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'),()=>this.dock.querySelector('#keys .key')?.focus());
     this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
-    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{openSampler:()=>{window.focus();this.selectWorkspace('sampler');this.sampler.focus();},openStudioFile:async file=>{
+    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{openSampler:()=>this.showSampler(),openStudioFile:async file=>{
       if(!await this.studio.recorder.open(file))return;
       window.focus();
       const id=this.studio.recorder.take.project.sequence?'seq':'studio';
@@ -74,6 +76,12 @@ class Foundation {
     }});
     this.sampler.onRouteChange=label=>{this.samplerSummary.textContent=label;};
     this.addView('sampler',this.sampler.node);
+    this.samplerWindow=new SamplerWindow(this.sampler,node=>this.views.set('sampler',node));
+    this.sampler.openWindow=()=>this.samplerWindow.open();
+    this.compactPlayers=['performance','daw'].map(context=>new SamplerPlayerPanel(this.sampler,()=>this.showSampler(),context));
+    this.samplerSummary.before(this.compactPlayers[0].node);
+    this.daw.compactSampler.append(this.compactPlayers[1].node);
+    this.sampler.updatePlayers=()=>this.compactPlayers.forEach(panel=>panel.sync());
     this.dawTab=new DawTab(this.daw,{
       onMove:node=>this.views.set('daw',node),focusSynth:()=>this.selectWorkspace('perf'),showDaw:()=>this.selectWorkspace('daw'),
       onError:message=>{this.notice.textContent=message;}
@@ -158,7 +166,7 @@ class Foundation {
     this.bridge.liveTape=part=>part===0&&this.tapes.live&&this.frame?.engines[part]===0?this.tapes.snapshot():null;
     const samplerStrip=el('div','ww-sampler-strip');
     this.samplerSummary=el('span','ww-muted','Part A · Synth keyboard');
-    samplerStrip.append(action('Open Sampler Studio',()=>{this.selectWorkspace('sampler');this.sampler.focus();}),this.samplerSummary,this.mapToggle);
+    samplerStrip.append(action('Open Sampler Studio',()=>this.showSampler()),this.samplerSummary,this.mapToggle);
     panel.firstElementChild.append(samplerStrip);
     view.append(this.tapes.node);
     middle.append(this.outputMonitor.node,notes,state);this.performanceReadouts=middle;this.addView('perf',view);
@@ -304,7 +312,12 @@ class Foundation {
     this.daw?.midiProfiles.focus(id==='daw'?this.daw.hostMidiContext||'transport':id==='tones'?
       (this.toneEditor.selectedGroup==='Envelopes'?'envelope':'instrument'):id==='seq'?'transport':'performance');
   }
+  showSampler(){
+    if(this.samplerWindow.win&&!this.samplerWindow.win.closed){this.samplerWindow.win.focus();return;}
+    window.focus();this.selectWorkspace('sampler');this.sampler.focus();
+  }
   selectWorkspace(id) {
+    if(id==='sampler'&&this.samplerWindow?.win&&!this.samplerWindow.win.closed){this.samplerWindow.win.focus();return;}
     if(id==='seq')queueMicrotask(()=>this.sequence?.draw());
     if(!this.views.has(id))return;
     if(id==='daw'&&this.dawTab?.connected)this.dawTab.win.focus();

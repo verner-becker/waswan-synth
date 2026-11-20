@@ -2,12 +2,13 @@
 import {el, action} from './ui-primitives.js';
 import {inspectWav} from './sampler-wav.js';
 import {checkFrameRange, rangeWav} from './sampler-waveform.js';
+import {createWaveTools} from './ui-sampler-wave-tools.js';
 import {createSamplerAudition} from './ui-sampler-audition.js';
 import {runOffline} from './sampler-offline.js';
 
 const seconds = (frame, rate) => String(Number((frame / rate).toFixed(6)));
 
-export function createSamplerWaveform({getAudio, audition = createSamplerAudition(getAudio), onCrop, onSelection} = {}) {
+export function createSamplerWaveform({getAudio, audition = createSamplerAudition(getAudio), onCrop, onSelection, onSlices, onLoop, onMarkers} = {}) {
   const node = el('section', 'ww-sampler-waveform');
   node.setAttribute('aria-label', 'Waveform editor');
   const heading = el('div', 'ww-sampler-wave-title');
@@ -16,7 +17,11 @@ export function createSamplerWaveform({getAudio, audition = createSamplerAuditio
   heading.append(name, metadata);
   const canvas = el('canvas');
   canvas.setAttribute('role', 'img');
+  canvas.tabIndex = 0;
   canvas.setAttribute('aria-label', 'Waveform. Drag to select a range, or enter its start and end below.');
+  const surface = el('div', 'ww-sampler-wave-surface'), playhead = el('span', 'ww-sampler-playhead');
+  playhead.hidden = true;
+  surface.append(canvas, playhead);
   const ruler = el('div', 'ww-sampler-wave-ruler');
   const left = el('span'), right = el('span');
   ruler.append(left, right);
@@ -62,10 +67,15 @@ export function createSamplerWaveform({getAudio, audition = createSamplerAuditio
   tools.append(preview, stop, zoom, fit, crop);
   const status = el('p', 'ww-sampler-wave-status');
   status.setAttribute('role', 'status');
-  node.append(heading, canvas, ruler, fields, tools, status);
+  node.append(heading, surface, ruler, fields, tools, status);
 
   let file, layout, selection, visible, peaks, drag;
   let generation = 0, scan, render, ownsPreview = false, cropEnabled = true;
+  let playbackStart = 0, playbackFrame, playbackWindow, pointerGeneration = 0, viewId = 0, playbackView;
+  const detail = createWaveTools({state: () => ({file,layout,visible,selection,peaks}), showRange, paint,
+    selectRange:range=>changeSelection(range,true),
+    play:playSelection, report:message=>{status.textContent=message;}, onSlices, onLoop, onMarkers});
+  node.insertBefore(detail.node,status);
   const unsubscribe = audition.subscribe(active => { stop.disabled = !active; });
   function update() {
     for (const input of [units, inputs.start, inputs.end, zoom, fit, preview]) input.disabled = !layout;
@@ -95,7 +105,7 @@ export function createSamplerWaveform({getAudio, audition = createSamplerAuditio
   function paint() {
     const width = canvas.clientWidth, height = canvas.clientHeight;
     if (!width || !height) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = canvas.ownerDocument.defaultView.devicePixelRatio || 1;
     const w = Math.round(width * dpr), h = Math.round(height * dpr);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     const ctx = canvas.getContext('2d');
@@ -111,22 +121,40 @@ export function createSamplerWaveform({getAudio, audition = createSamplerAuditio
       ctx.fillStyle = '#50646a';
       ctx.fillRect(0, middle, width, 1);
       if (peaks) {
+        ctx.save(); ctx.beginPath(); ctx.rect(0,lane*c,width,lane); ctx.clip();
         const bins = peaks.length / (channels * 2);
         ctx.fillStyle = '#76dcd5';
         for (let i = 0; i < bins; i++) {
           const index = (i * channels + c) * 2;
-          const top = middle - peaks[index + 1] / 32768 * lane * .46;
-          const bottom = middle - peaks[index] / 32768 * lane * .46;
+          const top = middle - peaks[index + 1] / 32768 * lane * .46 * detail.amplitude;
+          const bottom = middle - peaks[index] / 32768 * lane * .46 * detail.amplitude;
           ctx.fillRect(i * width / bins, top, Math.max(1, width / bins), Math.max(1, bottom - top));
         }
+        ctx.restore();
       }
       ctx.font = '11px sans-serif';
       ctx.fillStyle = '#c4d1d5';
       ctx.fillText(channels === 1 ? 'Mono' : c === 0 ? 'L' : 'R', 7, lane * c + 14);
     }
+    ctx.fillStyle = '#ba91d8';
+    for (const frame of detail.markers) {
+      if (frame >= visible.start && frame <= visible.end) ctx.fillRect(x(frame),0,1,height);
+    }
+    if (detail.regionLoop) {
+      const {start,end} = detail.regionLoop;
+      ctx.fillStyle = '#67ece1';
+      ctx.fillRect(x(start),2,x(end)-x(start),2);
+      for (const frame of [start,end]) ctx.fillRect(x(frame),2,2,8);
+    }
     ctx.fillStyle = '#f3d18c';
     for (const frame of [selection.start, selection.end]) {
       if (frame >= visible.start && frame <= visible.end) ctx.fillRect(Math.min(width - 2, x(frame)), 0, 2, height);
+    }
+    const cursor = detail.cursor;
+    if (!(ownsPreview && playbackView === viewId) && cursor >= visible.start && cursor <= visible.end) {
+      ctx.fillStyle = '#fff'; const at = Math.min(width - 1,x(cursor));
+      ctx.fillRect(at,0,1,height);
+      ctx.beginPath();ctx.moveTo(at-4,0);ctx.lineTo(at+4,0);ctx.lineTo(at,6);ctx.fill();
     }
   }
   const resize = new ResizeObserver(paint);
@@ -151,6 +179,7 @@ export function createSamplerWaveform({getAudio, audition = createSamplerAuditio
   }
   function changeSelection(range, notify = false) {
     checkFrameRange(range, layout.frames);
+    if (range.start !== selection.start || range.end !== selection.end) detail.clearSuggestions();
     selection = {start: range.start, end: range.end};
     update();
     if (notify) onSelection?.({...selection, sampleRate: layout.sampleRate});
@@ -163,35 +192,92 @@ export function createSamplerWaveform({getAudio, audition = createSamplerAuditio
   canvas.onpointerdown = event => {
     if (!layout || !event.isPrimary || event.button !== 0) return;
     event.preventDefault();
-    drag = {pointer: event.pointerId, frame: pointerFrame(event), previous: selection};
+    canvas.focus({preventScroll:true});
+    const at = pointerFrame(event);
+    const pixels = canvas.getBoundingClientRect().width;
+    const distance = Math.abs(selection.start - at) <= Math.abs(selection.end - at) ? 'start' : 'end';
+    const edge = Math.abs(selection[distance] - at) * pixels <= 6 * (visible.end - visible.start) ? distance : null;
+    drag = {pointer:event.pointerId, frame:at, x:event.clientX, previous:selection, edge, moved:false};
+    pointerGeneration++;
     canvas.setPointerCapture(event.pointerId);
   };
+  function dragFrame(event) {
+    const at=pointerFrame(event);
+    return event.shiftKey ? Math.round(drag.frame+(at-drag.frame)/10) : at;
+  }
+  function dragRange(anchor, at) {
+    if (drag.edge === 'start') return {start:Math.min(at,drag.previous.end-1),end:drag.previous.end};
+    if (drag.edge === 'end') return {start:drag.previous.start,end:Math.max(at,drag.previous.start+1)};
+    const start=Math.min(layout.frames-1,anchor,at);
+    return {start,end:Math.max(start+1,anchor,at)};
+  }
   canvas.onpointermove = event => {
     if (drag?.pointer !== event.pointerId) return;
-    const frame = pointerFrame(event);
-    const start = Math.min(layout.frames - 1, drag.frame, frame);
-    changeSelection({start, end: Math.max(start + 1, drag.frame, frame)});
+    if (Math.abs(event.clientX-drag.x)>=2) drag.moved=true;
+    if (drag.moved) changeSelection(dragRange(drag.frame,dragFrame(event)));
   };
-  canvas.onpointerup = event => {
+  canvas.onpointerup = async event => {
     if (drag?.pointer !== event.pointerId) return;
     canvas.onpointermove(event);
-    drag = null;
-    onSelection?.({...selection, sampleRate: layout.sampleRate});
+    const gesture=drag, token=pointerGeneration, source=file, at=dragFrame(event);
+    const edge=drag.edge;
+    drag=null;
+    try {
+      const [anchor,frame]=await Promise.all([detail.snapFrame(gesture.frame),detail.snapFrame(at)]);
+      if (pointerGeneration!==token || file!==source) return;
+      detail.moveCursor(frame);
+      if (!gesture.moved) return;
+      const start=edge==='end'?gesture.previous.start:edge==='start'?Math.min(frame,gesture.previous.end-1):Math.min(layout.frames-1,anchor,frame);
+      const end=edge==='start'?gesture.previous.end:edge==='end'?Math.max(start+1,frame):Math.max(start+1,anchor,frame);
+      changeSelection({start,end},true);
+    } catch(error) {
+      if (pointerGeneration===token && file===source) {changeSelection(gesture.previous);status.textContent=error.message;}
+    }
   };
   canvas.onlostpointercapture = canvas.onpointercancel = () => {
     if (drag) changeSelection(drag.previous);
     drag = null;
   };
+  canvas.onkeydown = event => {
+    if (!layout || event.altKey || event.metaKey || event.ctrlKey) return;
+    if (event.code === 'Space' && !event.repeat) {
+      event.preventDefault();
+      if (ownsPreview) audition.stop(); else void playSelection();
+      return;
+    }
+    const step=event.shiftKey?1:Math.max(1,Math.round((visible.end-visible.start)/Math.max(1,canvas.clientWidth)));
+    const next={ArrowLeft:detail.cursor-step, ArrowRight:detail.cursor+step, Home:visible.start, End:visible.end};
+    if (Object.hasOwn(next,event.key)) { event.preventDefault(); detail.moveCursor(next[event.key]); }
+  };
+  function hidePlayhead() {
+    playbackWindow?.cancelAnimationFrame(playbackFrame);
+    playhead.hidden = true;
+  }
 
-  async function playSelection() {
+  async function playSelection(range=selection,loop=false) {
+    const view = viewId;
     try {
-      const playing = audition.play(rangeWav(file, layout, selection), reason => {
+      const playing = audition.play(rangeWav(file, layout, range), reason => {
         ownsPreview = false;
-        status.textContent = reason === 'ended' ? 'Preview finished.' : reason === 'error' ? 'Unable to play this WAV selection.' : '';
-      });
-      ownsPreview = true;
-      if (await playing) status.textContent = 'Playing selection.';
-    } catch (error) { ownsPreview = false; status.textContent = error.message; }
+        hidePlayhead();paint();
+        if (view === viewId) status.textContent = reason === 'ended' ? 'Preview finished.' : reason === 'error' ? 'Unable to play this WAV selection.' : '';
+      },{loop});
+      playbackStart=range.start; playbackView=view; ownsPreview = true;
+      if (await playing && view === viewId) {
+        status.textContent = loop ? 'Repeating selection.' : 'Playing selection.';
+        paint();
+        const tick=()=>{
+          if (!ownsPreview || playbackView !== viewId) return;
+          const position = playbackStart + Math.round(audition.time * layout.sampleRate);
+          const fraction = (position - visible.start) / (visible.end - visible.start);
+          playhead.hidden = fraction < 0 || fraction > 1;
+          playhead.style.left = (100 * fraction) + '%';
+          playbackWindow = canvas.ownerDocument.defaultView;
+          playbackFrame = playbackWindow.requestAnimationFrame(tick);
+        };
+        tick();
+      }
+    } catch (error) { ownsPreview = false; if (view === viewId) status.textContent = error.message; }
   }
   async function createCrop() {
     if (render || !layout) return;
@@ -213,10 +299,10 @@ export function createSamplerWaveform({getAudio, audition = createSamplerAuditio
       if (render === task) { render = null; update(); }
     }
   }
-  function clear() {
-    generation++;
+  function clear(stopAudio = true) {
+    generation++;pointerGeneration++;viewId++;detail.reset();hidePlayhead();
     scan?.abort(); render?.abort();
-    if (ownsPreview) audition.stop();
+    if (stopAudio && ownsPreview) audition.stop();
     scan = render = file = layout = selection = visible = peaks = drag = null;
     canvas.removeAttribute('aria-busy');
     name.textContent = 'Waveform';
@@ -230,17 +316,20 @@ export function createSamplerWaveform({getAudio, audition = createSamplerAuditio
     const range = options.selection ?? {start: 0, end: info.frames};
     checkFrameRange(range, info.frames);
     if (generation !== token) return;
-    clear();
+    clear(false);
     file = source;
     layout = info;
     name.textContent = source.name || 'Sample waveform';
     metadata.textContent = [info.channels === 2 ? 'Stereo' : 'Mono', info.sampleRate.toLocaleString('en-US') + ' Hz',
       seconds(info.frames, info.sampleRate) + ' s'].join(' · ');
     selection = {start: range.start, end: range.end};
+    visible = {start:0,end:layout.frames};
+    detail.open(range,options.markers);
+    detail.setLoop(options.loop);
     await showRange({start: 0, end: layout.frames});
   }
   clear();
-  return {node, open, clear, setSelection: range => changeSelection(range),
+  return {node, open, clear, getMarkers:()=>[...detail.markers],setMarkers:marks=>detail.setMarkers(marks),setLoop:detail.setLoop,setSelection: range => changeSelection(range),
     setCropEnabled(enabled) { cropEnabled = !!enabled; update(); },
     getSelection: () => selection && {...selection, sampleRate: layout.sampleRate},
     destroy() { clear(); unsubscribe(); resize.disconnect(); }};

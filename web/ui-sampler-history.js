@@ -4,8 +4,9 @@ import {createMiniWaveform} from './ui-sampler-waveform.js';
 import {readSampleFile} from './sampler-library.js';
 import {inspectWav} from './sampler-wav.js';
 import {rangeWav} from './sampler-waveform.js';
+import {prepareSamplePreview,prepareSampler} from './sampler.js';
 import {createWorking,updateWorking,workingFromRef,createCheckpoint,checkpointWorking,restoreCheckpoint,branchWorking,
-  undoWorking,redoWorking,discardWorking,startFromOriginal,repromoteWorking,previewWorkingWav} from './sampler-working.js';
+  undoWorking,redoWorking,discardWorking,startFromOriginal,repromoteWorking,previewWorkingWav,prepareWorking} from './sampler-working.js';
 
 function select(label,parent){
   const wrap=el('label','',label),input=el('select');
@@ -20,14 +21,14 @@ const checkpointKey=id=>'checkpoint:'+id;
 export class SamplerHistory {
   constructor(studio){
     this.studio=studio;this.cards=new Map();this.node=el('div','ww-sampler-history');
-    this.observer=new IntersectionObserver(entries=>{
+    this.makeObserver=()=>new this.node.ownerDocument.defaultView.IntersectionObserver(entries=>{
       for(const {target,isIntersecting} of entries){
         if(!isIntersecting)continue;
         const card=this.cards.get(target.dataset.version);
         if(card&&!card.loaded)this.draw(card);
       }
     });
-    this.versions=el('div','ww-sampler-version-cards');this.versions.setAttribute('aria-label','Versions');
+    this.observer=this.makeObserver();this.versions=el('div','ww-sampler-version-cards');this.versions.setAttribute('aria-label','Versions');
     this.latest=el('div','ww-sampler-version-cards');this.latest.setAttribute('aria-label','Recent checkpoints');
     const toolbar=el('div','ww-sampler-actions'),button=(label,fn)=>studio.button(label,fn);
     this.undo=button('Undo working edit',()=>this.step(undoWorking));
@@ -40,8 +41,10 @@ export class SamplerHistory {
     const compare=el('div','ww-sampler-fields');this.compareA=select('Compare A',compare);
     this.compareB=select('Compare B',compare);this.listenA=button('Listen A',()=>this.listen(this.compareA,'A'));
     this.listenB=button('Listen B',()=>this.listen(this.compareB,'B'));
+    this.playA=button('Play A on Synth keyboard',()=>this.play(this.compareA,'A'));
+    this.playB=button('Play B on Synth keyboard',()=>this.play(this.compareB,'B'));
     this.stop=action('Stop comparison',()=>{studio.audition.stop();studio.status.textContent='Comparison stopped.';});
-    compare.append(this.listenA,this.listenB,this.stop);
+    compare.append(this.listenA,this.listenB,this.stop,this.playA,this.playB);
     const history=el('details','ww-sampler-full-history');history.append(el('summary','','Full history'));
     this.list=el('ol');
     const restore=el('div','ww-sampler-fields');
@@ -100,36 +103,54 @@ export class SamplerHistory {
     s.draft=updateWorking(d,{baseRef:ref});s.dirty=true;await s.browser.page();
     s.status.textContent='Official r'+revision+' re-promoted as r'+ref.revision+'.';
   }
-  async versionWav(key,signal){
+  async versionWav(key,signal){return (await this.versionAudio(key,signal)).file;}
+  async versionAudio(key,signal){
     const s=this.studio,d=s.draft,root=s.root;
     if(key==='original'){
-      if(!d.source.source)return s.file;
+      if(!d.source.source)return {file:s.file,sample:d.source};
       const original=await startFromOriginal(root,d);
-      if(s.originalFile?.hash===original.source.sha256)return s.originalFile.file;
+      if(s.originalFile?.hash===original.source.sha256)return {file:s.originalFile.file,sample:original.source};
       const file=await readSampleFile(root,original.source,{signal});
       if(s.root===root)s.originalFile={hash:original.source.sha256,file};
-      return file;
+      return {file,sample:original.source};
     }
-    if(key==='rendered')return readSampleFile(root,d.rendered,{signal});
+    if(key==='rendered')return {file:await readSampleFile(root,d.rendered,{signal}),sample:d.rendered};
     let version=d;
     if(key==='official')version=await workingFromRef(root,d.baseRef);
     else if(key.startsWith('checkpoint:'))version=await checkpointWorking(root,d,key.slice(11));
     signal?.throwIfAborted();
-    if(version.rendered)return readSampleFile(root,version.rendered,{signal});
+    if(version.rendered)return {file:await readSampleFile(root,version.rendered,{signal}),sample:version.rendered};
     const file=version.source.sha256===d.source.sha256?s.file:await readSampleFile(root,version.source,{signal});
     // For a mapped instrument this visual audition represents its reference sample.
-    if(version.instrument)return file;
+    if(version.instrument)return {file,sample:version.source,reference:true};
     if(!version.recipe.some(operation=>!operation.bypass)){
       const [start,end]=version.selection;
-      if(start===0&&end===version.source.frames)return file;
-      return rangeWav(file,await inspectWav(file,{anyRate:true}),{start,end});
+      if(start===0&&end===version.source.frames)return {file,sample:version.source};
+      return {file:rangeWav(file,await inspectWav(file,{anyRate:true}),{start,end}),sample:null};
     }
-    return previewWorkingWav(root,version,{signal});
+    return {file:await previewWorkingWav(root,version,{signal}),sample:null};
   }
   async listen(select,side){
-    const s=this.studio,wav=await this.versionWav(select.value);
-    await s.audition.play(wav);
-    s.status.textContent='Listening '+side+' · '+select.selectedOptions[0].textContent+(s.draft.instrument?' · reference sample':'');
+    const s=this.studio,audio=await this.versionAudio(select.value);
+    await s.audition.play(audio.file);
+    s.status.textContent='Listening '+side+' · '+select.selectedOptions[0].textContent+(audio.reference?' · reference sample':'');
+  }
+  async play(select,side){
+    const s=this.studio,{draft,player,root}=s,key=select.value;
+    await s.playPrepared(async()=>{
+      if(key==='official')return prepareSampler(player,root,draft.baseRef);
+      let version=draft;
+      if(key==='original')version=await startFromOriginal(root,draft);
+      else if(key==='rendered')version=createWorking({libraryId:draft.libraryId,source:draft.rendered,rootNote:draft.rootNote});
+      else if(key.startsWith('checkpoint:'))version=await checkpointWorking(root,draft,key.slice(11));
+      if(version.instrument||version.rendered||(version.source.sampleRate===44100&&version.recipe.every(op=>op.bypass)&&
+          version.selection[0]===0&&version.selection[1]===version.source.frames))return prepareWorking(player,root,version);
+      return prepareSamplePreview(player,await previewWorkingWav(root,version),version.rootNote);
+    },side+' · '+select.selectedOptions[0].textContent);
+  }
+  windowChanged(){
+    this.observer.disconnect();this.observer=this.makeObserver();
+    for(const card of this.cards.values())if(card.identity&&!card.loaded)this.observer.observe(card.node);
   }
   draw(card){
     card.loaded=true;card.scan=new AbortController();const signal=card.scan.signal;
@@ -140,12 +161,15 @@ export class SamplerHistory {
   showCard(container,id,title,detail,identity){
     let card=this.cards.get(id);
     if(!card){
-      const node=el('div','ww-sampler-version-card'),heading=el('strong'),label=el('small','ww-muted'),message=el('small','ww-muted');
-      node.dataset.version=id;
+      const node=el('button','ww-sampler-version-card'),heading=el('strong'),label=el('small','ww-muted'),message=el('small','ww-muted');
+      node.type='button';node.dataset.version=id;
+      node.onclick=()=>this.studio.run(()=>this.studio.showWave(id));
       const mini=createMiniWaveform();mini.node.setAttribute('aria-label',title+' waveform');
       node.append(heading,label,mini.node,message);
       card={id,node,heading,label,mini,message};this.cards.set(id,card);container.append(node);
     }
+    card.node.disabled=!identity;card.node.setAttribute('aria-label','View waveform for '+title);
+    card.node.setAttribute('aria-pressed',String(this.studio.displayMode===id));
     card.heading.textContent=title;card.label.textContent=detail||'';
     if(card.identity!==identity){
       card.scan?.abort();card.mini.clear();card.message.textContent='';card.identity=identity;card.loaded=false;
@@ -159,11 +183,13 @@ export class SamplerHistory {
     const links=[...(draft?.history?.checkpoints||[])].reverse();
     const reference=draft?.instrument?' · reference sample':'';
     this.latest.hidden=!links.length;
-    const entries=[['working','Working'+reference],['original','Original']];
+    const entries=[['working','Working'],['original','Original']];
     if(draft?.rendered)entries.push(['rendered','Rendered Derivative']);
-    if(draft?.baseRef)entries.push(['official','Official r'+draft.baseRef.revision+reference]);
+    if(draft?.baseRef)entries.push(['official','Official r'+draft.baseRef.revision]);
     entries.push(...links.map(item=>[checkpointKey(item.id),item.name]));
-    const selects=[[this.compareA,entries,'original'],[this.compareB,entries,'working'],
+    const waveViews=[['source','Source selection'],...entries.map(([id,label])=>[id,id==='working'?'Working result':label])];
+    if(draft?.instrument)waveViews.push(['region','Selected region WAV']);
+    const selects=[[this.studio.waveMode,waveViews,'source'],[this.compareA,entries,'original'],[this.compareB,entries,'working'],
       [this.selected,links.map(item=>[item.id,item.name]),links[0]?.id]];
     for(const [control,options,fallback] of selects){
       const signature=JSON.stringify(options);

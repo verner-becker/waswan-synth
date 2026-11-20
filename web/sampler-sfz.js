@@ -215,7 +215,7 @@ export async function inspectSfzImport(source, text, {signal} = {}) {
 }
 
 export async function importSfz(root, source, text, {
-  id, name, path, expectedRevision = 0, acceptLosses = false, provenance, license, signal,
+  id, name, path, expectedRevision = 0, acceptLosses = false, provenance, license, signal, beforePublish,
 } = {}) {
   if (!validSamplerId(id)) throw new SamplerError('invalid-instrument', 'Choose a stable identifier for the imported instrument.');
   const parts = samplerPath(path);
@@ -242,8 +242,10 @@ export async function importSfz(root, source, text, {
     return {...mapping, sample: descriptor.id, id: `r${index + 1}`, frames: [first, last ?? descriptor.frames]};
   });
   signal?.throwIfAborted();
-  const ref = await publish(root, createInstrument({id, name: label, groups, samples: [...samples.values()], regions}),
-    {path, expectedRevision});
+  const instrument=createInstrument({id,name:label,groups,samples:[...samples.values()],regions});
+  if(beforePublish)await beforePublish(instrument);
+  signal?.throwIfAborted();
+  const ref = await publish(root,instrument,{path,expectedRevision});
   return {ref, diagnostics: plan.diagnostics};
 }
 

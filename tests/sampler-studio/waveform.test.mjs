@@ -41,4 +41,15 @@ const monoExcerpt = await decodeWav(rangeWav(mono, monoMeta, {start: 1, end: 3})
 assert.equal(monoExcerpt.sampleRate, 48000);
 assert.equal(monoExcerpt.channels, 1);
 assert.deepEqual([...monoExcerpt.pcm], [16384, -8192]);
-console.log('PASS stereo waveform, preview and crop from 7-minute source, bounded reads of ' + file.largestRead + ' bytes, 48 kHz mono');
+file.largestRead = 0;
+assert.deepEqual(await processWav(file,{type:'loops',range:{start:0,end:frames-10}}),[]);
+assert(file.largestRead <= 768);
+const tone = encodeSample({channels:1,sampleRate:48000,pcm:Float32Array.from({length:24000},(_,i)=>.4*Math.sin(i*Math.PI/120))});
+const toneMeta = await inspectWav(tone,{anyRate:true});
+for(const range of [{start:7500,end:17800},{start:8900,end:9025}]){
+  const width = Math.min(32,Math.floor((range.end-range.start)/5));
+  const dense = await processWav(rangeWav(tone,toneMeta,range),{type:'loops',options:{start:width,end:range.end-range.start-width}});
+  const sparse = await processWav(tone,{type:'loops',range});
+  assert.deepEqual(sparse,dense.map(point=>({...point,start:point.start+range.start,end:point.end+range.start})));
+}
+console.log('PASS 7-minute stereo waveform (256 KiB reads), exact preview/crop, 48 kHz mono and bounded sparse loop matching (largest read ' + file.largestRead + ' bytes)');

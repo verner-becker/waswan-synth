@@ -60,6 +60,7 @@ export class SamplerLibraryBrowser {
       const row=el('li'),label=entry.displayName||entry.name;
       if(entry.kind==='directory')row.append(this.studio.button(label,()=>this.browse(entry.path)));
       else if(['sample','instrument','kit'].includes(entry.kind))row.append(this.studio.button(label,()=>this.studio.openEntry(entry)));
+      else if(entry.kind==='preset')row.append(this.studio.button(label,()=>this.studio.interchange.select(entry)));
       else row.append(el('span','ww-muted',label));
       if(['instrument','kit'].includes(entry.kind)){
         const add=this.studio.button('Add to Fusion',async()=>{

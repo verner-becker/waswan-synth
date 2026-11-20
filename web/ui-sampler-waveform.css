@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 .ww-sampler-waveform {min-width:0; display:grid; gap:.6rem;}
+.ww-sampler-wave-surface {position:relative; min-width:0; overflow:hidden;}
+.ww-sampler-playhead {position:absolute; top:0; bottom:0; width:2px; background:#fff; pointer-events:none;}
 .ww-sampler-wave-title,.ww-sampler-wave-fields,.ww-sampler-wave-tools {display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem;}
 .ww-sampler-wave-title {justify-content:space-between;}
 .ww-sampler-wave-title strong {overflow-wrap:anywhere;}
@@ -13,3 +15,6 @@
 .ww-sampler-wave-status {margin:0; color:var(--ww-muted);}
 .ww-sampler-wave-status:empty {display:none;}
 .ww-sampler-mini-waveform {display:block;width:120px;height:24px;background:#0b1419;border-radius:3px;}
+.ww-wave-tools {border-top:1px solid var(--ww-border);padding-top:6px;}
+.ww-wave-tools>fieldset {min-width:0;border:0;margin:8px 0;padding:0;display:grid;gap:8px;}
+.ww-wave-tools .ww-sampler-wave-fields input[type=text] {width:min(35rem,100%);}

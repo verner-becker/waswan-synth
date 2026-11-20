@@ -668,7 +668,24 @@ export async function findCandidates(root, missing, {signal} = {}) {
   }
 }
 
+export async function relinkMatches(root, ref, matches, {expectedRevision = ref.revision} = {}) {
+  const {instrument,ref:resolved} = await resolve(root,ref);
+  if (expectedRevision !== resolved.revision) throw revisionConflict(resolved.path,expectedRevision,resolved.revision);
+  if (!(matches instanceof Map) || !matches.size || [...matches.keys()].some(id=>!instrument.samples.some(s=>s.id===id))) {
+    throw error('invalid-sample','Choose a verified replacement for a referenced sample.');
+  }
+  const samples=instrument.samples.map(sample=>{
+    if(!matches.has(sample.id))return sample;
+    const path=matches.get(sample.id);
+    samplerPath(path);
+    return {...sample,path};
+  });
+  // publish verifies every original hash and compares the current revision under lock.
+  return publish(root,{...instrument,samples},{path:resolved.path,expectedRevision});
+}
+
 export async function relink(root, ref, sampleId, candidate, {expectedRevision = ref.revision, replace = false} = {}) {
+  if(!replace)return relinkMatches(root,ref,new Map([[sampleId,typeof candidate==='string'?candidate:candidate?.path]]),{expectedRevision});
   const resolved = await resolve(root, ref);
   if (expectedRevision !== resolved.ref.revision) {
     throw revisionConflict(resolved.ref.path, expectedRevision, resolved.ref.revision);
@@ -678,20 +695,15 @@ export async function relink(root, ref, sampleId, candidate, {expectedRevision =
   if (!sample) throw error('invalid-sample', 'The instrument has no sample with this ID.', {sampleId});
   const path = typeof candidate === 'string' ? candidate : candidate?.path;
   samplerPath(path);
-  let replacement = {...sample, path};
   try {
-    if (replace) {
-      const file = await (await fileAt(root, path)).getFile();
-      const {frames, channels, sampleRate, size} = await inspectWav(file);
-      replacement = {
-        ...Object.fromEntries(Object.entries(sample).filter(([key]) => !['license', 'recipe', 'source', 'provenance'].includes(key))),
-        path, frames, channels, sampleRate, size, sha256: await digest(await file.arrayBuffer()),
-      };
-      for (const key of ['license', 'provenance', 'recipe', 'source']) {
-        if (candidate?.[key] !== undefined) replacement[key] = structuredClone(candidate[key]);
-      }
-    } else {
-      await readVerified(root, replacement);
+    const file = await (await fileAt(root, path)).getFile();
+    const {frames, channels, sampleRate, size} = await inspectWav(file);
+    const replacement = {
+      ...Object.fromEntries(Object.entries(sample).filter(([key]) => !['license', 'recipe', 'source', 'provenance'].includes(key))),
+      path, frames, channels, sampleRate, size, sha256: await digest(await file.arrayBuffer()),
+    };
+    for (const key of ['license', 'provenance', 'recipe', 'source']) {
+      if (candidate?.[key] !== undefined) replacement[key] = structuredClone(candidate[key]);
     }
     const samples = instrument.samples.map(item => item.id === sampleId ? replacement : item);
     return publish(root, {...instrument, samples}, {path: resolved.ref.path, expectedRevision});

@@ -60,6 +60,9 @@ try {
   await idle();
   await set('Working name',name);
   await press('Promote to Official');
+  await studio.getByText('Advanced Tools',{exact:true}).click();
+  await studio.locator('.ww-wave-tools > summary').click();
+  await set('Waveform slice markers','111, 222');
   await set('Checkpoint name','Before experiment');
   await press('Create Checkpoint');
   await set('Working name','Alternate take');
@@ -74,6 +77,14 @@ try {
   const select=label=>studio.getByRole('combobox',{name:new RegExp('^'+label)});
   await select('Compare A').selectOption('original');
   await select('Compare B').selectOption('working');
+  const beforeInspect=await page.evaluate(()=>audit.auditions.length);
+  await press('View waveform for Before experiment');
+  assert.match(await f('Editor audio').inputValue(),/^checkpoint:/);
+  assert.equal(await f('End frame').inputValue(),'88200');
+  await press('View waveform for Original');
+  assert.equal(await f('Editor audio').inputValue(),'original');
+  assert.equal(await page.evaluate(()=>audit.auditions.length),beforeInspect);
+  await press('View waveform for Working');
   await press('Listen A');
   await press('Listen B');
   await press('Stop comparison');
@@ -82,6 +93,7 @@ try {
   await page.screenshot({path:evidence+'/history.png'});
   await studio.locator('.ww-sampler-full-history > summary').click();
   await press('Restore Checkpoint');
+  assert.equal(await f('Waveform slice markers').inputValue(),'111, 222');
   assert.equal(await f('Working name').inputValue(),name);
   await press('Save Working');
   await set('Previous Official revision','1');

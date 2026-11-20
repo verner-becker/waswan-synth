@@ -2,15 +2,16 @@
 import {el,action,Panel} from './ui-primitives.js';
 import {librarySetting} from './tone-bank.js';
 import {importOriginal,initializeLibrary,inspectSample,readLibrary,readSampleFile} from './sampler-library.js';
-import {createWorking,updateWorking,openWorking,saveWorking,renderWorking,promoteWorking,workingFromRef,prepareWorking,previewWorkingWav,continueFromRendered} from './sampler-working.js';
+import {createWorking,updateWorking,openWorking,saveWorking,renderWorking,promoteWorking,workingFromRef,prepareWorking,previewWorkingWav,continueFromRendered,startFromOriginal} from './sampler-working.js';
 import {runOffline} from './sampler-offline.js';
-import {prepareSamplePreview,prepareSampler,setLiveSampler} from './sampler.js';
+import {prepareSamplePreview,prepareSampler,setLiveSampler,mapSample} from './sampler.js';
 import {createSamplerAudition} from './ui-sampler-audition.js';
 import {SamplerHistory} from './ui-sampler-history.js';
 import {createProcessingStack} from './ui-sampler-processing.js';
 import {createSamplerWaveform} from './ui-sampler-waveform.js';
 import {validateInstrument} from './sampler-instrument.js';
 import {SamplerFusion} from './ui-sampler-fusion.js';
+import {createSamplerInterchange} from './ui-sampler-interchange.js';
 import {SamplerBuilder} from './ui-sampler-builder.js';
 import {createSamplerMapping} from './ui-sampler-mapping.js';
 import {createSamplerGroupInspector} from './ui-sampler-groups.js';
@@ -20,8 +21,8 @@ const preferenceKey='waswan.sampler.studio.sections.v1';
 const leaf=path=>path.split('/').at(-1);
 const stem=name=>name.replace(/\.wav$/iu,'');
 const routeIdle='Part A · Synth keyboard';
-function readPreferences(){
-  try{return JSON.parse(localStorage.getItem(preferenceKey))||{};}catch{return {};}
+function readPreferences(key){
+  try{return JSON.parse(localStorage.getItem(key))||{};}catch{return {};}
 }
 function field(parent,label,type,options={}){
   const node=el('label','',label),input=el('input');
@@ -31,14 +32,16 @@ function field(parent,label,type,options={}){
 export class SamplerStudio {
   constructor({bridge,player,daw,liveConflict,assignOfficial}) {
     Object.assign(this,{bridge,player,liveConflict,assignOfficial});
-    this.prefs=readPreferences();this.sections=new Map();
+    this.preferenceKey=preferenceKey;this.prefs=readPreferences(this.preferenceKey);this.sections=new Map();this.defaults=new Map();
     this.node=Panel('Sampler Studio');this.node.classList.add('ww-sampler-studio');
+    this.detachButton=action('Open Sampler in new window',()=>this.openWindow());
+    this.node.firstElementChild.append(this.detachButton);
     this.heading=this.node.querySelector('h2');this.heading.tabIndex=-1;
     this.status=el('p','ww-sampler-status','Choose your Samples folder to open a Working Copy or import a WAV.');
     this.status.setAttribute('role','status');this.node.append(this.status);
     this.body=el('fieldset','ww-sampler-layout');this.node.append(this.body);
     const library=this.section('Library & Metadata',true);
-    this.browser=new SamplerLibraryBrowser(this);library.append(this.browser.node);this.body.append(library);
+    this.browser=new SamplerLibraryBrowser(this);this.interchange=createSamplerInterchange(this);library.append(this.browser.node,this.interchange.node);this.body.append(library);
     this.main=el('div','ww-sampler-main');this.body.append(this.main);
     const sample=this.section('Sample Editor',true);
     this.fileInput=el('input');this.fileInput.type='file';this.fileInput.accept='.wav,audio/wav';this.fileInput.hidden=true;this.fileInput.setAttribute('aria-label','Import WAV');
@@ -53,9 +56,11 @@ export class SamplerStudio {
     modeWrap.append(this.waveMode);sampleTools.append(modeWrap);
     this.sourceLabel=el('p','ww-muted','No WAV open');
     this.audition=createSamplerAudition(()=>this.bridge.getAudio());
-    this.wave=createSamplerWaveform({audition:this.audition,onSelection:({start,end})=>{
+    this.wave=createSamplerWaveform({audition:this.audition,onMarkers:({file,markers})=>{
+      if(this.draft&&!this.busy&&this.displayMode==='source'&&file===this.file)this.change({sliceMarkers:markers});
+    },onSelection:({start,end})=>{
       if(this.draft&&!this.busy&&this.displayMode==='source'&&!this.draft.instrument)this.change({selection:[start,end]});
-    },onCrop:args=>this.run(()=>this.crop(args))});
+    },onCrop:args=>this.run(()=>this.crop(args)),onSlices:args=>this.run(()=>this.useSlices(args)),onLoop:args=>this.run(()=>this.useLoop(args))});
     sample.append(sampleTools,this.sourceLabel,this.wave.node);
     const processing=this.section('Processing Stack',true);
     this.stack=createProcessingStack({change:recipe=>this.change({recipe}),run:fn=>this.run(fn),
@@ -101,22 +106,55 @@ export class SamplerStudio {
       select:id=>this.selectRegion(id),run:fn=>this.run(fn)};
     this.map=createSamplerMapping(controls);this.groups=createSamplerGroupInspector(controls);
     this.builder=new SamplerBuilder(this);this.builder.paint();
-    mapping.append(this.map.node);builder.append(this.builder.node,this.groups.node);
+    this.editRegionWave=this.button('Open selected region waveform',()=>this.showWave('region'));
+    mapping.append(this.map.node,this.editRegionWave);builder.append(this.builder.node,this.groups.node);
     this.main.append(mapping,builder);
     const fusion=this.section('Sound Fusion',false);this.fusion=new SamplerFusion(this,daw);
     fusion.append(this.fusion.node);this.main.append(fusion);
-    for(const title of ['Advanced Tools']){
-      const section=this.section(title,false);section.firstElementChild.append(el('small','ww-muted','Planned'));this.main.append(section);
-    }
+    const advanced=this.section('Advanced Tools',false);
+    const waveTools=this.wave.node.querySelector('.ww-wave-tools');advanced.append(waveTools);
+    sampleTools.append(action('Advanced waveform tools',()=>{advanced.open=true;waveTools.open=true;waveTools.querySelector('summary').focus();}));
+    sample.after(advanced);
+    this.subsections=new WeakMap();
+    this.node.addEventListener('toggle',event=>{
+      const title=this.subsections.get(event.target);
+      if(title)this.storeExpansion(title,event.target.open);
+    },true);
     this.sync();
     addEventListener('beforeunload',event=>{if(this.dirty){event.preventDefault();event.returnValue='';}});
   }
   button(label,fn){return action(label,()=>void this.run(fn));}
   section(title,initial){
-    const box=el('details','ww-sampler-section');
+    this.defaults.set(title,initial);const box=el('details','ww-sampler-section');
     box.append(el('summary','',title));box.open=this.prefs[title]??initial;
-    box.ontoggle=()=>{this.prefs[title]=box.open;try{localStorage.setItem(preferenceKey,JSON.stringify(this.prefs));}catch{}};
+    box.ontoggle=()=>this.storeExpansion(title,box.open);
     this.sections.set(title,box);return box;
+  }
+  storeExpansion(key,open){
+    this.prefs[key]=open;
+    try{localStorage.setItem(this.preferenceKey,JSON.stringify(this.prefs));}catch{}
+  }
+  syncSubsections(reset=false){
+    for(const box of this.node.querySelectorAll('details details')){
+      const summary=box.querySelector(':scope > summary');
+      if(!summary)continue;
+      const title='Subsection · '+summary.textContent;
+      if(!reset&&this.subsections.get(box)===title)continue;
+      this.subsections.set(box,title);
+      if(!this.defaults.has(title))this.defaults.set(title,box.open);
+      box.open=this.prefs[title]??this.defaults.get(title);
+    }
+  }
+  setLayout(layout){
+    for(const [title,box] of this.sections)this.prefs[title]=box.open;
+    for(const box of this.node.querySelectorAll('details details')){
+      const key=this.subsections.get(box);if(key)this.prefs[key]=box.open;
+    }
+    try{localStorage.setItem(this.preferenceKey,JSON.stringify(this.prefs));}catch{}
+    this.preferenceKey=layout==='window'?preferenceKey+'.window':preferenceKey;
+    this.prefs=readPreferences(this.preferenceKey);
+    for(const [title,node] of this.sections)node.open=this.prefs[title]??this.defaults.get(title);
+    this.syncSubsections(true);
   }
   focus(){this.heading.focus({preventScroll:true});}
   async run(fn,activePanel) {
@@ -135,7 +173,7 @@ export class SamplerStudio {
   }
   activate(){
     if(this.busy)return;
-    void this.run(async()=>{
+    return this.run(async()=>{
       const root=await librarySetting(undefined,'sampleLibrary');
       if(!root)return;
       if(this.root&&await root.isSameEntry(this.root)){
@@ -159,15 +197,15 @@ export class SamplerStudio {
     this.root=root;this.library=library;await this.browser.refresh();
     this.status.textContent=library?'Samples folder ready · '+root.name:allowed?'Use Allow folder access to initialize this Samples folder.':'Allow read and write access to your Samples folder.';
   }
-  confirmDiscard(){return !this.dirty||confirm('Discard unsaved changes to this Working Copy?');}
+  confirmDiscard(){return !this.dirty||this.node.ownerDocument.defaultView.confirm('Discard unsaved changes to this Working Copy?');}
   async preserveWorking(){
     if(!this.dirty&&this.draft.generation)return true;
-    if(!confirm('Save the current Working Copy before opening a new copy?'))return false;
+    if(!this.node.ownerDocument.defaultView.confirm('Save the current Working Copy before opening a new copy?'))return false;
     await this.saveDraft();return true;
   }
   async chooseFolder(){
     if(!this.confirmDiscard())return;
-    const root=await showDirectoryPicker({id:'waswan-samples',mode:'readwrite',...(this.root?{startIn:this.root}:{})});
+    const root=await this.node.ownerDocument.defaultView.showDirectoryPicker({id:'waswan-samples',mode:'readwrite',...(this.root?{startIn:this.root}:{})});
     if(await root.requestPermission({mode:'readwrite'})!=='granted')throw Error('Write access was denied. Choose the Samples folder again.');
     await this.bindFolder(root,{initialize:true});
     await librarySetting(root,'sampleLibrary');
@@ -178,23 +216,38 @@ export class SamplerStudio {
   }
   async adopt(draft,file,{dirty=false}={}){
     const [start,end]=draft.selection;
-    if(this.file===file&&this.displayMode==='source')this.wave.setSelection({start,end});
-    else await this.wave.open(file,{selection:{start,end}});
+    const markers=draft.sliceMarkers??[];
+    if(this.file===file&&this.displayMode==='source'){
+      this.wave.setSelection({start,end});this.wave.setMarkers(markers);
+    }else await this.wave.open(file,{selection:{start,end},markers});
     this.resultStale=false;this.displayMode=this.waveMode.value='source';this.wave.setCropEnabled(true);
-    this.draft=draft;this.file=file;this.dirty=dirty;
+    this.draft=draft;this.file=file;this.displayFile=file;this.displaySample=draft.source;this.dirty=dirty;
     if(!draft.source.source)this.originalFile={hash:draft.source.sha256,file};
     this.keyboardSource.value='working';this.clearSuggestion();this.sync();
   }
   async showWave(mode){
     const d=this.draft;
-    if(mode==='working'){
-      const result=await this.history.versionWav('working');
-      await this.wave.open(new File([result],d.name+' · Working.wav',{type:'audio/wav'}));
+    const historical=mode!=='source';
+    let file=this.file,sample=d.source;
+    if(mode==='region'){
+      const region=d.instrument?.regions.find(r=>r.id===this.regionId);
+      if(!region)throw Error('Select a mapped region.');
+      sample=d.instrument.samples.find(s=>s.id===region.sample);
+      file=await readSampleFile(this.root,sample);
+      await this.wave.open(file,{selection:{start:region.frames[0],end:region.frames[1]},loop:region.loop});
+      this.sections.get('Sample Editor').open=true;
+    }else if(historical){
+      const result=await this.history.versionAudio(mode);
+      const label=this.waveMode.querySelector('option[value="'+CSS.escape(mode)+'"]')?.textContent||mode;
+      file=new File([result.file],d.name+' · '+label+'.wav',{type:'audio/wav'});
+      sample=result.sample;
+      await this.wave.open(file);
     }else{
       const [start,end]=d.selection;
-      await this.wave.open(this.file,{selection:{start,end}});
+      await this.wave.open(file,{selection:{start,end},markers:d.sliceMarkers??[]});
     }
-    this.wave.setCropEnabled(mode==='source');
+    this.displayFile=file;this.displaySample=sample;
+    this.wave.setCropEnabled(!historical);
     this.displayMode=this.waveMode.value=mode;this.resultStale=false;
   }
   async importFile(file){
@@ -209,6 +262,8 @@ export class SamplerStudio {
   }
   async crop({file,source:inputFile,start,end,sampleRate}){
     if(!this.draft||this.file!==inputFile)throw Error('The source changed. Select a range on the current WAV.');
+    const meaningfulEdit=this.draft.history?.undo?.some(delta=>Object.keys(delta).some(key=>key!=='selection'));
+    if(this.dirty&&meaningfulEdit&&!await this.preserveWorking())return;
     const source=this.draft.source;
     const selection=[start,end],name=stem(leaf(source.path))+' '+start+'–'+end;
     const path='Samples/Processed/'+source.id+'/'+start+'-'+end+'.wav';
@@ -219,10 +274,12 @@ export class SamplerStudio {
     await this.browser.page();
   }
   async openSource(){
-    const path=this.draft.source.source?.path;
-    if(path)await this.openEntry({kind:'sample',path});
+    if(!this.draft.source.source)return;
+    const original=await startFromOriginal(this.root,this.draft);
+    await this.openEntry({kind:'sample',path:original.source.path});
   }
   async openEntry(entry){
+    this.interchange.select(entry);
     if(!this.confirmDiscard())return;
     let draft;
     if(entry.kind==='sample'){
@@ -242,6 +299,35 @@ export class SamplerStudio {
     await this.adopt(draft,await readSampleFile(this.root,draft.source));
     this.status.textContent='Working Copy reopened · '+draft.name;
   }
+  displayedAsset(file){
+    if(file!==this.displayFile||!this.displaySample)throw Error('Render this Working version and open the rendered WAV to use these frames.');
+    return this.displaySample;
+  }
+  useSlices({file,markers}){
+    const sample=this.displayedAsset(file);
+    if(markers.length>15)throw Error('Use up to 15 markers for a 16-pad kit.');
+    if(this.builder.items.some(i=>i.sample.id!==sample.id)&&!this.node.ownerDocument.defaultView.confirm('Replace the builder recordings with this sliced sample?'))return;
+    this.builder.reset();this.builder.add(sample);this.builder.markers.value=markers.join(', ');
+    const panel=this.sections.get('Instrument Builder');panel.open=true;
+    const slices=this.builder.node.querySelector('.ww-sampler-slices');slices.open=true;this.builder.sliced.focus();
+    this.status.textContent='Slice markers ready · '+(markers.length+1)+' pads.';
+  }
+  async useLoop({file,start,end,mode,crossfade}){
+    const sample=this.displayedAsset(file),d=this.draft;
+    if(sample.sampleRate!==44100)throw Error('Render at 44.1 kHz and open the rendered WAV before mapping a loop.');
+    const model=d.instrument?structuredClone(d.instrument):mapSample(sample,d.rootNote,{name:d.name});
+    const region=d.instrument?model.regions.find(r=>r.id===this.regionId):model.regions[0];
+    if(region?.sample!==sample.id)throw Error('The displayed WAV must match the selected region.');
+    if(region.trigger==='release')throw Error('Choose an attack region for a sustain loop.');
+    region.mode='gate';region.loop={start,end,mode,crossfade};validateInstrument(model);
+    if(d.instrument)this.changeInstrument(model);
+    else{
+      if(this.dirty&&!await this.preserveWorking())return;
+      const draft=createWorking({libraryId:d.libraryId,source:sample,name:d.name,rootNote:d.rootNote,instrument:model});
+      await this.adopt(draft,await readSampleFile(this.root,sample),{dirty:true});
+    }
+    this.wave.setLoop?.(region.loop);this.status.textContent='Region loop applied · '+start+'–'+end+' frames.';
+  }
   clearSuggestion(){this.suggestion=null;this.pitchInfo.textContent='';}
   selectRegion(id){
     if(!this.draft?.instrument?.regions.some(r=>r.id===id))return;
@@ -257,7 +343,12 @@ export class SamplerStudio {
     const mapping=this.sections.get('Mapping Editor');
     if(model&&this.main.firstElementChild!==mapping)this.main.prepend(mapping);
     else if(!model&&this.main.firstElementChild===mapping)this.sections.get('Instrument Builder').before(mapping);
-    this.builder.sync();this.map.sync(model??null,this.regionId);this.groups.sync(model??null,this.regionId);
+    this.editRegionWave.disabled=!model;
+    const region=model?.regions.find(r=>r.id===this.regionId);
+    const loop=region?.sample===this.displaySample?.id?region?.loop:null;
+    const loopKey=JSON.stringify([this.regionId,loop]);
+    if(this.loopKey!==loopKey||this.loopFile!==this.displayFile){this.wave.setLoop(loop);this.loopKey=loopKey;this.loopFile=this.displayFile;}
+    this.builder.sync();this.map.sync(model??null,this.regionId);this.groups.sync(model??null,this.regionId);this.syncSubsections();
   }
   change(changes){
     const next=updateWorking(this.draft,changes);
@@ -292,18 +383,21 @@ export class SamplerStudio {
     this.status.textContent='Official r'+ref.revision+' published · '+ref.path;
     await this.browser.page();
   }
-  async assignLive(){
-    const conflict=this.liveConflict();if(conflict)throw Error(conflict);
+  async assignLive(official=this.keyboardSource.value==='official'){
     const draft=this.draft;
+    const prepare=()=>official?prepareSampler(this.player,this.root,draft.baseRef):
+      draft.instrument||draft.rendered?prepareWorking(this.player,this.root,draft):
+      this.previewWav().then(wav=>prepareSamplePreview(this.player,wav,draft.rootNote));
+    await this.playPrepared(prepare,draft.name+(official?' · Official r'+draft.baseRef.revision:' · Working'));
+  }
+  async playPrepared(prepare,label){
+    const conflict=this.liveConflict();if(conflict)throw Error(conflict);
     this.status.textContent='Preparing keyboard preview…';
-    const official=this.keyboardSource.value==='official';
-    const ref=official?await prepareSampler(this.player,this.root,draft.baseRef):
-      draft.instrument||draft.rendered?await prepareWorking(this.player,this.root,draft):
-      await prepareSamplePreview(this.player,await this.previewWav(),draft.rootNote);
+    const ref=await prepare();
     const changed=this.liveConflict();if(changed)throw Error(changed);
     await setLiveSampler(this.player,ref);
-    this.liveName=draft.name+(official?' · Official r'+draft.baseRef.revision:' · Working');
-    this.status.textContent='Play '+draft.name+' on Synth Part A. Release Synth keyboard to restore its previous sound.';
+    this.liveName=label;this.release.hidden=false;
+    this.status.textContent='Play '+label+' on Synth Part A. Release Synth keyboard to restore its previous sound.';
     this.updateRoute();
   }
   resetLive(){this.liveName=null;this.updateRoute();this.sync();}
@@ -313,15 +407,16 @@ export class SamplerStudio {
   }
   updateRoute(){
     this.route.textContent=this.liveName?'Part A · Sampler · '+this.liveName:routeIdle;
-    this.onRouteChange?.(this.route.textContent);
+    this.onRouteChange?.(this.route.textContent);this.updatePlayers?.();
   }
   sync(){
-    const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);this.syncMap();this.fusion.sync();
+    const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);this.syncMap();this.fusion.sync();this.interchange.sync();this.updatePlayers?.();
     this.waveMode.disabled=!d;this.waveMode.value=this.displayMode||'source';
     this.continueRender.disabled=!d?.rendered;
     this.importButton.disabled=!this.library;
     this.back.hidden=!source?.source?.path;
     this.sourceLabel.textContent=source?'Source · '+source.path+' · '+source.channels+' ch · '+(source.sampleRate/1000)+' kHz':'No WAV open';
+    if(d&&this.displayMode&&this.displayMode!=='source')this.sourceLabel.textContent=(this.waveMode.selectedOptions[0]?.textContent||'Version')+' · local frames';
     if(this.displayMode==='working'&&d)this.sourceLabel.textContent=(this.resultStale?'Working result needs refresh':'Working result')+' · local frames · '+(d.instrument?'reference sample':d.name);
     this.name.value=d?.name??'';this.note.value=d?.rootNote??60;
     for(const field of [this.name,this.note,this.save,this.render,this.analyze,this.play])field.disabled=!d;

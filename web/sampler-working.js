@@ -39,6 +39,10 @@ function validate(draft) {
     fail('The working copy needs a name and valid identities.');
   }
   checkSample(draft.source);
+  if (draft.sliceMarkers !== undefined && (!Array.isArray(draft.sliceMarkers) ||
+      draft.sliceMarkers.some((frame,i,marks) => !Number.isSafeInteger(frame) || frame <= (marks[i-1] ?? 0) || frame >= draft.source.frames))) {
+    fail('Choose distinct slice markers in ascending order inside the source WAV.');
+  }
   if (!Array.isArray(draft.selection) || draft.selection.length !== 2 ||
       !draft.selection.every(Number.isSafeInteger) || draft.selection[0] < 0 ||
       draft.selection[1] <= draft.selection[0] || draft.selection[1] > draft.source.frames) {
@@ -63,14 +67,14 @@ function validate(draft) {
   return draft;
 }
 
-const changedFields = ['name','rootNote','selection','recipe','rendered','instrument'];
+const changedFields = ['name','rootNote','selection','recipe','rendered','instrument','sliceMarkers'];
 const historyOf = draft => draft.history ?? {checkpoints:[],undo:[],redo:[]};
 
 // Keep only inverse changes. Audio, earlier actions and official revision
 // pointers never become nested copies inside the undo stack.
 function changesFrom(before, after) {
   const delta = {};
-  for (const field of changedFields) if (!same(before[field],after[field])) delta[field] = before[field];
+  for (const field of changedFields) if (!same(before[field],after[field])) delta[field] = field === 'sliceMarkers' ? before[field] ?? [] : before[field];
   return delta;
 }
 
@@ -96,16 +100,16 @@ export const undoWorking = draft => step(draft,'undo','redo');
 export const redoWorking = draft => step(draft,'redo','undo');
 
 export function createWorking({libraryId, source, name = source?.name, selection = [0,source?.frames], rootNote = 60,
-  recipe = [], baseRef = null, instrument = null, rendered = null} = {}) {
+  recipe = [], baseRef = null, instrument = null, rendered = null, sliceMarkers = []} = {}) {
   return validate(structuredClone({format, version:1, id:crypto.randomUUID(), generation:0, libraryId,
     instrumentId:baseRef?.instrumentId ?? instrument?.id ?? crypto.randomUUID(), name:name ?? 'Untitled sample',
-    source, selection, rootNote, recipe, instrument, rendered, baseRef}));
+    source, selection, rootNote, recipe, instrument, rendered, baseRef, sliceMarkers}));
 }
 
 export function updateWorking(draft, changes) {
   validate(draft);
   for (const field of Object.keys(changes)) {
-    if (!['name','selection','recipe','rootNote','instrument','baseRef'].includes(field)) fail('Unknown working copy field: ' + field);
+    if (!['name','selection','recipe','rootNote','instrument','baseRef','sliceMarkers'].includes(field)) fail('Unknown working copy field: ' + field);
   }
   const next = {...draft, ...structuredClone(changes)};
   if (!same(operations(next), operations(draft))) {

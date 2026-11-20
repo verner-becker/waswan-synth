@@ -182,10 +182,19 @@ try {
   await button('WASWAN extracted tone').first().click();
   await page.waitForFunction(() => document.querySelector('.ww-sampler-status').textContent.startsWith('Working Copy reopened'));
   assert.equal(await field('Working name').inputValue(),'WASWAN extracted tone');
+  page.on('dialog',dialog=>dialog.accept());
+  await button('Continue editing rendered version').click();
+  await page.waitForFunction(()=>document.querySelector('.ww-sampler-status').textContent.startsWith('New Working Copy from rendered WAV'));
+  await button('Back to source take').click();
+  await page.waitForFunction(n=>document.querySelector('[aria-label="End frame"]').value===String(n),frames);
+  await set('Start frame',rate*5);await set('End frame',rate*7);
+  await button('Create Sample from Selection').click();
+  await page.waitForFunction(()=>document.querySelector('.ww-sampler-status').textContent.startsWith('Sample created'));
+  assert.equal(await field('End frame').inputValue(),String(2*rate));
   assert.equal(await hashFile(),hash);
   assert.deepEqual(errors,[]);
   const report = {originalFrames:frames,sourceSha256:hash,excerptFrames:sample.frames,channels:sample.channels,
-    revision:model.revision,decoded,browser:browser.version(),midi:'simulated Web MIDI input',...observed};
+    secondExcerptFrames:2*rate,revision:model.revision,decoded,browser:browser.version(),midi:'simulated Web MIDI input',...observed};
   await writeFile(join(evidence,'chrome.json'),JSON.stringify(report,null,2));
   console.log('PASS UX-1 seven-minute WAV to playable instrument',report);
 } catch (error) {

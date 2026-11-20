@@ -96,7 +96,8 @@ export class SamplerFusion {
     this.restore=button('Restore source snapshots',()=>this.restoreSources());
     this.recipeLabel=el('span','ww-muted');const recipe=el('div','ww-sampler-actions');recipe.append(this.restore,this.recipeLabel);
     this.captureReport=el('output','ww-sampler-fusion-report');this.captureReport.setAttribute('aria-label','Fusion signal report');
-    this.config.append(recipe,sourceTools,this.list,fx,captureTools,this.multiFields,this.phraseTools,this.capture);
+    this.printInfo=el('p','ww-muted');
+    this.config.append(recipe,sourceTools,this.list,fx,captureTools,this.multiFields,this.phraseTools,this.capture,this.printInfo);
     this.cancel=action('Cancel Fusion capture',()=>this.controller?.abort(new DOMException('Capture cancelled.','AbortError')));
     this.progress=el('progress');this.progress.max=1;this.progress.setAttribute('aria-label','Fusion capture progress');
     const feedback=el('div','ww-sampler-actions');feedback.append(this.progress,this.cancel);
@@ -125,7 +126,7 @@ export class SamplerFusion {
   async restoreSources(){
     const s=this.studio,recipe=s.draft?.source.provenance?.fusion;
     if(!recipe?.sources?.length)throw Error('Open a captured Fusion take with its source recipe.');
-    if(this.sources.length&&!confirm('Replace the current Fusion sources with the captured snapshots?'))return;
+    if(this.sources.length&&!this.node.ownerDocument.defaultView.confirm('Replace the current Fusion sources with the captured snapshots?'))return;
     const restored=structuredClone(recipe.sources);
     for(const source of restored){
       if(source.instrument.type==='sampler')source.instrument=await prepareSampler(this.daw.player,s.root,source.instrument);
@@ -229,6 +230,8 @@ export class SamplerFusion {
     const multi=this.mode.value==='multi';this.multiFields.hidden=!multi;
     this.velocity.parentNode.hidden=this.note.parentNode.hidden=multi;
     const pending=!!this.controller,n=this.sources.length,live=!!this.lease;
+    this.printInfo.hidden=!n;
+    this.printInfo.textContent=n+' source'+(n===1?'':'s')+' per take · selected FX print into the WAV. The new map plays its own regions. Check voice use and CPU in DSP Monitor.';
     const recipe=this.studio.draft?.source.provenance?.fusion;
     this.restore.hidden=!recipe;this.restore.disabled=live;
     this.recipeLabel.textContent=recipe?'Capture recipe · '+recipe.sources.length+' source(s) · '+recipe.mode:'';

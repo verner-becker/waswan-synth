@@ -24,7 +24,12 @@ try {
   const preview = (root,draft,through) => previewWorkingWav(root,draft,{through,run:processWav});
   const clean = createWorking({libraryId:library.id,source,name:'Toy',selection:[800,3600]});
   const stages = [{type:'gain',db:-9,bypass:true},{type:'reverse'}];
-  const edits = updateWorking(clean,{recipe:stages});
+  const legacy = {...clean};
+  delete legacy.sliceMarkers; // Saved before source markers were introduced.
+  const marked=updateWorking(legacy,{sliceMarkers:[900,1950]});
+  assert.deepEqual(undoWorking(marked).sliceMarkers,[]);
+  assert.throws(()=>updateWorking(marked,{sliceMarkers:[1950,900]}),/slice markers/);
+  const edits = updateWorking(marked,{recipe:stages});
   let working = await renderWorking(root,edits,{run:processWav});
   assert.deepEqual(working.rendered.recipe.operations,[{type:'trim',start:800,end:3600},{type:'reverse'},{type:'rate',sampleRate:44100}]);
   const first = await audio(await preview(root,working,0));
@@ -59,6 +64,7 @@ try {
   const restored = await restoreCheckpoint(root,saved,checkpoint.id);
   const branch = await branchWorking(root,saved,checkpoint.id,'New idea');
   assert.equal(branch.name,'New idea');
+  assert.deepEqual(restored.sliceMarkers,[900,1950]);
   assert.equal(restored.lineage.action,'restore');
   assert.equal(branch.lineage.action,'branch');
   assert.equal(restored.lineage.checkpointId,checkpoint.id);
