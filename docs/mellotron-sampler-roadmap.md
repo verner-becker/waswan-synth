@@ -1,5 +1,7 @@
 # Roadmap musical do WASWAN Mellotron e do WASWAN Sampler
 
+Em 20/11/2026, o [roadmap do Sampler Studio](sampler-studio-roadmap.md) detalhou a evolução dos marcos C e D com regiões sobrepostas, velocity layers e uma biblioteca física por revisão. Os marcos A e B abaixo documentam o percurso do Mellotron.
+
 Primeiro, abrir um banco de fitas, tocar um acorde no SMK-37 Pro e gravá-lo na DAW. Depois, repetir a experiência com gravações próprias, distribuídas pelo teclado e salvas em uma pasta que o músico pode levar para outra máquina.
 
 | Marco | O que o músico consegue fazer ao final | Dependência |

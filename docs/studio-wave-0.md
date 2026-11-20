@@ -1,5 +1,7 @@
 # WASWAN Studio — onda 0: diagnóstico e viabilidade
 
+A evidência da Onda 0 do **Sampler Studio**, realizada em 20/11/2026, tem [registro próprio de auditoria e validação](sampler-studio-discovery.md). O diagnóstico abaixo corresponde à primeira série do Studio, de 17/11/2026.
+
 Data: 2026-11-17. Base: `97ab4ecb4b12521aaac8db7c1e990d83db16d2fc`, conferida com `origin/main` via fetch. Upstream preservado em `3f751bc2be066414f204cf44e1aa05d9c7467d7f`. Acompanhamento e autorizações: [controle das ondas](studio-waves.md).
 
 ## Parecer
