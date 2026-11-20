@@ -45,3 +45,7 @@ Node assertion suites use `tests/*.test.mjs`; Chrome checks use `tests/browser-*
 Use ES modules, kebab-case filenames, adjacent formatting (generally two spaces and semicolons), and SPDX headers. No formatter/linter is configured. Avoid unnecessary frameworks, dependencies, CI/CD, and refactoring.
 
 Inspect status, HEAD, and remote references; preserve local work. Development branches are temporary and start from updated `main`. Test changes before integration, use commits (`feat:`, `fix:`, `test:`, `docs:`), and push the branch. Integration requires explicit user approval. Remove completed branches only after confirming their commits are preserved in `main`. Never create tags automatically, force push, or use `reset --hard`. PR descriptions explain behaviour, validation, limitations, and screenshots.
+
+## Sampler Studio UX
+
+Follow [the Sampler Studio experience contract](docs/sampler-studio-ux-spec.md) and [wave status](docs/studio-waves.md). Number UX-0 through UX-5 separately from the foundational API. UX-1 includes the seven-minute stereo recording to playable excerpt. Use the existing host, revisioned library and partial trim reader.

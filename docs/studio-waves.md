@@ -187,3 +187,7 @@ A [Onda 4 do sampler](sampler-studio-wave-4.md) entrega stretch, pitch-shift, sl
 A [Onda 5 do sampler](sampler-studio-wave-5.md) fecha biblioteca física, presets, escala em 512 regiões, SFZ e geração de bancos para o Mellotron. O [guia de uso da API](sampler-studio-uso.md) reúne os contratos usados pela futura apresentação.
 
 Com a aprovação do usuário, a `main` avançou por fast-forward de `5c2338b` até `b7cd64a`, incorporando o discovery e as cinco ondas do Sampler Studio. Na árvore integrada, passaram os 19 testes Node/WASM do sampler. O Chrome reabriu o projeto com subtrativo, FM, Mellotron e sampler após reiniciar o navegador e mover a biblioteca. Os quatro stems e o master foram exportados, e o áudio ativo do stem do sampler coincidiu amostra a amostra após alinhar o ataque em 128 frames. Evidência em `.local/validation/sampler-main/`.
+
+### Sampler Studio UX · UX-0
+
+Branch `docs/sampler-studio-ux-0`, base local e remota `6c0d936`. [Contrato, inventário dos módulos, decisões e aceites UX-0 a UX-5](sampler-studio-ux-spec.md). A auditoria confirmou a publicação de revisões e o trim parcial em Worker. Identificou as lacunas de sessão, visualização longa, preview de mapa provisório e render de Fusion. Capturas atuais do shell em Chrome a 1366 × 800 em `.local/validation/sampler-ux-0/`. Nenhuma alteração musical. Próxima entrega: UX-1 sobre esta revisão, com ensaio de sete minutos.
