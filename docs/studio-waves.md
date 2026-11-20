@@ -10,6 +10,8 @@ Em 20/11/2026, a revisão com o agente de UX reproduziu a escolha de VIOLINS enq
 
 A captura do usuário mostrou `CHOIR` cadastrada diretamente com o seletor vazio. O painel passou a reconhecer os WAVs nessa pasta e a recuperar o cadastro anterior após a leitura. No Chrome com os 12 WAVs do coral, o teste confirmou sinal na saída e os quatro timbres ao voltar à biblioteca principal. Evidência local em `.local/validation/mellotron-selection-ux/choir-folder.png`.
 
+O usuário confirmou que conseguiu tocar os dois timbres com **Layer** e autorizou integrar à `main` a sequência dos marcos A e B até `6a63636`. O ensaio físico completo de pedal, bend e gravação continua previsto. O próximo marco de implementação é o sampler (C).
+
 Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83db16d2fc` (main local). Branch de planejamento e investigação: `docs/studio-waves-plan`.
 
 ## Integração e encerramento Git — 17/11/2026

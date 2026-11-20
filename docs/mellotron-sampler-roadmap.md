@@ -5,7 +5,7 @@ Primeiro, abrir um banco de fitas, tocar um acorde no SMK-37 Pro e gravá-lo na 
 | Marco | O que o músico consegue fazer ao final | Dependência |
 |---|---|---|
 | A · Prova do núcleo | Tocar um WAV de teste em três alturas e reconhecer a frase no arquivo exportado | [Concluído em software no host e no Chrome](mellotron-sampler-a.md) |
-| B · Mellotron tocável | Abrir fitas autorizadas, combinar dois bancos, tocar e gravar com o comportamento de fita | [Validado em software, pronto para ensaio no SMK-37 Pro](mellotron-sampler-b.md) |
+| B · Mellotron tocável | Abrir fitas autorizadas, combinar dois bancos, tocar e gravar com o comportamento de fita | [Validado em software; uso de Layer confirmado pelo usuário](mellotron-sampler-b.md) |
 | C · Sampler tocável | Transformar gravações próprias em um instrumento polifônico, salvar e reabrir | B entrega reprodução, eventos e biblioteca física |
 | D · Aceite conjunto | Reabrir um projeto, tocar com FM e subtrativo e exportar a música e suas pistas | B e C disponíveis para ensaio integrado |
 
@@ -55,6 +55,6 @@ Base do planejamento em 19/11/2026: WASWAN `df82b4f` e SMKTRON `3428613` (ML1). 
 
 ## Entrega e decisões
 
-Cada marco fecha com a revisão testada, resultado reproduzível, evidências em `.local/validation/`, limitações e próximo passo. Desenvolver em branch dedicada e integrar à `main` apenas com autorização explícita. O Marco A validou o núcleo adaptado com uma região mono. O Marco B entregou os dois bancos no simulador. O próximo passo é o [ensaio físico no SMK-37 Pro](mellotron-sampler-b.md). A próxima implementação prevista é o sampler do Marco C.
+Cada marco fecha com a revisão testada, resultado reproduzível, evidências em `.local/validation/`, limitações e próximo passo. Desenvolver em branch dedicada e integrar à `main` apenas com autorização explícita. O Marco A validou o núcleo adaptado com uma região mono. O Marco B entregou os dois bancos no simulador. O usuário confirmou a combinação de dois instrumentos e aprovou a integração à `main`. O [ensaio completo no SMK-37 Pro](mellotron-sampler-b.md) continua previsto. A próxima implementação prevista é o sampler do Marco C.
 
 As decisões em aberto são quais gravações poderão acompanhar uma distribuição, qual carga o host sustenta e quais efeitos opcionais cabem nela. O aceite físico depende de tocar e ouvir o instrumento no equipamento. Editor avançado de waveform, slicing, time stretching, granular e IA ficam fora destas quatro entregas.
