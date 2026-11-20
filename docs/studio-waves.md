@@ -181,3 +181,5 @@ O teste de seleção reproduziu a volta de **Blow** para **SBass** quando o sele
 O [fechamento da Onda 2 do sampler](sampler-studio-wave-2.md) registra as operações offline, a prova de edição não destrutiva em disco e o teste em Worker real.
 
 A [Onda 3 do sampler](sampler-studio-wave-3.md) acrescenta kits de 16 pads, choke por pista, filtros e envelopes no leitor WASM, MIDI expressivo e planejamento de tomadas de teclado externo.
+
+A [Onda 4 do sampler](sampler-studio-wave-4.md) entrega stretch, pitch-shift, slicing por tempo e texturas granulares reproduzíveis em Worker. A textura foi salva em disco e tocada por três notas no WASM.

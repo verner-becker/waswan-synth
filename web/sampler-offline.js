@@ -2,7 +2,8 @@
 import {importOriginal, readSampleFile} from './sampler-library.js';
 import {createInstrument} from './sampler-instrument.js';
 import {decodeWav, inspectWav} from './sampler-wav.js';
-import {checkAudio, editSample, splitFrames} from './sampler-edit.js';
+import {checkAudio, splitFrames} from './sampler-edit.js';
+import {renderRecipe} from './sampler-transform.js';
 import {analyzeSample, suggestLoops} from './sampler-analysis.js';
 import {pcm16, wavHeader} from './studio-format.js';
 
@@ -27,7 +28,7 @@ export async function processWav(file, job) {
   if (job.type === 'analyze') return analyzeSample(source,job.options);
   if (job.type === 'loops') return suggestLoops(source,job.options);
   if (job.type !== 'edit') throw Error('Unknown offline operation');
-  const {audio,report} = editSample(source,job.recipe);
+  const {audio,report} = renderRecipe(source,job.recipe);
   return {wav:encodeSample(audio),report};
 }
 

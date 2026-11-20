@@ -11,11 +11,16 @@ try{
     const file=encodeSample({pcm,channels:1,sampleRate:48000});
     const {wav}=await runOffline(file,{type:'edit',recipe:[{type:'trim',start:0,end:24000},{type:'rate',sampleRate:44100}]});
     const result=await runOffline(wav,{type:'analyze'});
+    const texture=await runOffline(wav,{type:'edit',recipe:[
+      {type:'stretch',factor:1.5},{type:'pitchShift',semitones:3},
+      {type:'granular',seconds:1,grainMs:100,positions:[.1,.8],seed:12}
+    ]});
+    const observed=await runOffline(texture.wav,{type:'analyze'});
     const abort=new AbortController();
     const work=runOffline(file,{type:'analyze'},{signal:abort.signal});
     abort.abort();
-    return {frames:result.frames,root:result.pitch.root,cancel:await work.then(()=>false,e=>e.name==='AbortError')};
+    return {frames:result.frames,root:result.pitch.root,textureFrames:observed.frames,audible:observed.peak>.05,cancel:await work.then(()=>false,e=>e.name==='AbortError')};
   });
-  assert.deepEqual(result,{frames:22050,root:69,cancel:true});
-  console.log('PASS browser worker trim, rate conversion, pitch measurement and abort');
+  assert.deepEqual(result,{frames:22050,root:69,textureFrames:44100,audible:true,cancel:true});
+  console.log('PASS browser worker trim, rate conversion, pitch measurement, transformed granular texture and abort');
 }finally{await browser.close();}
