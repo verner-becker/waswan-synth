@@ -10,7 +10,7 @@ export class DawMonitor {
   }
   track(){const recording=this.w.recorder;return recording?.busy&&recording.track?.type==='midi'?this.w.snapshot.tracks.find(t=>t.id===recording.track.id):this.w.selectedTrack();}
   allowed(track){return track?.monitor==='in'||track?.monitor==='auto'&&(!this.w.player.playing||this.w.recorder?.busy&&this.w.recorder?.track?.id===track.id);}
-  target(){const track=this.track();if(track?.type!=='midi')return null;const part=this.w.player.slots.get(track.id);return {trackId:track.id,part,audible:this.ready&&Number.isInteger(part)&&this.allowed(track),channel:this.channel};}
+  target(){const track=this.track();if(track?.type!=='midi')return null;const part=this.w.player.slots.get(track.id);return {trackId:track.id,part,audible:this.ready&&Number.isInteger(part)&&this.allowed(track),channel:this.channel,sampler:track.instrument?.type==='sampler'};}
   command(type,data){if(!this.token)return;void this.w.player.requests().request(type,{...data,token:this.token,projectId:this.w.controller.snapshot().id}).catch(error=>this.w.error(error));}
   async ensureSession(){
     await this.closing;

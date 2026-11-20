@@ -120,6 +120,51 @@ function tone(entry, field) {
   };
 }
 
+// Modulation depths are in destination units: dB, cents, octave change of cutoff,
+// normalized resonance, or signed stereo balance. CC sources use MIDI controller numbers.
+export const modulationDestinations = ['gainDb', 'pitchCents', 'cutoffOctaves', 'resonance', 'pan'];
+export const modulationSources = ['velocity', 'wheel', 'bend', 'channelPressure', 'polyPressure',
+  'ampEnvelope', 'filterEnvelope', 'auxEnvelope', 'lfo'];
+function soundOptions(entry, at) {
+  const result = {};
+  for (const name of ['envelope', 'filterEnvelope', 'auxEnvelope']) {
+    if (entry[name] == null) continue;
+    const e = object(entry[name], at + '.' + name);
+    result[name] = {
+      attackMs:number(e.attackMs ?? 0, 0, 60000, at+'.'+name+'.attackMs'),
+      decayMs:number(e.decayMs ?? 0, 0, 60000, at+'.'+name+'.decayMs'),
+      sustain:number(e.sustain ?? 1, 0, 1, at+'.'+name+'.sustain'),
+      releaseMs:number(e.releaseMs ?? 5, 0, 60000, at+'.'+name+'.releaseMs'),
+    };
+  }
+  if (entry.filter != null) {
+    const f = object(entry.filter, at+'.filter');
+    result.filter = {type:option(f.type, ['lowpass','highpass','bandpass'], at+'.filter.type'),
+      cutoffHz:number(f.cutoffHz, 10, 19845, at+'.filter.cutoffHz'),
+      resonance:number(f.resonance ?? 0, 0, 1, at+'.filter.resonance')};
+  }
+  if (entry.lfo != null) {
+    const l = object(entry.lfo, at+'.lfo');
+    result.lfo = {shape:option(l.shape ?? 'sine', ['sine','triangle'], at+'.lfo.shape'),
+      rateHz:number(l.rateHz, .01, 40, at+'.lfo.rateHz')};
+  }
+  if (entry.modulation != null) {
+    check(Array.isArray(entry.modulation) && entry.modulation.length <= 16, at+'.modulation', 'Use up to 16 modulation routes.');
+    result.modulation = entry.modulation.map((route,i) => {
+      const path=at+'.modulation.'+i;
+      object(route,path);
+      const cc=route.source?.cc;
+      const source=cc === undefined ? option(route.source,modulationSources,path+'.source') :
+        {cc:integer(cc,0,127,path+'.source.cc')};
+      const destination=option(route.destination,modulationDestinations,path+'.destination');
+      const limit={gainDb:96,pitchCents:9600,cutoffOctaves:12,resonance:1,pan:2}[destination];
+      return {source,destination,depth:number(route.depth,-limit,limit,path+'.depth'),
+        polarity:option(route.polarity ?? (['bend','lfo'].includes(source)?'bipolar':'unipolar'),
+          ['unipolar','bipolar'],path+'.polarity')};
+    });
+  }
+  return result;
+}
 function requireSupported(entry, fields, path) {
   for (const field of fields) {
     if (entry[field] != null && (!Array.isArray(entry[field]) || entry[field].length)) {
@@ -145,7 +190,7 @@ export function createInstrument(options = {}) {
 export function validateInstrument(model) {
   object(model, 'instrument');
   check(model.format === samplerFormat && model.version === 1, 'format', 'This sampler instrument version is unavailable.', 'unsupported-feature');
-  requireSupported(model, ['requires', 'modulation', 'pads'], 'instrument');
+  requireSupported(model, ['requires'], 'instrument');
   check(validSamplerId(model.id), 'id', 'Expected an instrument identifier.');
   integer(model.revision, 0, Number.MAX_SAFE_INTEGER, 'revision');
   text(model.name, 'name');
@@ -160,12 +205,25 @@ export function validateInstrument(model) {
   check(outputs.length > 0 && outputs[0].id === 'main', 'outputs.0.id', 'The first output must be main.');
   const outputIndex = byId(outputs);
   const groups = items(model.groups ?? [], 'groups', (group, at) => {
-    requireSupported(group, ['envelope', 'filter', 'voiceLimit', 'choke', 'modulation', 'retrigger'], at);
+    if (group.choke != null) check(validSamplerId(group.choke),at+'.choke','Expected a choke group identifier.');
+    if (group.voiceLimit != null) integer(group.voiceLimit,1,256,at+'.voiceLimit');
+    if (group.retrigger != null) option(group.retrigger,['layer','cut'],at+'.retrigger');
     const output = group.output ?? 'main';
     reference(outputIndex, output, `${at}.output`);
-    return {...group, output, ...tone(group, at)};
+    return {...group, output, ...tone(group, at), ...soundOptions(group,at)};
   });
   const groupIndex = byId(groups);
+  const padNotes = new Set(), padIndices = new Set();
+  const pads = items(model.pads ?? [], 'pads', (pad, at) => {
+    check(kind === 'kit', at, 'Pad mappings require a kit.');
+    const index=integer(pad.index,1,16,at+'.index'), note=integer(pad.note,0,127,at+'.note');
+    check(!padIndices.has(index) && !padNotes.has(note), at, 'Each pad index and input note must be unique.');
+    padIndices.add(index);padNotes.add(note);
+    check(Array.isArray(pad.groups) && pad.groups.length && new Set(pad.groups).size===pad.groups.length,
+      at+'.groups','Choose one or more distinct pad groups.');
+    for(const group of pad.groups) reference(groupIndex,group,at+'.groups');
+    return {...pad,index,note,groups:[...pad.groups]};
+  });
   const samples = items(model.samples ?? [], 'samples', (sample, at) => {
     samplerPath(sample.path);
     check(/\.wav$/iu.test(sample.path), `${at}.path`, 'Expected a library-relative WAV path.');
@@ -199,12 +257,24 @@ export function validateInstrument(model) {
     check(validSamplerId(selectorGroup), `${at}.selectorGroup`, 'Expected an articulation group identifier.');
     const mode = option(articulation.mode ?? 'persistent', ['persistent'], `${at}.mode`);
     object(articulation.select, `${at}.select`);
-    requireSupported(articulation.select, ['cc'], `${at}.select`);
+    if (articulation.select.cc !== undefined) {
+      check(articulation.select.keyswitch === undefined,at+'.select','Choose one articulation selector.');
+      const cc=integer(articulation.select.cc,0,127,at+'.select.cc');
+      const range=interval(articulation.select.range ?? [1,127],0,127,at+'.select.range');
+      return {...articulation,selectorGroup,mode,select:{cc,range}};
+    }
     const keyswitch = integer(articulation.select.keyswitch, 0, 127, `${at}.select.keyswitch`);
     check(!keyswitches.has(keyswitch), `${at}.select.keyswitch`, 'A keyswitch can select only one articulation.');
     keyswitches.add(keyswitch);
     return {...articulation, selectorGroup, mode, select: {keyswitch}};
   });
+  for (let i=0;i<articulations.length;i++) {
+    const a=articulations[i];
+    if(a.select.cc===undefined)continue;
+    for(const b of articulations.slice(0,i))if(a.selectorGroup===b.selectorGroup && a.select.cc===b.select.cc)
+      check(a.select.range[0]>b.select.range[1] || b.select.range[0]>a.select.range[1],
+        'articulations','CC ranges in the same selector group must be disjoint.');
+  }
   const artIndex = byId(articulations);
   const initialArticulations = {...object(model.initialArticulations ?? {}, 'initialArticulations')};
   if (model.initialArticulation !== undefined) {
@@ -238,23 +308,24 @@ export function validateInstrument(model) {
       const set = reference(variationIndex, region.variation.set, `${at}.variation.set`);
       check(set.order.includes(region.variation.member), `${at}.variation.member`, 'The variant is missing from the set order.');
     }
-    requireSupported(region, ['reverse', 'envelope', 'modulation'], at);
-    const normalized = {...region, key, root, trigger, mode, frames, velocityCurve, ...tone(region, at)};
+    check(region.reverse === undefined || typeof region.reverse === 'boolean',at+'.reverse','Expected a playback direction flag.');
+    const normalized = {...region, key, root, trigger, mode, frames, velocityCurve, ...tone(region, at), ...soundOptions(region,at)};
     if (velocity) normalized.velocity = velocity;
     if (region.keyFadeIn !== undefined) normalized.keyFadeIn = interval(region.keyFadeIn, ...key, `${at}.keyFadeIn`, true);
     if (region.keyFadeOut !== undefined) normalized.keyFadeOut = interval(region.keyFadeOut, ...key, `${at}.keyFadeOut`, true);
     normalized.keyFadeLaw = option(region.keyFadeLaw ?? 'equalPower', ['equalPower', 'linear'], `${at}.keyFadeLaw`);
     if (region.loop != null) {
       object(region.loop, `${at}.loop`);
-      requireSupported(region.loop, ['crossfade'], `${at}.loop`);
-      option(region.loop.mode ?? 'forward', ['forward'], `${at}.loop.mode`);
+      const loopMode=option(region.loop.mode ?? 'forward', ['forward','reverse','pingPong'], `${at}.loop.mode`);
       const [start, end] = interval([region.loop.start, region.loop.end], ...frames, `${at}.loop`, true);
       check(mode === 'gate' && trigger === 'attack', `${at}.loop`, 'A forward loop requires an attack region in gate mode.');
-      normalized.loop = {start, end, mode: 'forward'};
+      check(loopMode!=='pingPong' || end-start>=2,at+'.loop','A ping-pong loop needs at least two frames.');
+      const crossfade=integer(region.loop.crossfade ?? 0,0,Math.floor((end-start-(loopMode==='pingPong'?1:0))/2),at+'.loop.crossfade');
+      normalized.loop = {start,end,mode:loopMode,...(crossfade?{crossfade}:{})};
     }
     return normalized;
   });
-  return {...model, kind, tags: [...tags], outputs, groups, samples, layers, variations, articulations, initialArticulations, regions, ...tone(model, 'instrument')};
+  return {...model, kind, tags: [...tags], outputs, groups, samples, layers, variations, articulations, initialArticulations, regions, ...(pads.length?{pads}:{}), ...tone(model, 'instrument'), ...soundOptions(model,'instrument')};
 }
 
 export function applyEdits(draft, edits) {
@@ -264,7 +335,7 @@ export function applyEdits(draft, edits) {
     const field = `edits.${index}`;
     object(edit, field);
     const {op, collection, id, value} = edit;
-    check(['samples', 'regions', 'groups', 'articulations', 'layers', 'variations', 'outputs'].includes(collection),
+    check(['samples', 'regions', 'groups', 'articulations', 'layers', 'variations', 'outputs', 'pads'].includes(collection),
       `${field}.collection`, 'Choose a sampler entity collection.');
     check(['add', 'replace', 'remove'].includes(op), `${field}.op`, 'Choose add, replace or remove.');
     const key = id ?? value?.id;
@@ -292,7 +363,7 @@ export function compile(model, capabilities = {}, requestedLimits = {}) {
   const articulations = byId(instrument.articulations);
   const variations = byId(instrument.variations);
   const notes = {attack: Array.from({length: 128}, () => []), release: Array.from({length: 128}, () => [])};
-  const used = new Set();
+  const used = new Set(), resolvedRegions = [];
   const destinations = capabilities.outputs ?? ['main'];
   check(instrument.regions.length <= limits.regions, 'regions', 'The instrument exceeds the region limit.', 'budget-exceeded');
   check(instrument.articulations.length <= limits.articulations, 'articulations', 'The instrument exceeds the articulation limit.', 'budget-exceeded');
@@ -300,6 +371,7 @@ export function compile(model, capabilities = {}, requestedLimits = {}) {
   for (const variation of instrument.variations) {
     check(variation.order.length <= limits.variationMembers, `variations.${variation.id}.order`, 'The set exceeds the variant limit.', 'budget-exceeded');
   }
+  const pads = new Map((instrument.pads ?? []).map(pad=>[pad.note,pad]));
   for (const region of instrument.regions) {
     const group = groups.get(region.group);
     const layer = layers.get(region.layer);
@@ -310,13 +382,22 @@ export function compile(model, capabilities = {}, requestedLimits = {}) {
       fadeIn: layer?.fadeIn,
       fadeOut: layer?.fadeOut,
       fadeLaw: layer?.fadeLaw,
-      output: group.output,
+      output: group.output, fixedPitch:pads.size>0,
+      envelope:region.envelope ?? group.envelope ?? instrument.envelope,
+      filterEnvelope:region.filterEnvelope ?? group.filterEnvelope ?? instrument.filterEnvelope,
+      auxEnvelope:region.auxEnvelope ?? group.auxEnvelope ?? instrument.auxEnvelope,
+      filter:region.filter ?? group.filter ?? instrument.filter, lfo:region.lfo ?? group.lfo ?? instrument.lfo,
+      modulation:[...(instrument.modulation ?? []),...(group.modulation ?? []),...(region.modulation ?? [])],
       gainDb: instrument.gainDb + group.gainDb + region.gainDb,
       cents: instrument.cents + group.cents + region.cents,
       pan: Math.max(-1, Math.min(1, instrument.pan + group.pan + region.pan)),
     };
+    check(resolved.modulation.length<=16,'regions.'+region.id+'.modulation','Use up to 16 combined modulation routes.','budget-exceeded');
+    resolvedRegions.push(resolved);
     used.add(region.sample);
-    for (let key = region.key[0]; key <= region.key[1]; key++) notes[region.trigger][key].push(resolved);
+    for (let key=region.key[0];key<=region.key[1];key++) {
+      if (!pads.size || pads.get(key)?.groups.includes(region.group)) notes[region.trigger][key].push(resolved);
+    }
   }
   const dependencies = instrument.samples.filter(sample => used.has(sample.id));
   const hashes = new Map();
@@ -332,8 +413,8 @@ export function compile(model, capabilities = {}, requestedLimits = {}) {
     throw new SamplerError('budget-exceeded', 'The instrument exceeds the PCM memory budget.', {memoryBytes, limit: limits.memoryBytes});
   }
   return {
-    instrument, notes, dependencies, memoryBytes, maxVoices: limits.voices,
-    keyswitches: new Map(instrument.articulations.map(art => [art.select.keyswitch, art])),
+    instrument, notes, resolvedRegions, dependencies, memoryBytes, maxVoices: limits.voices,
+    keyswitches: new Map(instrument.articulations.filter(art=>art.select.keyswitch!==undefined).map(art => [art.select.keyswitch, art])),
     articulations, variations,
   };
 }
@@ -375,6 +456,26 @@ function variationMember(set, eligible, previous = {}) {
   return {member: usable[random % usable.length], random};
 }
 
+// The explainer reports the first control tick. Sustain, LFO and pressure may
+// subsequently change during a sounding voice without selecting another region.
+function attackParameters(region, velocity, note, state) {
+  const envStart=(e,fallback)=>e ? (e.attackMs>0?0:e.decayMs>0?1:e.sustain) : fallback;
+  const amp=envStart(region.envelope,1);
+  const raw={velocity:velocity/127,wheel:(state.cc?.[1] ?? 0)/127,bend:((state.bend ?? 0)/8192+1)/2,
+    channelPressure:(state.channelPressure ?? 0)/127,polyPressure:(state.polyPressure?.[note] ?? 0)/127,
+    ampEnvelope:amp,filterEnvelope:envStart(region.filterEnvelope,0),auxEnvelope:envStart(region.auxEnvelope,0),
+    lfo:region.lfo?.shape==='triangle'?0:.5};
+  const mod={gainDb:0,pitchCents:0,cutoffOctaves:0,resonance:0,pan:0};
+  for(const route of region.modulation) {
+    const v=typeof route.source==='string'?raw[route.source]:(state.cc?.[route.source.cc] ?? 0)/127;
+    mod[route.destination]+=(route.polarity==='bipolar'?2*v-1:v)*route.depth;
+  }
+  return {amp,gainDb:region.gainDb+mod.gainDb,pan:Math.max(-1,Math.min(1,region.pan+mod.pan)),
+    cents:(region.fixedPitch?0:note-region.root)*100+region.cents+mod.pitchCents,
+    cutoffHz:region.filter?Math.max(8.18,Math.min(19845,region.filter.cutoffHz*2**mod.cutoffOctaves)):null,
+    resonance:region.filter?Math.max(0,Math.min(1,region.filter.resonance+mod.resonance)):null};
+}
+
 function choose(plan, trigger, note, velocity, articulations, groups, state) {
   const candidates = [];
   const eligible = new Map();
@@ -403,23 +504,24 @@ function choose(plan, trigger, note, velocity, articulations, groups, state) {
   }
   return candidates
     .filter(({region}) => !region.variation || state.variations[region.variation.set].member === region.variation.member)
-    .map(({region, weight}) => ({
+    .map(({region, weight}) => {
+      const parameters=attackParameters(region,velocity,note,state);
+      return {
       regionId: region.id,
       sampleId: region.sample,
       groupId: region.group,
       output: region.output,
       trigger,
       weight,
-      gain: weight * velocityGain(velocity, region.velocityCurve) * 10 ** (region.gainDb / 20),
-      pan: region.pan,
-      cents: (note - region.root) * 100 + region.cents,
-    }));
+      gain: weight * velocityGain(velocity, region.velocityCurve) * parameters.amp * 10 ** (parameters.gainDb / 20),
+      pan: parameters.pan, cents: parameters.cents, parameters,
+    };});
 }
 
 export function explainNote(plan, event, previous = createSelectionState()) {
   object(event, 'event');
   const {type} = event;
-  check(['noteOn', 'noteOff', 'sustain', 'panic'].includes(type), 'event.type', 'Expected a supported note or pedal gesture.');
+  check(['noteOn', 'noteOff', 'sustain', 'panic','cc','channelPressure','polyPressure','bend'].includes(type), 'event.type', 'Expected a supported note or pedal gesture.');
   if (type === 'panic') return {state: createSelectionState(), voices: [], releases: [], consumed: true};
   const channel = integer(event.channel ?? 0, 0, 15, 'event.channel');
   const state = structuredClone(previous);
@@ -433,7 +535,26 @@ export function explainNote(plan, event, previous = createSelectionState()) {
     if (held.gate) releases.push({id: held.id, note: held.note, channel});
     requested.push(...choose(plan, 'release', held.note, held.velocity, held.articulations, held.groups, here));
   };
-  if (type === 'sustain') {
+  if(type==='cc' || type==='channelPressure' || type==='polyPressure' || type==='bend') {
+    const value=integer(event.value,type==='bend'?-8192:0,type==='bend'?8191:127,'event.value');
+    if(type==='cc') {
+      const cc=integer(event.controller,0,127,'event.controller');
+      (here.cc ??= {})[cc]=value;
+      if(cc===120||cc===123) {
+        for(const held of here.notes)releases.push({id:held.id,note:held.note,channel});
+        here.notes=[];here.sustain=false;here.cc[64]=0;
+        return {state,voices:[],releases,consumed:true};
+      }
+      for(const art of plan.instrument.articulations) {
+        if(art.select.cc===cc && value>=art.select.range[0] && value<=art.select.range[1]) {
+          Object.defineProperty(here.articulations,art.selectorGroup,{value:art.id,writable:true,enumerable:true,configurable:true});
+          consumed=true;
+        }
+      }
+      if(cc===64)return explainNote(plan,{type:'sustain',channel,value},state);
+    } else if(type==='polyPressure') (here.polyPressure ??= {})[integer(event.note,0,127,'event.note')]=value;
+    else here[type]=value;
+  } else if (type === 'sustain') {
     here.sustain = typeof event.value === 'boolean' ? event.value : integer(event.value, 0, 127, 'event.value') >= 64;
     if (!here.sustain) {
       here.notes = here.notes.filter(held => {

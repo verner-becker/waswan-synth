@@ -2,6 +2,7 @@
 import {validTape} from './mellotron-settings.js';
 import {validSamplerRef} from './sampler-instrument.js';
 import {validToneBytes} from './fm-patch.js';
+import {validPerformanceControl} from './daw-sampler-midi.js';
 // Musical data only. Track IDs never encode firmware part numbers or UI layout.
 export const RATE=44100,PPQ=960;
 export const LIMITS={tracks:32,assets:32,clips:512,notes:65536,json:16*1024*1024,totalFrames:RATE*1800,sourceFrames:RATE*1200};
@@ -55,7 +56,7 @@ export function validateProject(p){
       notes+=c.notes.length;
       for(const n of c.notes)assert(int(n.pitch,0,127)&&int(n.velocity,1,127)&&int(n.start,0,c.loopLength-1)&&int(n.duration,1,c.loopLength-n.start),'Invalid MIDI note');
       for(const n of c.notes)if(n.channel!==undefined)assert(int(n.channel,0,15),'Invalid MIDI note channel');
-      if(c.midiEvents!==undefined){assert(Array.isArray(c.midiEvents),'Invalid MIDI performance events');unique(c.midiEvents,'MIDI event');midiEvents+=c.midiEvents.length;for(const e of c.midiEvents)assert(int(e.tick,0,c.loopLength-1)&&int(e.channel,0,15)&&['bend','mod'].includes(e.type)&&int(e.value,e.type==='bend'?-8192:0,e.type==='bend'?8191:127),'Invalid MIDI performance event');}
+      if(c.midiEvents!==undefined){assert(Array.isArray(c.midiEvents),'Invalid MIDI performance events');unique(c.midiEvents,'MIDI event');midiEvents+=c.midiEvents.length;for(const e of c.midiEvents)assert(int(e.tick,0,c.loopLength-1)&&validPerformanceControl(e),'Invalid MIDI performance event');}
     }
   }
   assert(notes<=LIMITS.notes,'MIDI note budget exceeded');

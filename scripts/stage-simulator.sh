@@ -105,6 +105,21 @@ s = "import {updateMidiDiagnostic} from './midi-diagnostic.js';\nimport {updateM
 receive = 'function receive({data:m}){'
 assert s.count(receive) == 1
 s = "import {updateDspMonitor} from './dsp-monitor.js';\n" + s.replace(receive, receive+'sessionObserver.publish(m);updateFoundation(m);updateDspMonitor(m);')
+# Keep the original pad nodes and press/release handlers. The active kit supplies their labels.
+pad_frame = '\n}\n' + receive
+assert s.count(pad_frame) == 1
+s = s.replace(pad_frame, """
+ if(samplerPads&&!m.midiMode){
+  $('#bankLabel').textContent='SAMPLER KIT';$('#padHelp').textContent='Play the loaded sampler kit.';
+  for(let p=0;p<padEls.length;p++){
+   const note=samplerPads.get(p+1),el=padEls[p];el.disabled=note===undefined;el.textContent=String(p+1);
+   el.setAttribute('aria-label',note===undefined?`Sampler pad ${p+1} · unused`:`Sampler pad ${p+1} · MIDI note ${note}`);
+   el.removeAttribute('aria-pressed');el.classList.remove('kbd-play-active');
+  }
+ }
+}
+let samplerPads=null;
+""" + receive + "if(m.t==='sampler-pads'){midi.samplerInput=!!m.active;samplerPads=m.pads?new Map(m.pads):null;previousBank=-1;if(state)frame(state);return;}")
 assert s.count("node.onprocessorerror=()=>log(") == 1
 s = s.replace("node.onprocessorerror=()=>log(", "node.onprocessorerror=()=>{updateFoundation({t:'error',message:'Audio processor stopped'});updateDspMonitor({t:'error'});log(").replace("Reinicie o simulador.');gain=", "Reinicie o simulador.');};gain=")
 # Report the existing browser write, without a second persistence mechanism.

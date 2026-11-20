@@ -8,6 +8,7 @@ import {mountDspMonitor} from './dsp-monitor.js';
 import {mountPolyphonyPanel} from './polyphony-panel.js';
 import {observeStudioInput} from './studio-events.js';
 import {observeDawInput} from './daw-input-events.js';
+import {midiControl} from './daw-sampler-midi.js';
 
 export class MidiInputController extends OriginalMidiInputController {
   constructor(options) {
@@ -76,6 +77,10 @@ export class MidiInputController extends OriginalMidiInputController {
     if(entry)entry.disposition=consumed?(contextConsumed?'context-profile':learning?'learned-no-output':entry.commands.length?'mapped-command-sent':'mapped-no-command'):'original-path';
     const routed=!consumed&&!!this.dawRouter?.route(data,timeStamp);observeDawInput(data,timeStamp,{running,listening,consumed,routed,deviceId:this.input?.id,deviceName:this.input?.name});
     if(consumed||routed)return;
+    if(this.samplerInput){
+      const control=midiControl(data);
+      if(control)this.send({t:'sampler-keyboard-control',control});
+    }
     super.message(data);
   }
   release() {

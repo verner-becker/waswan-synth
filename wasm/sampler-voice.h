@@ -11,20 +11,26 @@
 #define SAM_PREVIEW (SAM_SOURCES+16u)
 #define SAM_KEYBOARD 17u
 
+#include "sampler-modulation.h"
+
 typedef struct {
     int16_t *pcm;
     uint32_t channels, first, end, loop_first, loop_end, root_inc, flags;
     uint32_t group, articulation, set, member;
     float tuning, left, right, key[128], velocity[128];
+    unsigned loop_mode, crossfade, choke, voice_limit, retrigger;
+    sam_program_t program;
 } sam_region_t;
 typedef struct {
     sam_region_t regions[SAM_REGIONS];
-    uint32_t count, initial;
+    uint32_t count, initial,cc_switch_count;
+    struct { unsigned cc,lo,hi,clear,select; } cc_switches[16];
     uint32_t set_size[SAM_SETS], seed[SAM_SETS], random[SAM_SETS], avoid[SAM_SETS];
     uint32_t keys[128], clear[128];
 } sam_bank_t;
 typedef struct {
     uint32_t articulation, pos[SAM_SETS], rng[SAM_SETS];
+    sam_controls_t controls;
 } sam_selection_t;
 typedef struct {
     uint32_t id, art, groups[4];
@@ -34,6 +40,8 @@ typedef struct {
     uint32_t seq, gesture, bank, region;
     uint64_t phase;
     float gain;
+    unsigned source;
+    sam_mod_voice_t modulation;
     uint8_t fading;
     sam_gesture_t *key;
 } sam_voice_t;
@@ -44,11 +52,12 @@ static sam_selection_t sam_states[NPART][SAM_SOURCES];
 static sam_gesture_t sam_keys[NPART][SAM_SOURCES][128];
 /* DAW clips carry stable gesture IDs; equal pitches on one or several channels
  * can release independently while all sequenced voices use the same DAW bus. */
-typedef struct {sam_gesture_t key; uint32_t id; uint8_t part,channel,note;} sam_seq_key_t;
+typedef struct {sam_gesture_t key; uint32_t id; uint8_t part,channel,note,released;} sam_seq_key_t;
 static sam_seq_key_t sam_seq_keys[NV];
 static sam_selection_t sam_seq_states[NPART][16],sam_preview_states[NPART];
 static sam_gesture_t sam_preview_keys[NPART][128];
 static unsigned sam_preview_part=NPART;
+static struct {sam_gesture_t key;unsigned note,released;} sam_pads[16];
 static sam_voice_t sam_voices[NV];
 static uint32_t sam_next_id;
 static uint32_t sam_source(void) { return seq_note_source>=3 ? seq_note_source-3u : SAM_KEYBOARD; }
@@ -65,7 +74,7 @@ SAM_EXPORT int waswan_sampler_bank(unsigned bank,unsigned count,unsigned initial
     if(!sam_banks[bank])return 0;
     sam_bank_t *b=sam_banks[bank];
     memset(b->keys,0,sizeof b->keys);memset(b->clear,0,sizeof b->clear);
-    b->count=count;b->initial=initial;return 1;
+    b->count=count;b->initial=initial;b->cc_switch_count=0;return 1;
 }
 SAM_EXPORT void waswan_sampler_switch(unsigned bank,unsigned key,unsigned clear,unsigned select) {
     if(bank<SAM_BANKS && sam_banks[bank] && key<128){sam_banks[bank]->keys[key]|=select;sam_banks[bank]->clear[key]|=clear;}
@@ -82,8 +91,43 @@ SAM_EXPORT uintptr_t waswan_sampler_region(unsigned bank,unsigned i,uintptr_t pc
     sam_region_t *r=&sam_banks[bank]->regions[i];
     r->pcm=(int16_t*)pcm;r->channels=channels;r->first=first;r->end=end;r->loop_first=loop_first;r->loop_end=loop_end;
     r->root_inc=pitch_inc(root*256);r->flags=flags;r->group=group;r->articulation=art;r->set=set;r->member=member;
-    r->tuning=tuning;r->left=left;r->right=right;
+    r->tuning=tuning;r->left=left;r->right=right;memset(&r->program,0,sizeof r->program);
     return (uintptr_t)r->key;
+}
+static sam_region_t *sam_region(unsigned bank,unsigned region) {
+    if(bank>=SAM_BANKS||!sam_banks[bank]||region>=sam_banks[bank]->count)return 0;
+    return &sam_banks[bank]->regions[region];
+}
+SAM_EXPORT int waswan_sampler_playback(unsigned bank,unsigned region,unsigned mode,unsigned fade,unsigned choke,
+                                       unsigned limit,unsigned retrigger,float gain,float pan) {
+    sam_region_t *r=sam_region(bank,region);
+    if(!r||mode>2||limit>NV||choke>SAM_REGIONS||fade>(r->loop_end-r->loop_first)/2||
+       (mode==2 && r->loop_end-r->loop_first<=1+fade))return 0;
+    r->loop_mode=mode;r->crossfade=fade;r->choke=choke;r->voice_limit=limit;r->retrigger=retrigger;
+    r->program.gain=gain;r->program.pan=pan;return 1;
+}
+SAM_EXPORT int waswan_sampler_filter(unsigned bank,unsigned region,unsigned type,float cutoff,float resonance) {
+    sam_region_t *r=sam_region(bank,region);if(!r||type<1||type>3)return 0;
+    r->program.enabled=1;r->program.filter=type;r->program.cutoff_q8=cutoff;r->program.resonance=resonance;return 1;
+}
+SAM_EXPORT int waswan_sampler_envelope(unsigned bank,unsigned region,unsigned index,float a,float d,float sustain,float release) {
+    sam_region_t *r=sam_region(bank,region);if(!r||index>2)return 0;
+    r->program.enabled=1;r->program.env[index]=(sam_env_t){a*44.1f,d*44.1f,sustain,release*44.1f,1};return 1;
+}
+SAM_EXPORT int waswan_sampler_lfo(unsigned bank,unsigned region,unsigned shape,float rate) {
+    sam_region_t *r=sam_region(bank,region);if(!r||shape<1||shape>2||rate<=0||rate>40)return 0;
+    r->program.enabled=1;r->program.lfo=shape;r->program.lfo_step=(uint32_t)(rate*(4294967296.*CTL/44100.));return 1;
+}
+SAM_EXPORT int waswan_sampler_modulation(unsigned bank,unsigned region,unsigned source,unsigned dest,unsigned bipolar,float depth) {
+    sam_region_t *r=sam_region(bank,region);
+    if(!r||r->program.routes>=16||source>=144||(source>8&&source<16)||dest>=5||bipolar>1)return 0;
+    r->program.enabled=1;r->program.route[r->program.routes++]=(sam_mod_route_t){source,dest,bipolar,depth};return 1;
+}
+SAM_EXPORT int waswan_sampler_cc_switch(unsigned bank,unsigned cc,unsigned lo,unsigned hi,unsigned clear,unsigned select) {
+    if(bank>=SAM_BANKS||!sam_banks[bank]||cc>127||lo>hi||hi>127)return 0;
+    sam_bank_t *b=sam_banks[bank];if(b->cc_switch_count>=16)return 0;
+    unsigned i=b->cc_switch_count++;b->cc_switches[i].cc=cc;b->cc_switches[i].lo=lo;b->cc_switches[i].hi=hi;
+    b->cc_switches[i].clear=clear;b->cc_switches[i].select=select;return 1;
 }
 static sam_selection_t *sam_state(unsigned part,unsigned source) {
     if(source==SAM_PREVIEW)return &sam_preview_states[part];
@@ -124,6 +168,7 @@ SAM_EXPORT unsigned waswan_sampler_bank_used(unsigned bank) {
     for(unsigned r=0;r<=NPART;r++)if(sam_routes[r]==bank+1)return 1;
     for(unsigned i=0;i<NV;i++)if(sam_voice_active(i)&&sam_voices[i].bank==bank+1)return 1;
     for(unsigned i=0;i<NV;i++)if(sam_seq_keys[i].key.bank==bank+1)return 1;
+    for(unsigned i=0;i<16;i++)if(sam_pads[i].key.bank==bank+1)return 1;
     if(sam_preview_part<NPART)for(unsigned n=0;n<128;n++)if(sam_preview_keys[sam_preview_part][n].bank==bank+1)return 1;
     for(unsigned p=0;p<NPART;p++)for(unsigned s=0;s<SAM_SOURCES;s++)for(unsigned n=0;n<128;n++)
         if(sam_keys[p][s][n].bank==bank+1)return 1;
@@ -142,6 +187,24 @@ static unsigned sam_choose(sam_bank_t *b,sam_selection_t *s,unsigned set,unsigne
         if(mask>>picked&1u){s->pos[set]=(picked+1)%count;return 1u<<picked;}}
     return 0;
 }
+static void sam_stolen(voice_t *v);
+/* Sequenced and monitored hits share the track. Keyboard and preview have isolated owners. */
+static unsigned sam_domain(unsigned source) {return source==SAM_KEYBOARD?1:source==SAM_PREVIEW?2:0;}
+static void sam_enforce_group(unsigned part,unsigned source,unsigned bank,const sam_region_t *r,unsigned gesture,unsigned note) {
+    if(!r->choke&&!r->voice_limit&&!r->retrigger)return;
+    unsigned oldest=NV,count=0;
+    for(unsigned i=0;i<NV;i++){
+        sam_voice_t *h=&sam_voices[i];
+        if(!sam_voice_active(i)||h->bank!=bank||vc[i].part!=part||sam_domain(h->source)!=sam_domain(source))continue;
+        sam_region_t *other=&sam_banks[bank-1]->regions[h->region];
+        if(h->gesture!=gesture && ((r->choke && other->choke==r->choke)||
+           (r->retrigger && other->group==r->group && vc[i].note==note))){
+            sam_stolen(&vc[i]);continue;
+        }
+        if(other->group==r->group){count++;if(oldest==NV||vc[i].seq<vc[oldest].seq)oldest=i;}
+    }
+    if(r->voice_limit&&count>=r->voice_limit&&oldest<NV)sam_stolen(&vc[oldest]);
+}
 static void sam_select(unsigned part,unsigned note,unsigned source,sam_gesture_t *key,int release,int silent) {
     unsigned selected_bank=key->bank;sam_bank_t *b=sam_banks[selected_bank-1];
     sam_selection_t *s=sam_state(part,source);
@@ -159,11 +222,12 @@ static void sam_select(unsigned part,unsigned note,unsigned source,sam_gesture_t
         if(r->set && !(masks[r->set-1]>>r->member&1u))continue;
         key->groups[r->group>>5]|=1u<<(r->group&31);
         if(silent)continue;
+        sam_enforce_group(part,source,selected_bank,r,key->id,note);
         unsigned index=voice_alloc(part);voice_t *v=&vc[index];
         if(v->gate||v->ae.stage!=E_IDLE)super_retire(index);
-        voice_start(v,part,note,key->velocity,0,0);v->grp=0;
+        voice_start(v,part,note,key->velocity,0,0);v->grp=0;key->bank=selected_bank;
         sam_voices[index]=(sam_voice_t){.seq=v->seq,.gesture=key->id,.bank=selected_bank,.region=id,
-            .phase=(uint64_t)r->first<<20,.gain=r->key[note]*r->velocity[key->velocity],.key=key};
+            .phase=0,.source=source,.gain=r->key[note]*r->velocity[key->velocity],.key=key};
     }
 }
 static int sam_attack_key(unsigned part,unsigned note,unsigned velocity,unsigned source,int silent,sam_gesture_t *key) {
@@ -206,7 +270,10 @@ static int sam_sequence_note(unsigned part,unsigned note,unsigned velocity,unsig
         if(k->part==part&&k->channel==channel&&k->id==id){found=k;break;}
     }
     if(!velocity){
-        if(found && found->note==note)sam_release_key(part,note,SAM_SOURCES+channel,silent,&found->key);
+        if(found && found->note==note && !found->released) {
+            if(sam_state(part,SAM_SOURCES+channel)->controls.cc[64]>=64)found->released=1;
+            else sam_release_key(part,note,SAM_SOURCES+channel,silent,&found->key);
+        }
         return 1;
     }
     if(!found)found=free_key;
@@ -216,8 +283,68 @@ static int sam_sequence_note(unsigned part,unsigned note,unsigned velocity,unsig
         found=sam_seq_keys;
         for(unsigned i=1;i<NV;i++)if(sam_seq_keys[i].key.id<found->key.id)found=&sam_seq_keys[i];
     }
-    found->part=part;found->note=note;found->channel=channel;found->id=id;
+    found->part=part;found->note=note;found->channel=channel;found->id=id;found->released=0;
     return sam_attack_key(part,note,velocity,SAM_SOURCES+channel,silent,&found->key);
+}
+SAM_EXPORT unsigned waswan_sampler_live_pad(unsigned index,unsigned note,unsigned velocity) {
+    if(index<1||index>16||note>127||velocity>127)return 0;
+    unsigned i=index-1,previous=seq_note_source;seq_note_source=21u;
+    if(velocity){
+        if(!sam_routes[NPART]){seq_note_source=previous;return 0;}
+        sam_pads[i].note=note;sam_pads[i].released=0;
+        sam_attack_key(0,note,velocity,SAM_KEYBOARD,0,&sam_pads[i].key);
+    } else if(sam_pads[i].key.bank && sam_pads[i].note==note){
+        if(sam_state(0,SAM_KEYBOARD)->controls.cc[64]>=64)sam_pads[i].released=1;
+        else sam_release_key(0,note,SAM_KEYBOARD,0,&sam_pads[i].key);
+    }
+    seq_note_source=previous;return 1;
+}
+SAM_EXPORT unsigned waswan_sampler_control(unsigned part,unsigned channel,unsigned input_origin,unsigned kind,
+                                          unsigned number,int value,unsigned silent) {
+    if(part>=NPART||channel>15||input_origin>2||kind>3||number>127||
+       (kind==3?(value< -8192||value>8191):(value<0||value>127)))return 0;
+    unsigned source=input_origin==2?SAM_KEYBOARD:input_origin?1+channel:SAM_SOURCES+channel,route=sam_route(part,source);
+    if(route>NPART||!sam_routes[route]){
+        if(input_origin==2 && kind==0 && number==64 && value<64) {
+            sam_state(0,SAM_KEYBOARD)->controls.cc[64]=0;
+            for(unsigned i=0;i<16;i++)if(sam_pads[i].released)waswan_sampler_live_pad(i+1,sam_pads[i].note,0);
+        }
+        return 0;
+    }
+    sam_selection_t *s=sam_state(part,source);
+    if(kind==1)s->controls.channel_pressure=value;
+    else if(kind==2)s->controls.pressure[number]=value;
+    else if(kind==3){s->controls.bend=value;s->controls.has_bend=1;}
+    else {
+        if(number==120||number==123){
+            if(!silent)for(unsigned i=0;i<NV;i++)if(sam_voice_active(i)&&vc[i].part==part&&sam_voices[i].source==source){
+                if(number==120)sam_stolen(&vc[i]);
+                else {vc[i].gate=0;sam_voices[i].fading=1;}
+            }
+            if(input_origin==2)memset(sam_pads,0,sizeof sam_pads);
+            if(input_origin)memset(sam_keys[part][source],0,sizeof sam_keys[part][source]);
+            else for(unsigned i=0;i<NV;i++)if(sam_seq_keys[i].part==part&&sam_seq_keys[i].channel==channel)sam_seq_keys[i].key.bank=0;
+            s->controls.cc[64]=0;
+            return 1;
+        }
+        unsigned prev=s->controls.cc[number];s->controls.cc[number]=value;
+        sam_bank_t *b=sam_banks[sam_routes[route]-1];
+        for(unsigned i=0;i<b->cc_switch_count;i++)
+            if(b->cc_switches[i].cc==number && value>=(int)b->cc_switches[i].lo && value<=(int)b->cc_switches[i].hi)
+                s->articulation=(s->articulation&~b->cc_switches[i].clear)|b->cc_switches[i].select;
+        if(input_origin==2 && number==64 && prev>=64 && value<64)
+            for(unsigned i=0;i<16;i++)if(sam_pads[i].released)waswan_sampler_live_pad(i+1,sam_pads[i].note,0);
+        if(!input_origin&&number==64&&prev>=64&&value<64) {
+            unsigned previous=seq_note_source;seq_note_source=3;
+            for(unsigned i=0;i<NV;i++){
+                sam_seq_key_t *k=&sam_seq_keys[i];
+                if(k->key.bank&&k->part==part&&k->channel==channel&&k->released)
+                    sam_release_key(part,k->note,source,silent,&k->key);
+            }
+            seq_note_source=previous;
+        }
+    }
+    return 1;
 }
 SAM_EXPORT void waswan_sampler_chase_id(unsigned part,unsigned note,unsigned velocity,unsigned channel,unsigned id) {
     sam_sequence_note(part,note,velocity,channel,id,1);
@@ -227,6 +354,7 @@ SAM_EXPORT void waswan_sampler_chase(unsigned part,unsigned note,unsigned veloci
 }
 static void sam_forget(unsigned part,unsigned source) {
     memset(sam_keys[part][source],0,sizeof sam_keys[part][source]);
+    if(source!=0)memset(&sam_state(part,source)->controls,0,sizeof(sam_controls_t));
     if(!source)for(unsigned i=0;i<NV;i++)if(sam_seq_keys[i].part==part)sam_seq_keys[i].key.bank=0;
     for(unsigned i=0;i<NV;i++)if(sam_voice_active(i)&&vc[i].part==part&&
        (source==SAM_KEYBOARD?vc[i].seq_owned<3:vc[i].seq_owned==source+3))sam_voices[i].fading=1;
@@ -235,35 +363,16 @@ static void sam_panic(void) {
     memset(sam_keys,0,sizeof sam_keys);
     memset(sam_seq_keys,0,sizeof sam_seq_keys);
     memset(sam_preview_keys,0,sizeof sam_preview_keys);
+    memset(sam_pads,0,sizeof sam_pads);
+    for(unsigned p=0;p<NPART;p++){
+        for(unsigned s=0;s<SAM_KEYBOARD;s++)sam_reset_state(p,s,sam_routes[p]);
+        for(unsigned ch=0;ch<16;ch++)sam_reset_state(p,SAM_SOURCES+ch,sam_routes[p]);
+    }
+    sam_reset_state(0,SAM_KEYBOARD,sam_routes[NPART]);
     for(unsigned i=0;i<NV;i++)sam_voices[i].fading=1;
 }
-static void sam_render(voice_t *v,int32_t *out) {
-    unsigned i=v-vc;sam_voice_t *h=&sam_voices[i];sam_region_t *r=&sam_banks[h->bank-1]->regions[h->region];
-    int bend=daw_is_live(v->seq_owned)?daw_live_bend8[v->seq_owned-4][v->part]:v->seq_owned==3?daw_bend8[v->part]:pt[v->part].bend8;
-    uint64_t step=(uint64_t)((double)pitch_inc(clampi((int)v->note*256+bend,0,127*256))/r->root_inc*r->tuning*1048576.);
-    if(!step)step=1; /* Even extreme negative tuning must eventually reach EOF. */
-    uint64_t end=(uint64_t)r->end<<20,loop_end=(uint64_t)r->loop_end<<20,loop_length=(uint64_t)(r->loop_end-r->loop_first)<<20;
-    for(unsigned j=0;j<CTL;j++){
-        if(loop_length && h->phase>=loop_end)h->phase=(loop_end-loop_length)+(h->phase-loop_end)%loop_length;
-        if(h->phase>=end || h->fading>64){v->gate=0;v->ae.stage=E_IDLE;h->bank=0;v->guard_l=v->guard_r=0;return;}
-        if(!v->gate && !(r->flags&2) && !h->fading)h->fading=1;
-        unsigned frame=h->phase>>20,next=frame+1;
-        if(loop_length && next==r->loop_end)next=r->loop_first;
-        float frac=(float)(h->phase&0xfffff)/1048576.f;
-        float gain=h->gain*4.f;
-        if(h->fading)gain*=(65-h->fading++)/64.f;
-        if(v->guard_in){gain*=(STEAL_FADE-v->guard_in)/(float)STEAL_FADE;v->guard_in--;}
-        int32_t y[2];
-        for(unsigned c=0;c<r->channels;c++){
-            int a=r->pcm[frame*r->channels+c],b=next<r->end?r->pcm[next*r->channels+c]:0;
-            float sample=(a+(b-a)*frac)*gain*(c?r->right:r->left);
-            y[c]=(int32_t)__builtin_fminf(131071.f,__builtin_fmaxf(-131072.f,sample));
-        }
-        if(r->channels==1){int a=r->pcm[frame],b=next<r->end?r->pcm[next]:0;float sample=(a+(b-a)*frac)*gain*r->right;y[1]=(int32_t)__builtin_fminf(131071.f,__builtin_fmaxf(-131072.f,sample));}
-        out[j*2]+=y[0];out[j*2+1]+=y[1];v->guard_l=y[0];v->guard_r=y[1];h->phase+=step;
-    }
-    v->ae.stage=v->gate?E_SUS:E_REL;
-}
+#include "sampler-reader.h"
+
 /* A stolen attack can no longer produce a release sample for a later Note Off.
  * Layer siblings still sounding for the same gesture retain that entitlement. */
 static void sam_stolen(voice_t *v) {

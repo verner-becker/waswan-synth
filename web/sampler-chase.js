@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import {heldKey} from './daw-transport.js';
+import {heldKey,updateHeldNotes} from './daw-transport.js';
+import {applySamplerControl} from './daw-sampler-midi.js';
 // Capture selection state as bounded schedule chunks arrive. A seek restarts
 // held samples at their attack, with their original variation and articulation.
 export class SamplerChase {
   constructor(runtime, schedule) {
     this.runtime = runtime;
     this.held = new Map();
+    this.pedals = new Set();
     this.checkpoints = new Map();
     this.positions = [schedule.fromFrame ?? 0];
     if (schedule.loop && schedule.loopStart !== schedule.fromFrame) this.positions.push(schedule.loopStart ?? 0);
@@ -20,10 +22,15 @@ export class SamplerChase {
       while (this.positions.length && (event.frame > this.positions[0] ||
           (event.frame === this.positions[0] && (event.type || event.velocity)))) this.checkpoint();
       if (!this.positions.length) break;
-      if (event.type || !this.runtime.routes.has(event.part)) continue;
-      const key = heldKey(event);
-      if (event.velocity) this.held.set(key, this.runtime.sequenceState(event.part,event.channel??0));
-      else this.held.delete(key);
+      if (!this.runtime.routes.has(event.part)) continue;
+      if (event.type) {
+        if (event.channel === undefined) continue;
+        if (!applySamplerControl(this.runtime.x,event.part,0,event,1)) throw Error('Sampler expression unavailable');
+        updateHeldNotes(this.held,this.pedals,event);
+        continue;
+      }
+      const state = event.velocity ? this.runtime.sequenceState(event.part,event.channel??0) : undefined;
+      updateHeldNotes(this.held,this.pedals,event,state);
       this.runtime.chase(event.part, event.note, event.velocity, event.channel, event.noteId);
     }
   }
@@ -31,6 +38,7 @@ export class SamplerChase {
     while (this.positions.length) this.checkpoint();
     this.runtime.resetSequence();
     this.held.clear();
+    this.pedals.clear();
   }
   enter(position) {
     this.current = this.checkpoints.get(position);
@@ -39,7 +47,7 @@ export class SamplerChase {
   }
   beforeHeld(note) {
     const prior = this.current.held.get(heldKey(note));
-    if (prior) this.runtime.restoreSequenceState(prior);
+    if (prior) this.runtime.restoreSequenceState(prior.samplerState);
   }
   afterHeld() { this.runtime.restoreSequenceState(this.current.state); }
 }

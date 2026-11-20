@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import {compile, fade, velocityGain, samplerLimits, validSamplerId, SamplerError} from './sampler-instrument.js';
+import {compile, fade, velocityGain, samplerLimits, validSamplerId, SamplerError, modulationSources, modulationDestinations} from './sampler-instrument.js';
 
 const pageBytes = 65536;
 const maxBanks = 16;
@@ -56,17 +56,17 @@ export function packSampler(model) {
   const arts = instrument.articulations, variations = instrument.variations;
   const artBit = id => id === undefined ? 0 : 1 << arts.findIndex(art => art.id === id);
   const initial = Object.values(instrument.initialArticulations).reduce((mask, id) => mask | artBit(id), 0);
-  const switches = arts.map(art => [art.select.keyswitch,
-    arts.reduce((mask, a) => a.selectorGroup === art.selectorGroup ? mask | artBit(a.id) : mask, 0), artBit(art.id)]);
-  const resolved = new Map();
-  for (const lists of Object.values(plan.notes)) {
-    for (const regions of lists) for (const region of regions) resolved.set(region.id, region);
-  }
-  const regions = instrument.regions.map(raw => {
-    const r = resolved.get(raw.id);
+  const artClear = art => arts.reduce((mask, a) => a.selectorGroup === art.selectorGroup ? mask | artBit(a.id) : mask, 0);
+  const switches = arts.filter(art=>art.select.keyswitch!==undefined).map(art=>[art.select.keyswitch,artClear(art),artBit(art.id)]);
+  const ccSwitches = arts.filter(art=>art.select.cc!==undefined).map(art=>[art.select.cc,...art.select.range,artClear(art),artBit(art.id)]);
+  const chokes=[...new Set(instrument.groups.map(g=>g.choke).filter(Boolean))];
+  const groups=new Map(instrument.groups.map(g=>[g.id,g]));
+  const regions = plan.resolvedRegions.map(r => {
+    const group=groups.get(r.group);
     const set = variations.findIndex(v => v.id === r.variation?.set);
     const gain = 10 ** (r.gainDb / 20), weights = new Float32Array(256);
     for (let midi = r.key[0]; midi <= r.key[1]; midi++) {
+      if (!plan.notes[r.trigger][midi].includes(r)) continue;
       weights[midi] = fade(midi, r.keyFadeIn, true, r.keyFadeLaw) * fade(midi, r.keyFadeOut, false, r.keyFadeLaw);
     }
     for (let midi = r.velocity[0]; midi <= r.velocity[1]; midi++) {
@@ -74,13 +74,21 @@ export function packSampler(model) {
         fade(midi, r.fadeOut, false, r.fadeLaw);
     }
     return {id:r.id, sample:r.sample, first:r.frames[0], end:r.frames[1], root:r.root,
-      loopFirst:r.loop?.start ?? 0, loopEnd:r.loop?.end ?? 0,
-      flags:Number(r.trigger === 'release') | (r.mode === 'oneShot' || r.trigger === 'release' ? 2 : 0),
+      loopFirst:r.loop?.start ?? 0, loopEnd:r.loop?.end ?? 0, crossfade:r.loop?.crossfade ?? 0,
+      loopMode:['forward','reverse','pingPong'].indexOf(r.loop?.mode ?? 'forward'),
+      choke:chokes.indexOf(group.choke)+1, voiceLimit:group.voiceLimit ?? 0, retrigger:group.retrigger==='cut',
+      filter:r.filter ? [['lowpass','highpass','bandpass'].indexOf(r.filter.type)+1,
+        (69+12*Math.log2(r.filter.cutoffHz/440))*256,r.filter.resonance] : null,
+      envelopes:[r.envelope,r.filterEnvelope,r.auxEnvelope].map(e=>e&&[e.attackMs,e.decayMs,e.sustain,e.releaseMs]),
+      lfo:r.lfo && [r.lfo.shape==='triangle'?2:1,r.lfo.rateHz], pan:r.pan, gain,
+      routes:r.modulation.map(route=>[typeof route.source==='object'?16+route.source.cc:modulationSources.indexOf(route.source),
+        modulationDestinations.indexOf(route.destination),route.polarity==='bipolar',route.depth]),
+      flags:Number(r.trigger === 'release') | (r.mode === 'oneShot' || r.trigger === 'release' ? 2 : 0) | (r.reverse ? 4 : 0) | (r.fixedPitch ? 8 : 0),
       group:groupIds.indexOf(r.group), art:artBit(r.articulation), set:set + 1,
       member:set < 0 ? 0 : variations[set].order.indexOf(r.variation.member),
       tuning:2 ** (r.cents / 1200), left:gain * Math.min(1, 1 - r.pan), right:gain * Math.min(1, 1 + r.pan), weights};
   });
-  return {id:instrument.id, revision:instrument.revision, dependencies:plan.dependencies, initial, switches, regions,
+  return {id:instrument.id, revision:instrument.revision, dependencies:plan.dependencies, initial, switches, ccSwitches, regions, pads:(instrument.pads ?? []).map(pad=>[pad.index,pad.note]),
     variations:variations.map(v => [v.order.length, v.seed, v.mode === 'random', v.avoidRepeat])};
 }
 
@@ -136,7 +144,7 @@ export class SamplerRuntime {
     const occupied = new Set([...this.banks.values()].map(bank => bank.index));
     let index = 0;
     while (occupied.has(index)) index++;
-    const pending = {token:m.request, key, index, hashes:new Set(), missing:new Map()};
+    const pending = {token:m.request, key, index, pads:new Map(packed.pads), hashes:new Set(), missing:new Map()};
     this.pending = pending;
     try {
       for (const sample of packed.dependencies) {
@@ -170,6 +178,7 @@ export class SamplerRuntime {
     const x = this.x;
     if (!x.waswan_sampler_bank(index, packed.regions.length, packed.initial)) throw budget('Insufficient instrument table memory.');
     for (const sw of packed.switches) x.waswan_sampler_switch(index, ...sw);
+    for (const sw of packed.ccSwitches ?? []) x.waswan_sampler_cc_switch(index,...sw);
     packed.variations.forEach((v, i) => x.waswan_sampler_variation(index, i, ...v));
     const samples = new Map(packed.dependencies.map(sample => [sample.id, sample]));
     for (const [i, r] of packed.regions.entries()) {
@@ -181,6 +190,11 @@ export class SamplerRuntime {
         r.loopFirst, r.loopEnd, r.root, r.flags, r.group, r.art, r.set, r.member, r.tuning, r.left, r.right);
       if (!ptr) throw Error('Invalid sampler region '+r.id);
       new Float32Array(x.memory.buffer, ptr, 256).set(r.weights);
+      if (!x.waswan_sampler_playback(index,i,r.loopMode,r.crossfade,r.choke,r.voiceLimit,r.retrigger,r.gain,r.pan)) throw Error('Invalid sampler playback settings');
+      if (r.filter && !x.waswan_sampler_filter(index,i,...r.filter)) throw Error('Invalid sampler filter');
+      if (r.lfo && !x.waswan_sampler_lfo(index,i,...r.lfo)) throw Error('Invalid sampler LFO');
+      r.envelopes.forEach((env,k)=>{if(env && !x.waswan_sampler_envelope(index,i,k,...env))throw Error('Invalid sampler envelope');});
+      for (const route of r.routes) if(!x.waswan_sampler_modulation(index,i,...route))throw Error('Invalid sampler modulation');
     }
   }
   command(m) {
@@ -210,7 +224,7 @@ export class SamplerRuntime {
     if (m.t !== 'daw-sampler-commit') throw Error('Unknown sampler command');
     if (!p.resident) {
       for (const {entry, written} of p.missing.values()) if (2 * written !== entry.bytes) throw Error('Incomplete sampler upload');
-      this.banks.set(p.key, {index:p.index, hashes:p.hashes});
+      this.banks.set(p.key, {index:p.index, hashes:p.hashes, pads:p.pads});
     }
     this.pending = null;
     return true;

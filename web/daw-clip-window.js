@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {controlKey} from './daw-sampler-midi.js';
 // Source notes remain intact. This bounded view is shared by playback and editing.
 export function midiWindow(clip,limit=131072){
   const offset=clip.offsetTicks||0,end=offset+clip.length,period=clip.loopLength,first=clip.loop?Math.floor(offset/period):0,last=clip.loop?Math.ceil(end/period):1,notes=[],events=[],prior=new Map();let budget=0;
   if(!clip.loop&&offset>=period)return {notes,events};
-  for(const [order,e] of (clip.midiEvents||[]).entries()){let tick=(clip.loop?first*period:0)+e.tick;if(tick>=offset&&clip.loop&&first>0)tick-=period;if(tick<offset){const key=e.channel+':'+e.type,old=prior.get(key);if(!old||tick>=old.at)prior.set(key,{...e,at:tick,order,tick:0});}}
+  for(const [order,e] of (clip.midiEvents||[]).entries()){let tick=(clip.loop?first*period:0)+e.tick;if(tick>=offset&&clip.loop&&first>0)tick-=period;if(tick<offset){const key=controlKey(e),old=prior.get(key);if(!old||tick>=old.at)prior.set(key,{...e,at:tick,order,tick:0});}}
   for(const e of [...prior.values()].sort((a,b)=>a.at-b.at||a.order-b.order)){if(++budget>limit)throw Error('MIDI window event budget exceeded');const {at,order,...value}=e;events.push(value);}
   if(!clip.notes.length&&!clip.midiEvents?.length)return {notes,events};
   for(let cycle=first;cycle<last;cycle++){

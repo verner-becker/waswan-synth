@@ -179,3 +179,5 @@ No Chrome com uma biblioteca de teste em OPFS, a importação do cartucho Aquano
 O teste de seleção reproduziu a volta de **Blow** para **SBass** quando o seletor tratava a carga do primeiro arquivo como uma edição pendente. O cabeçalho e o editor agora comparam o timbre da parte com o estado confirmado pelo motor após a carga. Ao cancelar o descarte de uma edição real, a parte conserva os ajustes e o seletor identifica o timbre editado. No Chrome, o teste conferiu a seleção visível, os parâmetros dos seis operadores, a saída de áudio e o retorno ao programa interno. Evidências em `.local/validation/dx7/`.
 
 O [fechamento da Onda 2 do sampler](sampler-studio-wave-2.md) registra as operações offline, a prova de edição não destrutiva em disco e o teste em Worker real.
+
+A [Onda 3 do sampler](sampler-studio-wave-3.md) acrescenta kits de 16 pads, choke por pista, filtros e envelopes no leitor WASM, MIDI expressivo e planejamento de tomadas de teclado externo.

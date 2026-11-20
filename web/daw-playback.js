@@ -2,6 +2,7 @@
 import {RATE,PPQ,clipSeconds,clipDuration,validateProject} from './daw-project.js';
 import {midiWindow} from './daw-clip-window.js';
 import {prepareSchedule,timelineFrame,eventPriority,heldKey} from './daw-transport.js';
+import {legacyExpression} from './daw-sampler-midi.js';
 // Shared only inside one AudioWorkletGlobalScope. The main-thread import has its
 // own copy and cannot change the audio gate through UI state.
 export const audioTransport={playing:false,startFrame:0};
@@ -41,7 +42,13 @@ export function compileProject(project,slots=assignSlots(project),{endFrame}={})
       if(track.instrument.type==='sampler'){note.noteId=++noteId;note.channel=n.channel??0;}
       events.push({...note,frame:on,velocity:n.velocity},{...note,frame:Math.max(on+1,off),velocity:0});
     }
-    for(const e of view.events)events.push({frame:Math.round((start+e.tick*60/(project.bpm*PPQ))*RATE),part,type:e.type,value:e.value});
+    for(const e of view.events){
+      const frame=Math.round((start+e.tick*60/(project.bpm*PPQ))*RATE);
+      if(track.instrument.type==='sampler'){
+        const {tick,id,...control}=e;
+        events.push({frame,part,...control});
+      }else if(legacyExpression(e.type))events.push({frame,part,type:e.type,value:e.value});
+    }
   }
   const length=endFrame??Math.ceil(duration*RATE);if(length<1||length>RATE*1200)throw Error('Playback supports at most 20 minutes');
   events.sort((a,b)=>a.frame-b.frame||eventPriority(a)-eventPriority(b));
@@ -50,7 +57,7 @@ export function compileProject(project,slots=assignSlots(project),{endFrame}={})
 }
 // Runs in AudioWorklet. No UI timer schedules notes. Frame notifications are UI only.
 export class DawClock {
-  constructor(note,stop,notify=()=>{},capacity=8,expression=()=>true){Object.assign(this,{note,stopNotes:stop,notify,capacity,expression});this.active=false;this.held=new Map();this.bend=new Int16Array(capacity);this.mod=new Uint8Array(capacity);}
+  constructor(note,stop,notify=()=>{},capacity=8,expression=()=>true,samplerControl=()=>true){Object.assign(this,{note,stopNotes:stop,notify,capacity,expression,samplerControl});this.active=false;this.held=new Map();this.bend=new Int16Array(capacity);this.mod=new Uint8Array(capacity);}
   start(data,frame){this.startPrepared(prepareSchedule(data,this.capacity),frame);}
   startPrepared(data,frame){
     if(!Number.isSafeInteger(frame)||frame<0)throw Error('Invalid DAW start frame');
@@ -61,7 +68,12 @@ export class DawClock {
     while(this.index<this.events.length&&(inclusive?this.events[this.index].frame<=until:this.events[this.index].frame<until)){
       if(++count>512){this.stop('clock-event-budget');return count;}
       const e=this.events[this.index++],key=heldKey(e);
-      if(e.type){this[e.type][e.part]=e.value;if(!this.expression(e.part,this.bend[e.part],this.mod[e.part])){this.stop('instrument-unavailable');return count;}}
+      if(e.type){
+        let applied;
+        if(e.channel!==undefined)applied=this.samplerControl(e);
+        else{this[e.type][e.part]=e.value;applied=this.expression(e.part,this.bend[e.part],this.mod[e.part]);}
+        if(!applied){this.stop('instrument-unavailable');return count;}
+      }
       else if(e.velocity){this.held.set(key,(this.held.get(key)||0)+1);if(!this.playNote(e)){this.stop('instrument-unavailable');return count;}}
       else if(this.held.has(key)){const n=this.held.get(key)-1;if(n>0)this.held.set(key,n);else{this.held.delete(key);this.playNote(e);}}
     }
@@ -84,7 +96,21 @@ export class DawClock {
     }
     const relative=timelineFrame({playing:true,startFrame:this.startFrame,fromFrame:this.fromFrame,length:this.length,loop:this.loop,loopStart:this.loopStart,loopEnd:this.loopEnd},frame);this.position=relative;
     if(this.pendingExpression){for(const e of this.pendingExpression){if(++dispatched>512){this.stop('clock-event-budget');return;}this.bend[e.part]=e.bend;this.mod[e.part]=e.mod;if(!this.expression(e.part,e.bend,e.mod)){this.stop('instrument-unavailable');return;}}this.pendingExpression=null;}
-    if(this.pendingChase){for(const n of this.pendingChase){if(++dispatched>512){this.stop('clock-event-budget');return;}this.held.set(heldKey(n),n.count);this.samplerChase?.beforeHeld(n);if(!this.playNote(n)){this.stop('instrument-unavailable');return;}}this.pendingChase=null;this.samplerChase?.afterHeld();}
+    if(this.pendingChase){
+      for(const n of this.pendingChase){
+        if(++dispatched>512){this.stop('clock-event-budget');return;}
+        if(!n.released)this.held.set(heldKey(n),n.count);
+        this.samplerChase?.beforeHeld(n);
+        if(!this.playNote(n)){this.stop('instrument-unavailable');return;}
+      }
+      this.samplerChase?.afterHeld();
+      for(const n of this.pendingChase){
+        if(!n.released)continue;
+        if(++dispatched>512){this.stop('clock-event-budget');return;}
+        if(!this.playNote({...n,velocity:0})){this.stop('instrument-unavailable');return;}
+      }
+      this.pendingChase=null;
+    }
     this.dispatch(relative,true,dispatched);if(!this.active)return;
     if(frame-this.lastNotify>=1764){this.lastNotify=frame;this.notify({playing:true,frame:relative,cycle:this.cycle,startFrame:this.startFrame});}
   }
