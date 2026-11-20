@@ -230,6 +230,17 @@ O editor usa frames exatos para cursor, limites, loops e slices. Tem controles i
 
 Library & Metadata verifica identidade, metadados e dependências de uma revisão, inclusive se ela não tocar. No Chrome, o relink conjunto de dois WAVs criou r2 e a publicação de metadados criou r3. Uma coleta foi reaberta como biblioteca portátil. O SFZ exportado foi reimportado com pré-validação no host e duas fitas MIDI 60/61 foram exportadas e reabertas. Permissão negada ou cancelamento no picker da janela destacada preservaram a sessão. Em diretórios POSIX reais houve rejeição de hash incorreto, revisão concorrente e falha de preflight sem substituição do oficial. O Chrome usou uma pasta OPFS como destino de teste.
 
-Na navegação entre as duas janelas e os players compactos, uma nota de 275 Hz acionada por MIDI de teste continuou soando. O host, o AudioContext e o painel mantiveram a identidade, com zero comandos de interrupção. Evidência local em `.local/validation/sampler-ux-5/`, incluindo linked-player.json, wave-handoff.log, interchange-browser.json, as duas capturas dos players e window-waveform.png. O Chrome enumerou fisicamente SMK-37 Pro-Master e SMK-37 Pro-Private. A escuta do proprietário, a resposta de dinâmica e a ergonomia no controlador permanecem pendentes. O ensaio manual está no guia.
+Na navegação entre as duas janelas e os players compactos, uma nota de 275 Hz acionada por MIDI de teste continuou soando. O host, o AudioContext e o painel mantiveram a identidade, com zero comandos de interrupção. Evidência local em `.local/validation/sampler-ux-5/`, incluindo linked-player.json, wave-handoff.log, interchange-browser.json, as duas capturas dos players e window-waveform.png. O Chrome enumerou fisicamente SMK-37 Pro-Master e SMK-37 Pro-Private. O guia inclui o ensaio manual. A passagem pelo controlador físico está registrada abaixo.
 
 Também passaram A/B tocável de mapas completos (uma tecla forte em checkpoint e Official mediu 330 Hz, na Working mediu 550 Hz), sugestão de loop em tom e silêncio, retorno do render aninhado até a gravação de sete minutos e extração de um segundo recorte de 88.200 frames. O cálculo da sugestão de loop leu no máximo 768 bytes por bloco no caso ensaiado. O Chrome repetiu os percursos UX-1 a UX-4, Foundation v1/v2, diagnóstico MIDI, pickup, monitor da DAW, 256 vozes e monitor DSP por três minutos. O relatório DSP contém 181 janelas. O perfil do músico e o upstream são independentes dos perfis e fixtures de teste.
+
+| Entrega da série UX | Commit de implementação |
+|---|---|
+| UX-0 · inventário e contrato | `98128dc` |
+| UX-1 · tomada longa e publicação | `4341bcc` |
+| UX-2 · laboratório e histórico | `1cb821c` |
+| UX-3 · construção e mapa visual | `7cda61b` |
+| UX-4 · Single / multisample | `8435c05` / `4d55ca8` |
+| UX-5 · editor, interoperabilidade e janelas | `32a37f7` |
+
+**Ensaio físico de 20/11/2026.** O músico tocou o instrumento de teste SMK Dynamics r1 na entrada real SMK-37 Pro-Master, em Chrome visível com saída de áudio habilitada. Confirmou ter ouvido as duas camadas e esclareceu que havia sustentação enquanto tocava. Até o registro de aceite, foram observados 69 ataques (57 suaves e 12 fortes), velocidades de 32 a 107 e pico de sinal de 0.444. O ensaio físico não registrou CC64 de pedal. A continuidade durante a troca de janela e a soltura de pedal constam nos testes automatizados. Biblioteca de ensaio em `.local/validation/sampler-ux-5/Ensaio SMK/` e fotografia das medições em physical-acceptance.json. As seis branches foram publicadas; main verificada em `6c0d936`.
