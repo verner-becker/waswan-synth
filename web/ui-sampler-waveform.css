@@ -12,3 +12,4 @@
 .ww-sampler-wave-tools button:last-child {border-color:var(--ww-accent);}
 .ww-sampler-wave-status {margin:0; color:var(--ww-muted);}
 .ww-sampler-wave-status:empty {display:none;}
+.ww-sampler-mini-waveform {display:block;width:120px;height:24px;background:#0b1419;border-radius:3px;}

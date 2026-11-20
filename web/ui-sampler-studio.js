@@ -2,9 +2,12 @@
 import {el,action,Panel} from './ui-primitives.js';
 import {librarySetting} from './tone-bank.js';
 import {importOriginal,initializeLibrary,inspectSample,readLibrary,readSampleFile} from './sampler-library.js';
-import {createWorking,updateWorking,openWorking,saveWorking,renderWorking,promoteWorking,workingFromRef,prepareWorking} from './sampler-working.js';
+import {createWorking,updateWorking,openWorking,saveWorking,renderWorking,promoteWorking,workingFromRef,prepareWorking,previewWorkingWav,continueFromRendered} from './sampler-working.js';
 import {runOffline} from './sampler-offline.js';
 import {prepareSamplePreview,prepareSampler,setLiveSampler} from './sampler.js';
+import {createSamplerAudition} from './ui-sampler-audition.js';
+import {SamplerHistory} from './ui-sampler-history.js';
+import {createProcessingStack} from './ui-sampler-processing.js';
 import {createSamplerWaveform} from './ui-sampler-waveform.js';
 import {SamplerLibraryBrowser} from './ui-sampler-library.js';
 
@@ -38,18 +41,21 @@ export class SamplerStudio {
     this.importButton=action('Import WAV…',()=>this.fileInput.click(),'ww-primary');
     this.back=this.button('Back to source take',()=>this.openSource());
     const sampleTools=el('div','ww-sampler-actions');sampleTools.append(this.importButton,this.fileInput,this.back);
+    const modeWrap=el('label','','Editor audio ');this.waveMode=el('select');
+    this.waveMode.setAttribute('aria-label','Editor audio');
+    this.waveMode.append(new Option('Source selection','source'),new Option('Working result','working'));
+    this.waveMode.onchange=()=>this.run(()=>this.showWave(this.waveMode.value));
+    modeWrap.append(this.waveMode);sampleTools.append(modeWrap);
     this.sourceLabel=el('p','ww-muted','No WAV open');
-    this.wave=createSamplerWaveform({getAudio:()=>this.bridge.getAudio(),onSelection:({start,end})=>{
-      if(this.draft&&!this.busy&&!this.draft.instrument)this.change({selection:[start,end]});
+    this.audition=createSamplerAudition(()=>this.bridge.getAudio());
+    this.wave=createSamplerWaveform({audition:this.audition,onSelection:({start,end})=>{
+      if(this.draft&&!this.busy&&this.displayMode==='source'&&!this.draft.instrument)this.change({selection:[start,end]});
     },onCrop:args=>this.run(()=>this.crop(args))});
     sample.append(sampleTools,this.sourceLabel,this.wave.node);
     const processing=this.section('Processing Stack',true);
-    this.editorFields=el('div','ww-sampler-fields');
-    this.pitch=field(this.editorFields,'Pitch shift (semitones)','number',{min:-12,max:12,step:'any'});
-    this.fadeIn=field(this.editorFields,'Fade in (ms)','number',{min:0,step:'any'});
-    this.fadeOut=field(this.editorFields,'Fade out (ms)','number',{min:0,step:'any'});
-    this.editorFields.onchange=()=>{void this.run(()=>this.updateRecipe());};
-    processing.append(this.editorFields);
+    this.stack=createProcessingStack({change:recipe=>this.change({recipe}),run:fn=>this.run(fn),
+      audition:this.audition,preview:through=>previewWorkingWav(this.root,this.draft,{through})});
+    processing.append(this.stack.node);
     const versions=this.section('Versions & History',true);
     this.identity=el('div','ww-sampler-fields');
     this.name=field(this.identity,'Working name','text',{maxLength:128});
@@ -61,11 +67,17 @@ export class SamplerStudio {
     this.pitchInfo=el('span','ww-muted');this.identity.append(this.analyze,this.accept,this.pitchInfo);
     this.versionLabel=el('p','ww-sampler-versions');
     this.save=this.button('Save Working',()=>this.saveDraft());this.render=this.button('Render Version',()=>this.renderDraft());
+    this.continueRender=this.button('Continue editing rendered version',async()=>{
+      if(!await this.preserveWorking())return;
+      const next=continueFromRendered(this.draft);
+      await this.adopt(next,await readSampleFile(this.root,next.source),{dirty:true});
+      this.status.textContent='New Working Copy from rendered WAV · '+next.name;
+    });
     this.promote=this.button('Promote to Official',()=>this.promoteDraft());this.promote.classList.add('ww-primary');
     this.play=this.button('Play on Synth keyboard',()=>this.assignLive());
     this.release=this.button('Release Synth keyboard',()=>this.releaseLive());
     this.route=el('strong','ww-sampler-route',routeIdle);
-    const versionTools=el('div','ww-sampler-actions');versionTools.append(this.save,this.render,this.promote);
+    const versionTools=el('div','ww-sampler-actions');versionTools.append(this.save,this.render,this.continueRender,this.promote);
     const playback=el('div','ww-sampler-actions');
     const source=el('label','','Keyboard source ');this.keyboardSource=el('select');
     this.keyboardSource.append(new Option('Working Copy','working'),new Option('Official revision','official'));
@@ -75,7 +87,9 @@ export class SamplerStudio {
       this.status.textContent='Official r'+this.draft.baseRef.revision+' assigned to DAW track · '+trackName;
     });
     playback.append(source,this.play,this.release,this.route);versionTools.append(this.assignTrack);
-    versions.append(this.versionLabel,this.identity,versionTools,playback);
+    this.history=new SamplerHistory(this);
+    sample.append(this.history.versions,this.history.latest);
+    versions.append(this.versionLabel,this.identity,versionTools,playback,this.history.node);
     this.main.append(sample,processing,versions);
     for(const title of ['Mapping Editor','Instrument Builder','Sound Fusion','Advanced Tools']){
       const section=this.section(title,false);section.firstElementChild.append(el('small','ww-muted','Planned'));this.main.append(section);
@@ -94,7 +108,11 @@ export class SamplerStudio {
   async run(fn) {
     if(this.busy)return;
     this.busy=true;this.body.disabled=true;this.body.inert=true;this.node.setAttribute('aria-busy','true');
-    try{return await fn();}
+    try{
+      const result=await fn();
+      if(this.displayMode==='working'&&this.resultStale)await this.showWave('working');
+      return result;
+    }
     catch(error){if(error.name!=='AbortError')this.status.textContent=error.message||String(error);}
     finally{this.busy=false;this.body.disabled=false;this.body.inert=false;this.node.removeAttribute('aria-busy');this.sync();}
   }
@@ -118,11 +136,16 @@ export class SamplerStudio {
       try{library=initialize?await initializeLibrary(root,{name:root.name}):await readLibrary(root);}
       catch(error){if(error.code!=='missing-library')throw error;}
     }
-    if(!this.root||!await this.root.isSameEntry(root)){this.wave.clear();this.draft=null;this.file=null;this.dirty=false;this.browser.reset();}
+    if(!this.root||!await this.root.isSameEntry(root)){this.wave.clear();this.originalFile=null;this.draft=null;this.file=null;this.dirty=false;this.browser.reset();}
     this.root=root;this.library=library;await this.browser.refresh();
     this.status.textContent=library?'Samples folder ready · '+root.name:allowed?'Use Allow folder access to initialize this Samples folder.':'Allow read and write access to your Samples folder.';
   }
   confirmDiscard(){return !this.dirty||confirm('Discard unsaved changes to this Working Copy?');}
+  async preserveWorking(){
+    if(!this.dirty&&this.draft.generation)return true;
+    if(!confirm('Save the current Working Copy before opening a new copy?'))return false;
+    await this.saveDraft();return true;
+  }
   async chooseFolder(){
     if(!this.confirmDiscard())return;
     const root=await showDirectoryPicker({id:'waswan-samples',mode:'readwrite',...(this.root?{startIn:this.root}:{})});
@@ -136,8 +159,24 @@ export class SamplerStudio {
   }
   async adopt(draft,file,{dirty=false}={}){
     const [start,end]=draft.selection;
-    await this.wave.open(file,{selection:{start,end}});
-    this.draft=draft;this.file=file;this.dirty=dirty;this.keyboardSource.value='working';this.clearSuggestion();this.sync();
+    if(this.file===file&&this.displayMode==='source')this.wave.setSelection({start,end});
+    else await this.wave.open(file,{selection:{start,end}});
+    this.resultStale=false;this.displayMode=this.waveMode.value='source';this.wave.setCropEnabled(true);
+    this.draft=draft;this.file=file;this.dirty=dirty;
+    if(!draft.source.source)this.originalFile={hash:draft.source.sha256,file};
+    this.keyboardSource.value='working';this.clearSuggestion();this.sync();
+  }
+  async showWave(mode){
+    const d=this.draft;
+    if(mode==='working'){
+      const result=await this.history.versionWav('working');
+      await this.wave.open(new File([result],d.name+' · Working.wav',{type:'audio/wav'}));
+    }else{
+      const [start,end]=d.selection;
+      await this.wave.open(this.file,{selection:{start,end}});
+    }
+    this.wave.setCropEnabled(mode==='source');
+    this.displayMode=this.waveMode.value=mode;this.resultStale=false;
   }
   async importFile(file){
     if(!this.library)throw Error('Choose a Samples folder first.');
@@ -188,24 +227,10 @@ export class SamplerStudio {
   change(changes){
     const next=updateWorking(this.draft,changes);
     if(changes.selection||changes.recipe)this.clearSuggestion();
+    if(changes.recipe||changes.selection||changes.instrument)this.resultStale=true;
     this.draft=next;this.dirty=true;this.sync();
   }
-  updateRecipe(){
-    const rate=this.draft.source.sampleRate,length=this.draft.selection[1]-this.draft.selection[0];
-    const fades=[this.fadeIn,this.fadeOut].map(input=>Math.round(input.valueAsNumber*rate/1000));
-    if(!fades.every(n=>Number.isInteger(n)&&n>=0&&n<=length))throw Error('Each fade must fit within the selected duration.');
-    const semitones=this.pitch.valueAsNumber;
-    if(!Number.isFinite(semitones)||Math.abs(semitones)>12)throw Error('Choose a pitch shift from −12 to +12 semitones.');
-    const recipe=[];
-    if(semitones)recipe.push({type:'pitchShift',semitones});
-    if(fades.some(Boolean))recipe.push({type:'fade',inFrames:fades[0],outFrames:fades[1]});
-    this.change({recipe});
-  }
-  async previewWav(){
-    const draft=this.draft,[start,end]=draft.selection,recipe=[{type:'trim',start,end},...draft.recipe];
-    if(draft.source.sampleRate!==44100)recipe.push({type:'rate',sampleRate:44100});
-    return (await runOffline(this.file,{type:'edit',recipe})).wav;
-  }
+  previewWav(){return previewWorkingWav(this.root,this.draft);}
   async analyzeRoot(){
     this.status.textContent='Analyzing selected audio…';
     const {pitch}=await runOffline(await this.previewWav(),{type:'analyze'});
@@ -256,22 +281,22 @@ export class SamplerStudio {
     this.onRouteChange?.(this.route.textContent);
   }
   sync(){
-    const d=this.draft,source=d?.source,fade=d?.recipe?.find(op=>op.type==='fade');
+    const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);
+    this.waveMode.disabled=!d;this.waveMode.value=this.displayMode||'source';
+    this.continueRender.disabled=!d?.rendered;
     this.importButton.disabled=!this.library;
     this.back.hidden=!source?.source?.path;
     this.sourceLabel.textContent=source?'Source · '+source.path+' · '+source.channels+' ch · '+(source.sampleRate/1000)+' kHz':'No WAV open';
+    if(this.displayMode==='working'&&d)this.sourceLabel.textContent=(this.resultStale?'Working result needs refresh':'Working result')+' · local frames · '+(d.instrument?'reference sample':d.name);
     this.name.value=d?.name??'';this.note.value=d?.rootNote??60;
-    this.fadeIn.value=source?Number(((fade?.inFrames||0)*1000/source.sampleRate).toFixed(5)):0;
-    this.fadeOut.value=source?Number(((fade?.outFrames||0)*1000/source.sampleRate).toFixed(5)):0;
-    this.pitch.value=d?.recipe?.find(op=>op.type==='pitchShift')?.semitones??0;
-    for(const field of [this.name,this.note,this.fadeIn,this.fadeOut,this.pitch,this.save,this.render,this.analyze,this.play])field.disabled=!d;
-    this.accept.hidden=this.suggestion==null;const originalPlayable=d&&d.source.sampleRate===44100&&!d.recipe.length&&d.selection[0]===0&&d.selection[1]===d.source.frames;
+    for(const field of [this.name,this.note,this.save,this.render,this.analyze,this.play])field.disabled=!d;
+    this.accept.hidden=this.suggestion==null;const originalPlayable=d&&d.source.sampleRate===44100&&d.recipe.every(op=>op.bypass)&&d.selection[0]===0&&d.selection[1]===d.source.frames;
     this.promote.disabled=!(d?.rendered||originalPlayable);
     this.keyboardSource.options[1].disabled=!d?.baseRef;this.keyboardSource.disabled=!d;
     this.assignTrack.disabled=!d?.baseRef;
     this.release.hidden=!this.liveName;
     if(d?.instrument){
-      for(const field of [this.note,this.fadeIn,this.fadeOut,this.pitch,this.render,this.analyze])field.disabled=true;
+      for(const field of [this.note,this.render,this.analyze])field.disabled=true;
       this.promote.disabled=false;
     }
     this.versionLabel.textContent=d?['Working · '+(this.dirty?'Unsaved changes':d.generation?'Saved '+d.generation:'New'),

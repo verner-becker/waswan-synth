@@ -2,11 +2,12 @@
 import {el, action} from './ui-primitives.js';
 import {inspectWav} from './sampler-wav.js';
 import {checkFrameRange, rangeWav} from './sampler-waveform.js';
+import {createSamplerAudition} from './ui-sampler-audition.js';
 import {runOffline} from './sampler-offline.js';
 
 const seconds = (frame, rate) => String(Number((frame / rate).toFixed(6)));
 
-export function createSamplerWaveform({getAudio, onCrop, onSelection} = {}) {
+export function createSamplerWaveform({getAudio, audition = createSamplerAudition(getAudio), onCrop, onSelection} = {}) {
   const node = el('section', 'ww-sampler-waveform');
   node.setAttribute('aria-label', 'Waveform editor');
   const heading = el('div', 'ww-sampler-wave-title');
@@ -55,8 +56,8 @@ export function createSamplerWaveform({getAudio, onCrop, onSelection} = {}) {
   const tools = el('div', 'ww-sampler-wave-tools');
   const zoom = action('Zoom to selection', () => showRange(selection));
   const fit = action('Fit file', () => showRange({start: 0, end: layout.frames}));
-  const preview = action('Preview selection', () => audition());
-  const stop = action('Stop preview', () => { stopAudition(); status.textContent = ''; });
+  const preview = action('Preview selection', () => playSelection());
+  const stop = action('Stop preview', () => { audition.stop(); status.textContent = ''; });
   const crop = action('Create Sample from Selection', () => createCrop());
   tools.append(preview, stop, zoom, fit, crop);
   const status = el('p', 'ww-sampler-wave-status');
@@ -64,11 +65,12 @@ export function createSamplerWaveform({getAudio, onCrop, onSelection} = {}) {
   node.append(heading, canvas, ruler, fields, tools, status);
 
   let file, layout, selection, visible, peaks, drag;
-  let generation = 0, scan, render, auditionState;
+  let generation = 0, scan, render, ownsPreview = false, cropEnabled = true;
+  const unsubscribe = audition.subscribe(active => { stop.disabled = !active; });
   function update() {
     for (const input of [units, inputs.start, inputs.end, zoom, fit, preview]) input.disabled = !layout;
-    crop.disabled = !layout || !onCrop || !!render;
-    stop.disabled = !auditionState;
+    crop.hidden = !cropEnabled;
+    crop.disabled = !layout || !onCrop || !cropEnabled || !!render;
     if (!layout) {
       inputs.start.value = inputs.end.value = left.textContent = right.textContent = duration.textContent = '';
     } else {
@@ -181,42 +183,15 @@ export function createSamplerWaveform({getAudio, onCrop, onSelection} = {}) {
     drag = null;
   };
 
-  function stopAudition() {
-    const state = auditionState;
-    auditionState = null;
-    if (state?.audio) {
-      state.audio.onended = state.audio.onerror = null;
-      state.audio.pause();
-      state.audio.removeAttribute('src');
-      state.audio.load();
-      state.source?.disconnect();
-      URL.revokeObjectURL(state.url);
-    }
-    stop.disabled = true;
-  }
-  async function audition() {
-    stopAudition();
-    const state = {};
-    auditionState = state;
-    stop.disabled = false;
+  async function playSelection() {
     try {
-      const {context, gain} = getAudio?.() || {};
-      if (!context || !gain) throw Error('Start audio in the Synth to preview this selection.');
-      const wav = rangeWav(file, layout, selection);
-      await context.resume();
-      if (auditionState !== state) return;
-      state.audio = new Audio();
-      state.url = URL.createObjectURL(wav);
-      state.audio.src = state.url;
-      state.source = context.createMediaElementSource(state.audio);
-      state.source.connect(gain);
-      state.audio.onended = () => { stopAudition(); status.textContent = 'Preview finished.'; };
-      state.audio.onerror = () => { stopAudition(); status.textContent = 'Unable to play this WAV selection.'; };
-      await state.audio.play();
-      if (auditionState === state) status.textContent = 'Playing selection.';
-    } catch (error) {
-      if (auditionState === state) { stopAudition(); status.textContent = error.message; }
-    }
+      const playing = audition.play(rangeWav(file, layout, selection), reason => {
+        ownsPreview = false;
+        status.textContent = reason === 'ended' ? 'Preview finished.' : reason === 'error' ? 'Unable to play this WAV selection.' : '';
+      });
+      ownsPreview = true;
+      if (await playing) status.textContent = 'Playing selection.';
+    } catch (error) { ownsPreview = false; status.textContent = error.message; }
   }
   async function createCrop() {
     if (render || !layout) return;
@@ -240,7 +215,8 @@ export function createSamplerWaveform({getAudio, onCrop, onSelection} = {}) {
   }
   function clear() {
     generation++;
-    scan?.abort(); render?.abort(); stopAudition();
+    scan?.abort(); render?.abort();
+    if (ownsPreview) audition.stop();
     scan = render = file = layout = selection = visible = peaks = drag = null;
     canvas.removeAttribute('aria-busy');
     name.textContent = 'Waveform';
@@ -265,6 +241,45 @@ export function createSamplerWaveform({getAudio, onCrop, onSelection} = {}) {
   }
   clear();
   return {node, open, clear, setSelection: range => changeSelection(range),
+    setCropEnabled(enabled) { cropEnabled = !!enabled; update(); },
     getSelection: () => selection && {...selection, sampleRate: layout.sampleRate},
-    destroy() { clear(); resize.disconnect(); }};
+    destroy() { clear(); unsubscribe(); resize.disconnect(); }};
+}
+
+
+export function createMiniWaveform() {
+  const node = el('canvas', 'ww-sampler-mini-waveform');
+  node.setAttribute('aria-label', 'Checkpoint audio waveform');
+  node.setAttribute('role', 'img');
+  node.width = 240;
+  node.height = 48;
+  const ctx = node.getContext('2d');
+  let current;
+  function clear() {
+    current?.abort();
+    current = null;
+    ctx.clearRect(0, 0, node.width, node.height);
+  }
+  async function show(wav) {
+    clear();
+    const task = new AbortController();
+    current = task;
+    try {
+      const {channels, frames} = await inspectWav(wav, {anyRate: true});
+      const bins = Math.min(frames, node.width);
+      const peaks = await runOffline(wav, {type:'waveform', bins}, {signal:task.signal});
+      if (current !== task) return;
+      const lane = node.height / channels;
+      ctx.fillStyle = '#76dcd5';
+      for (let i = 0; i < bins; i++) for (let c = 0; c < channels; c++) {
+        const j = (i * channels + c) * 2;
+        const scale = lane * .47 / 32768;
+        const top = lane * (c + .5) - peaks[j + 1] * scale;
+        ctx.fillRect(i * node.width / bins, top, node.width / bins, Math.max(1, (peaks[j + 1] - peaks[j]) * scale));
+      }
+    } catch (error) {
+      if (!task.signal.aborted) throw error;
+    }
+  }
+  return {node, clear, show};
 }

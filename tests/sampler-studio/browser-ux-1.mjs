@@ -101,9 +101,13 @@ try {
   await button('Create Sample from Selection').click();
   await button('Back to source take').waitFor();
   await set('Working name','WASWAN extracted tone');
+  await field('Processing operation').selectOption('pitchShift');
+  await button('Add stage').click();
+  await set('Pitch shift (semitones)',3);
+  await field('Processing operation').selectOption('fade');
+  await button('Add stage').click();
   await set('Fade in (ms)',25);
   await set('Fade out (ms)',80);
-  await set('Pitch shift (semitones)',3);
   await button('Save Working').click();
   await button('Render Version').click();
   await button('Promote to Official').click();

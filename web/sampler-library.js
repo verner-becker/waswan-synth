@@ -354,7 +354,7 @@ async function locate(root, instrumentId, knownPath) {
   return found;
 }
 
-async function resolve(root, ref) {
+async function resolve(root, ref, {latest = false} = {}) {
   if (!validSamplerRef(ref)) throw error('invalid-reference', 'An instrument reference needs a library ID, instrument ID, revision and path.');
   const library = await readLibrary(root);
   if (library.id !== ref.libraryId) throw error('library-mismatch', 'Select the library referenced by this instrument.', {libraryId: ref.libraryId});
@@ -362,7 +362,7 @@ async function resolve(root, ref) {
     const found = await locate(root, ref.instrumentId, ref.path);
     if (!found) throw error('missing-instrument', 'This instrument is missing from the library.', {path: ref.path, instrumentId: ref.instrumentId});
     let {instrument} = found;
-    if (instrument.revision !== ref.revision) {
+    if (!latest && instrument.revision !== ref.revision) {
       let revision;
       if (ref.revision < instrument.revision) {
         try {
@@ -390,8 +390,8 @@ export async function load(root, ref) {
   return (await resolve(root, ref)).instrument;
 }
 
-export async function inspect(root, ref) {
-  return resolve(root, ref);
+export async function inspect(root, ref, options) {
+  return resolve(root, ref, options);
 }
 
 async function readVerified(root, sample, {maxFileBytes = Infinity, signal} = {}) {
