@@ -38,7 +38,7 @@ export class TapeRuntime {
     }
     if(m.t!=='daw-tape-commit'||p.written!==p.frames||!validTape(m.tape))throw Error('Incomplete tape pair');
     if(x.sim_engine(0)!==0)throw Error('Select an Analog sound on Part A first.');
-    if(x.waswan_mel_busy(this.live)||!x.waswan_mel_commit())throw Error('Release keys and sustain, then load both banks again.');
+    if(x.waswan_mel_busy(this.live)||!x.waswan_mel_commit(Number(m.tape.banks[0]===m.tape.banks[1])))throw Error('Release keys and sustain, then retry the selection.');
     this.id=m.tape.id;this.routes.clear();this.liveOn=true;
     this.config(this.live,m.tape.settings);this.pending=null;
     return true;

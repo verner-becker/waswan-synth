@@ -60,7 +60,7 @@ MEL_EXPORT int waswan_mel_busy(unsigned route) {
         if(mel_route(&vc[i])==route && (route!=NPART || vc[i].part==0) && (vc[i].gate || vc[i].ae.stage!=E_IDLE)) return 1;
     return 0;
 }
-MEL_EXPORT int waswan_mel_commit(void) {
+MEL_EXPORT int waswan_mel_commit(unsigned same_bank) {
     mel_pair_t *pair=&mel_pairs[!mel_current];
     for(unsigned r=0;r<MEL_ROUTES;r++) if(mel_enabled[r] && waswan_mel_busy(r)) return 0;
     for(int b=0;b<2;b++) for(int n=0;n<128;n++) {
@@ -69,7 +69,7 @@ MEL_EXPORT int waswan_mel_commit(void) {
             mel_region_t *region=&pair->regions[i];
             int delta=(int)region->root-n;
             if(delta<0)delta=-delta;
-            if(region->bank==b && delta<distance){distance=delta;pair->map[b][n]=i;}
+            if(region->bank==(same_bank?0:b) && delta<distance){distance=delta;pair->map[b][n]=i;}
         }
         if(distance==129)return 0;
     }

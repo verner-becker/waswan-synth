@@ -84,8 +84,8 @@ try{
   await page.getByLabel('Folder tone',{exact:true}).getByRole('option',{name:'SBass2',exact:true}).waitFor({state:'attached'});
   await page.getByRole('button',{name:'Start audio',exact:true}).click();
   await page.locator('.ww-midi-continue').click();
-  await page.locator('.ww-tone-editor .ww-tapes summary').click();
-  assert.deepEqual(await page.getByLabel('Bank A',{exact:true}).locator('option').allTextContents(),['Cello','Flute']);
+  await page.locator('.ww-tone-editor .ww-tapes > summary').click();
+  assert.deepEqual(await page.getByLabel('Instrument',{exact:true}).locator('option').allTextContents(),['Choose an instrument…','Cello','Flute']);
   assert.equal(await page.evaluate(()=>picks),0);
   // Reopen the format used by milestone B with the order the player last loaded.
   await page.evaluate(async()=>{
@@ -105,8 +105,8 @@ try{
   await page.reload();
   panel=await setup();
   await panel.getByText('My tapes · access required',{exact:true}).waitFor();
-  assert.equal(await page.getByLabel('Bank A',{exact:true}).inputValue(),'Flute');
-  assert.equal(await page.getByLabel('Bank B',{exact:true}).inputValue(),'Cello');
+  assert.equal(await page.getByLabel('Instrument',{exact:true}).inputValue(),'Flute');
+  assert.equal(await page.getByLabel('Layer',{exact:true}).inputValue(),'Cello');
   assert.deepEqual(await page.evaluate(()=>[picks,prompts]),[0,0]);
   assert.deepEqual(errors,[]);
   console.log('PASS three folders survive a Chrome restart, disk changes visible in TONES, permission retry, no picker on restore');

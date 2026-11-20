@@ -6,44 +6,79 @@ import {tapeDefaults,tapeControls,validTapeSettings} from './mellotron-settings.
 
 export class MellotronPanel {
   constructor(request){
-    this.request=request;this.settings=tapeDefaults();
+    this.request=request;this.settings=tapeDefaults();this.revision=0;
     this.node=el('details','ww-panel ww-tapes');
     this.node.append(el('summary','','Mellotron · Part A'));
-    this.fields=el('fieldset');this.fields.disabled=true;this.node.append(this.fields);
-    this.fields.append(el('p','','Load two banks to play on Analog Part A. For your own tapes, choose a folder with one subfolder per bank and name each WAV by MIDI root (e.g. 60 Flute.wav).'));
-    this.status=el('p','','Start audio to load tapes.');this.status.setAttribute('role','status');
-    this.selects=['Bank A','Bank B'].map(name=>{
-      const select=el('select');this.field(name,select);return select;
-    });
-    this.populate(rehearsalBanks,rehearsalBanks);
+    this.source=el('small','ww-muted');
+    this.pickers=el('fieldset','ww-tape-pickers');
+    this.instrument=el('select');this.layer=el('select');
+    this.field('Instrument',this.instrument,this.pickers);
+    this.field('Layer',this.layer,this.pickers);
+    this.instrument.onchange=this.layer.onchange=()=>this.applySelection();
+    this.fields=el('fieldset','ww-tape-actions');
+    this.play=action('Play selection',()=>{
+      if(!this.sameSelection())return this.applySelection();
+      return this.run(async()=>{
+        await this.request('daw-tape-live',{enabled:true,settings:this.settings});
+        this.live=true;this.update();
+      });
+    },'ww-primary');
+    this.switch=action('Use Synth on Part A',()=>this.run(async()=>{
+      await this.request('daw-tape-live',{enabled:false,settings:this.settings});
+      this.live=false;this.update();
+    }));
+    this.fields.append(this.play,this.switch);
+    this.advanced=el('details');
+    this.advanced.append(el('summary','','Tape settings and library'));
     const openFolder=action('Open tape folder',()=>this.run(()=>this.choose()));
     openFolder.disabled=!globalThis.showDirectoryPicker;
-    this.fields.append(openFolder,
-      action('Use rehearsal banks',()=>this.run(()=>{this.folder=null;this.populate(rehearsalBanks,rehearsalBanks);})),
-      action('Load both banks',()=>this.run(()=>this.load())));
-    this.switch=action('Use Synth on Part A',()=>this.run(async()=>{
-      await this.request('daw-tape-live',{enabled:!this.live,settings:this.settings});
-      this.live=!this.live;this.update();await this.save();
+    const rehearsal=action('Use rehearsal instruments',()=>this.run(()=>{
+      this.folder=null;this.populate(rehearsalBanks);
     }));
-    this.fields.append(this.switch);
+    this.savedFolder=action('Use saved tape folder',()=>this.run(async()=>{
+      const {folder}=this.library;
+      if(await folder.requestPermission({mode:'read'})!=='granted')throw Error('Allow access to the tape folder.');
+      await this.configureLibrary(folder);
+    }));
+    this.reload=action('Reload from disk',()=>this.applySelection());
+    this.advanced.append(openFolder,this.savedFolder,rehearsal,this.reload);
     this.controls=new Map();
-    const group=el('div','ww-tape-controls');this.fields.append(group);
+    const group=el('div','ww-tape-controls');this.advanced.append(group);
     for(const [key,label,min,max,value] of tapeControls){
       const input=el('input');input.type=max===1?'checkbox':'number';input.min=min;input.max=max;input.value=value;
-      this.field(label,input,group);this.controls.set(key,input);
-      input.onchange=()=>this.run(async()=>{
+      this.field(label,input,key==='mix'?this.pickers:group);
+      this.controls.set(key,input);
+      input.onchange=()=>{
         const settings={...this.settings,[key]:max===1?Number(input.checked):input.valueAsNumber};
-        if(!validTapeSettings(settings))throw Error('Choose a value between '+min+' and '+max+'.');
-        if(this.loaded)await this.request('daw-tape-live',{enabled:this.live,settings});
-        this.settings=settings;if(this.loaded)await this.save();
-      });
+        this.run(async()=>{
+          if(!validTapeSettings(settings))throw Error('Choose a value between '+min+' and '+max+'.');
+          if(this.loaded)await this.request('daw-tape-live',{enabled:this.live,settings});
+          this.settings=settings;if(this.loaded)await this.save();
+        });
+      };
     }
-    this.node.append(this.status);this.update();
+    this.fields.append(this.advanced);
+    this.status=el('p','ww-tape-status');this.status.setAttribute('role','status');
+    this.feedback=el('p','ww-muted');this.feedback.setAttribute('role','status');
+    const strip=el('div','ww-tape-strip'),info=el('div','ww-tape-info');
+    info.append(this.source,this.status);
+    strip.append(info,this.pickers,this.fields);
+    this.node.append(strip,this.feedback);
+    this.populate(rehearsalBanks);
     this.initialized=this.restoreLibrary();
   }
-  field(name,input,parent=this.fields){const label=el('label','',name);input.setAttribute('aria-label',name);label.append(input);parent.append(label);}
-  populate(names,selected){
-    this.selects.forEach((s,i)=>{s.replaceChildren(...names.map(n=>new Option(n,n)));s.value=names.includes(selected?.[i])?selected[i]:names[Math.min(i,names.length-1)];});
+  field(name,input,parent){
+    const label=el('label','',name);input.setAttribute('aria-label',name);label.append(input);parent.append(label);
+  }
+  populate(names,selected=[]){
+    this.names=names;
+    this.instrument.replaceChildren(new Option(names.length?'Choose an instrument…':'No instruments found',''),...names.map(n=>new Option(n,n)));
+    this.instrument.options[0].disabled=true;
+    this.layer.replaceChildren(new Option('None',''),...names.map(n=>new Option(n,n)));
+    this.instrument.value=names.includes(selected[0])?selected[0]:'';
+    this.layer.value=names.includes(selected[1])&&selected[1]!==selected[0]?selected[1]:'';
+    this.feedback.textContent=names.length?'':'Add one subfolder per instrument, then refresh the tape folder in Instrument setup.';
+    this.update();
   }
   async restoreLibrary(){
     try{
@@ -60,21 +95,16 @@ export class MellotronPanel {
         const same=saved?.folder&&await folder.isSameEntry(saved.folder);
         this.folder=folder;this.populate(names,same?saved.banks:[]);
         if(await folder.queryPermission({mode:'read'})==='granted'){
-          const current=await this.bankNames(folder);
-          this.library.names=current;this.populate(current,same?saved.banks:[]);
+          this.library.names=await this.bankNames(folder);
+          this.populate(this.library.names,same?saved.banks:[]);
         }
-        this.status.textContent='Load both banks to reopen your last selection.';
-      }else if(saved){
-        this.populate(rehearsalBanks,saved.banks);
-        this.status.textContent='Load both banks to reopen your last selection.';
-      }else this.status.textContent='Rehearsal banks are ready to load.';
-    }catch(e){this.status.textContent=e.message;}
+      }else if(saved)this.populate(rehearsalBanks,saved.banks);
+    }catch(e){this.feedback.textContent=e.message;}
     this.update();
   }
   async ready(){
     await this.initialized;
-    this.loaded=null;this.live=false;this.audioReady=true;
-    this.fields.disabled=!!this.busy;this.update();
+    this.loaded=null;this.live=false;this.audioReady=true;this.update();
   }
   async bankNames(folder){
     const names=[];
@@ -83,40 +113,73 @@ export class MellotronPanel {
   }
   async configureLibrary(folder){
     const names=await this.bankNames(folder);
-    const selected=this.folder&&await folder.isSameEntry(this.folder)?this.selects.map(s=>s.value):[];
+    const selected=this.folder&&await folder.isSameEntry(this.folder)?this.selectedBanks():[];
     const library={folder,names,id:crypto.randomUUID()};
     this.library=library;this.folder=folder;this.populate(names,selected);
     try{await librarySetting(library,'tapeLibrary');}
     catch{throw Error('Tapes available for this session. The browser could not remember the folder.');}
-    this.status.textContent=names.length?'Select banks A and B, then load.':'Add bank subfolders, then refresh the folder in Instrument setup.';
   }
   async choose(){
     const folder=await showDirectoryPicker({mode:'read',id:'waswan-tapes'});
     await this.configureLibrary(folder);
   }
-  async load(){
-    if(this.folder && await this.folder.requestPermission({mode:'read'})!=='granted')throw Error('Allow folder access or choose the folder again.');
-    const banks=this.selects.map(s=>s.value);
-    if(banks.some(name=>!name))throw Error('Add bank subfolders, then refresh the folder in Instrument setup.');
+  selectedBanks(){return [this.instrument.value,this.layer.value||this.instrument.value];}
+  sameSelection(){
+    return this.loaded&&this.folder===this.loaded.folder&&this.selectedBanks().every((name,i)=>name===this.loaded.banks[i]);
+  }
+  async applySelection(){
+    if(this.layer.value===this.instrument.value)this.layer.value='';
+    ++this.revision;
+    if(this.selecting)return;
+    this.selecting=true;
+    try{
+      await this.run(async()=>{
+        let revision;
+        do{
+          revision=this.revision;
+          const banks=this.selectedBanks();
+          this.feedback.textContent='Loading '+[...new Set(banks)].join(' + ')+'…';
+          try{await this.load(banks,revision);}
+          catch(error){if(revision===this.revision)throw error;}
+        }while(revision!==this.revision);
+        this.feedback.textContent='';
+      });
+    }finally{this.selecting=false;this.update();}
+  }
+  async load(banks,revision){
+    if(!banks[0])throw Error('Choose an instrument first.');
+    if(this.folder&&await this.folder.requestPermission({mode:'read'})!=='granted')throw Error('Allow folder access, then retry the selection.');
     const {regions,id}=await preparePair(this.folder,banks);
+    if(revision!==this.revision)return;
     const tape={banks,id,settings:{...this.settings}};
     const token=await this.request('daw-tape-begin',{regions:regions.map(({bank,root,pcm})=>({bank,root,frames:pcm.length}))});
     let offset=0;
     for(const {pcm} of regions)for(let i=0;i<pcm.length;i+=32768){
+      if(revision!==this.revision)return;
       const chunk=pcm.slice(i,i+32768);
       await this.request('daw-tape-chunk',{token,offset,pcm:chunk},[chunk.buffer]);
       offset+=Math.min(32768,pcm.length-i);
     }
+    if(revision!==this.revision)return;
     await this.request('daw-tape-commit',{token,tape});
-    this.loaded={id,banks,folder:this.folder,libraryId:this.library?.id,names:[...this.selects[0].options].map(o=>o.value)};
+    this.loaded={id,banks,folder:this.folder,libraryId:this.library?.id,names:this.names};
     this.live=true;this.update();await this.save();
   }
+  get sound(){return this.loaded?[...new Set(this.loaded.banks)].join(' + '):'';}
   snapshot(){return this.loaded?{id:this.loaded.id,banks:[...this.loaded.banks],settings:{...this.settings}}:null;}
   save(){return librarySetting({...this.loaded,settings:this.settings},'mellotron');}
   update(){
-    this.switch.disabled=!this.loaded;
-    this.switch.textContent=this.live?'Use Synth on Part A':'Play Mellotron on Part A';
-    if(this.loaded)this.status.textContent=this.loaded.banks.join(' + ')+' · '+(this.live?'playing on Part A':'available in DAW presets');
+    this.source.textContent='Library · '+(this.folder?(this.folder.name||'Tape folder'):'Rehearsal instruments');
+    this.pickers.disabled=!this.audioReady||(this.busy&&!this.selecting);
+    this.fields.disabled=!this.audioReady||!!this.busy;
+    this.layer.disabled=!this.instrument.value;
+    const mix=this.controls.get('mix');
+    mix.parentNode.hidden=!this.layer.value;mix.disabled=!!this.busy;
+    this.savedFolder.hidden=!this.library||this.folder===this.library.folder;
+    this.reload.hidden=!this.folder||!this.instrument.value;
+    this.play.hidden=!this.instrument.value||(this.sameSelection()&&this.live);
+    this.switch.hidden=!this.live;
+    this.status.textContent=this.live?this.sound+' · playing on Part A':this.audioReady?'Synth on Part A':'Start audio to play.';
     for(const [key,input] of this.controls){
       if(input.type==='checkbox')input.checked=!!this.settings[key];else input.value=this.settings[key];
     }
@@ -126,13 +189,12 @@ export class MellotronPanel {
       if(propagate)throw Error('Finish the current tape operation first.');
       return;
     }
-    this.busy=true;this.fields.disabled=true;
+    this.busy=true;this.feedback.textContent='';this.update();
     try{await fn();}
     catch(e){
-      this.update();
       if(propagate)throw e;
-      if(e.name!=='AbortError')this.status.textContent=e.message;
+      if(e.name!=='AbortError')this.feedback.textContent=e.message;
     }
-    finally{this.busy=false;this.fields.disabled=!this.audioReady;}
+    finally{this.busy=false;this.update();}
   }
 }

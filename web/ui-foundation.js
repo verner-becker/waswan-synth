@@ -103,7 +103,12 @@ class Foundation {
     this.start=action('Start audio',()=>this.startAudio(),'ww-primary');this.settings=action('Settings',()=>this.showSettings(this.settingsPanel.hidden));
     this.settings.setAttribute('aria-controls','ww-settings');this.settings.setAttribute('aria-expanded','false');
     this.banks=new ToneBanks(m=>this.bridge.send(m),this.toneSelector.node);
-    preset.append(this.banks.picker,this.toneSelector.detail,this.banks.feedback);
+    this.tapePicker=action('Mellotron',()=>{
+      if(this.workspace!=='tones'&&this.workspace!=='perf')this.selectWorkspace('perf');
+      this.tapes.node.open=true;this.tapes.instrument.focus();
+    });
+    this.tapePicker.hidden=true;
+    preset.append(this.banks.picker,this.tapePicker,this.toneSelector.detail,this.banks.feedback);
     top.append(brand,preset,this.part,this.midiStatus,this.mode,this.voices,this.bpm,this.start,this.settings);this.shell.append(top);
     this.notice=el('p','ww-notice','Start audio, then connect your MIDI controller in Settings.');this.notice.setAttribute('role','status');this.shell.append(this.notice);
   }
@@ -338,6 +343,13 @@ class Foundation {
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
     this.instrumentSetup.update(m,this.running);
     this.toneEditor.update(m,this.running);this.toneSelector.update(m,this.running,this.banks.sourceLabel(m),this.banks.hasUnsavedEdits(m));
+    const playingTape=part===0&&this.tapes.live&&m.engines[part]===0;
+    this.banks.picker.hidden=this.toneSelector.detail.hidden=playingTape;
+    this.tapePicker.hidden=!playingTape;
+    if(playingTape){
+      const label='Mellotron · '+this.tapes.sound;
+      if(this.tapePicker.textContent!==label)this.tapePicker.textContent=label;
+    }
     this.part.textContent=`Part ${'ABCD'[part]}`;const connected=!!this.bridge.midi.input;
     this.midiStatus.textContent=connected?'MIDI · Connected':'MIDI · Not connected';this.midiStatus.dataset.state=connected?'on':'off';
     this.mode.textContent=m.engines[part]===2?'DRUM-X':['POLY','DUAL','UNISON','MONO'][poly.parts[part].mode];

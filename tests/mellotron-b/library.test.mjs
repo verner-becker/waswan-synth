@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from 'node:assert/strict';
-import {webcrypto} from 'node:crypto';
+import {createHash,webcrypto} from 'node:crypto';
 import {preparePair} from '../../web/mellotron-library.js';
 import {readSample} from '../../web/mellotron-wav.js';
 import {writeFixture} from '../mellotron-a/fixture.mjs';
@@ -13,6 +13,11 @@ const pair=await preparePair(folder(['72 high.wav','60.wav']),['A','B']);
 assert.deepEqual(pair.regions.map(r=>[r.bank,r.root]),[[0,60],[0,72],[1,60],[1,72]]);
 assert.equal((await preparePair(folder(['60.wav','72 high.wav']),['A','B'])).id,pair.id);
 assert.notEqual((await preparePair(folder(['60.wav','72 high.wav']),['B','A'])).id,pair.id);
+const solo=await preparePair(folder(['60.wav']),['A','A']);
+assert.equal(solo.regions.length,1);
+const hash=data=>createHash('sha256').update(data).digest('hex');
+const sampleHash=hash(bytes.subarray(44));
+assert.equal(solo.id,hash(JSON.stringify([[0,'A',60,sampleHash],[1,'A',60,sampleHash]])),'Existing two-bank preset ID');
 await assert.rejects(preparePair(folder(['60.wav','60-high.wav']),['A','B']),/Duplicate/);
 await assert.rejects(preparePair(folder(['128.wav']),['A','B']),/MIDI root/);
 await assert.rejects(preparePair(folder([]),['A','B']),/No WAVs/);

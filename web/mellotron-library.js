@@ -32,6 +32,11 @@ export async function preparePair(folder,banks){
   let frames=0;
   for(let bank=0;bank<2;bank++){
     const name=banks[bank];
+    if(bank===1&&name===banks[0]){
+      // Both heads read the same PCM. Keep the original two-bank content ID.
+      signature.push(...signature.map(([,label,root,hash])=>[1,label,root,hash]));
+      break;
+    }
     const files=folder?await entries(await folder.getDirectoryHandle(name)):[{root:60}];
     if(regions.length+files.length>maxRegions)throw Error('Use up to 48 regions across both banks.');
     for(const {root,entry} of files){

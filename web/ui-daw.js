@@ -261,7 +261,7 @@ export class DawWorkspace {
     if(value==='')return;
     if(value==='mellotron'){
       const tape=this.bridge.tapeSnapshot?.();
-      if(!tape)throw Error('Open Mellotron in Performance and load both banks first.');
+      if(!tape)throw Error('Choose a Mellotron instrument in Performance or TONES first.');
       const instrument=await this.player.tapeInstrument(tape);
       this.controller.command('track.update',{id,changes:{instrument}});
       return;

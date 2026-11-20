@@ -3,14 +3,14 @@
 ## Ensaio no SMK-37 Pro
 
 1. Abrir o [simulador local](http://localhost:8737/simulator/), iniciar em **Start audio** e conectar o SMK-37 Pro na configuração MIDI. Em **Performance**, selecionar a parte A com um timbre Analog comum e o modo **POLY**.
-2. Abrir **Mellotron · Part A** e clicar em **Load both banks**. Os dois bancos de ensaio, Rehearsal flute e Rehearsal strings, são sons sintetizados para esta entrega. Tocar a mesma frase com **Bank B mix (%)** em 0, 100 e 50. **Use Synth on Part A** devolve o teclado ao timbre da parte.
+2. Abrir **Mellotron · Part A** e escolher **Rehearsal flute** em **Instrument**. Com **Layer → None** ouve-se só a flauta. Selecionar **Rehearsal strings** em **Layer** e tocar a mesma frase com **Layer mix (%)** em 0, 100 e 50. **Use Synth on Part A** devolve o teclado ao timbre da parte.
 3. Em modo de fita, sustentar uma tecla por alguns segundos, soltá-la e repetir imediatamente. Repetir depois de um segundo em repouso para ouvir o início novamente. Cada tecla retorna a 8×. Uma gravação curta pode acabar antes dos oito segundos. Marcar **Continuous loop** para manter a fita tocando. Experimentar o pedal e o pitch bend em um acorde, trocar de tela com as notas soando e verificar a liberação ao tirar o pé do pedal.
 4. Para gravar o **áudio** tocado no Synth, armar uma pista de áudio na DAW e escolher a entrada interna do WASWAN. Para gravar ou editar **MIDI**, usar uma pista de instrumento com o preset **Mellotron · loaded banks** e direcionar a entrada MIDI a essa pista. O preset captura a mistura e os controles atuais. Selecioná-lo novamente para adotar novos ajustes.
 5. Ouvir a tomada e os WAVs exportados da pista e do master. Conferir mute, solo, notas repetidas, tempo de resposta, estalos e notas presas. Para o aceite físico, registrar sistema, versão do Chrome, porta MIDI, saída de áudio e o trecho em que ocorreu qualquer falha.
 
 ## Usar gravações próprias ou autorizadas
 
-Em **Open tape folder**, escolher a pasta que contém as subpastas de bancos. Cada WAV deve ser mono PCM16 a 44,1 kHz, com até oito segundos. A árvore abaixo exemplifica a nomeação pela nota-raiz MIDI.
+Em **Tape settings and library → Open tape folder**, escolher a pasta que contém as subpastas de bancos. Cada WAV deve ser mono PCM16 a 44,1 kHz, com até oito segundos. A árvore abaixo exemplifica a nomeação pela nota-raiz MIDI.
 
 ```text
 Minhas fitas/
@@ -22,7 +22,7 @@ Minhas fitas/
     67.wav
 ```
 
-Escolher as duas subpastas em **Bank A** e **Bank B** e clicar em **Load both banks**. Cada tecla usa a raiz mais próxima de cada banco. Em empate vale a raiz mais grave. O limite é de 48 regiões e 16 MiB de PCM por par. O navegador guarda o acesso à pasta e os nomes dos bancos. Depois de reiniciar o Chrome, clicar em **Load both banks** para reler os arquivos e renovar a permissão quando solicitada. Os projetos guardam os nomes, uma assinatura do conteúdo e os controles por pista. Se os arquivos mudarem, o usuário pode selecionar o novo som explicitamente no preset da pista.
+A pasta principal é a biblioteca e cada subpasta contém um instrumento. Escolher o timbre em **Instrument** já o coloca na parte A. **Layer** acrescenta um segundo timbre. O cabeçalho mostra o som confirmado. Se houver notas sustentadas durante a troca, soltá-las e clicar em **Play selection**. Cada tecla usa a raiz mais próxima de cada banco. Em empate vale a raiz mais grave. O limite é de 48 regiões e 16 MiB de PCM por par. O navegador guarda o acesso à pasta e os nomes dos bancos. Depois de reiniciar o Chrome, clicar em **Play selection** para reler os arquivos e renovar a permissão quando solicitada. Os projetos guardam os nomes, uma assinatura do conteúdo e os controles por pista. Se os arquivos mudarem, o usuário pode selecionar o novo som explicitamente no preset da pista.
 
 ## Implementação
 

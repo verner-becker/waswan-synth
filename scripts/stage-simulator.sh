@@ -68,7 +68,7 @@ assert s.count(typing_anchor) == 1
 s = s.replace(typing_anchor, """const supportsOpenSelect = CSS.supports('selector(select:open)');
 function typing(e){
   if(e.ctrlKey||e.metaKey||e.altKey)return true;
-  if(e.target.matches?.('.ww-program-picker select')){
+  if(e.target.matches?.('.ww-program-picker select, .ww-tapes select')){
     return supportsOpenSelect && e.target.matches(':open');
   }
   return ['INPUT','SELECT','TEXTAREA','BUTTON'].includes(e.target.tagName);

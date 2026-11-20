@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 export const tapeControls=[
-  ['mix','Bank B mix (%)',0,100,50],['transpose','Transpose (semitones)',-24,24,0],
+  ['mix','Layer mix (%)',0,100,50],['transpose','Transpose (semitones)',-24,24,0],
   ['cents','Fine tune (cents)',-100,100,0],['attack','Attack (ms)',1,2000,10],
   ['release','Release (ms)',1,4000,120],['loop','Continuous loop',0,1,0],
   ['velocity','Velocity response',0,1,0],['wow','Wow (%)',0,100,0],
