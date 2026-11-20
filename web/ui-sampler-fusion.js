@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action} from './ui-primitives.js';
 import {prepareSampler} from './sampler.js';
+import {LIMITS,RATE} from './daw-project.js';
 import {readSampleFile} from './sampler-library.js';
 import * as fusion from './sampler-fusion.js';
 import {createFusionInput} from './sampler-fusion-input.js';
@@ -13,6 +14,20 @@ function number(parent,text,value,min,max,step=1){
 }
 function select(parent,text,options){
   const node=el('select');node.append(...options.map(([value,label])=>new Option(label,value)));return control(parent,text,node);
+}
+function midiValues(text,min,{ranges=false}={}){
+  const result=[];
+  for(const item of text.split(',')){
+    const token=item.trim();
+    if(/^\d{1,3}$/u.test(token)&&Number(token)>=min&&Number(token)<=127){result.push(Number(token));continue;}
+    const match=ranges&&token.match(/^(\d{1,3})\s*[-–]\s*(\d{1,3})\s*\/\s*(\d{1,3})$/u);
+    if(!match)throw Error(ranges?'Enter MIDI roots as a list or range, for example 48-72/6.':'Enter MIDI velocities from 1 to 127 separated by commas.');
+    const [start,end,step]=match.slice(1).map(Number);
+    if(start<min||end>127||end<start||step<1||step>127)throw Error('Check the MIDI root range and its positive semitone step.');
+    for(let note=start;note<=end;note+=step)result.push(note);
+  }
+  if(new Set(result).size!==result.length)throw Error('Choose distinct MIDI roots or velocities.');
+  return result;
 }
 const engine=instrument=>instrument.type==='sampler'?'Sampler':instrument.type==='mellotron'?'Mellotron':
   instrument.patch?.[80]?(instrument.patch[83]?'Analog + FM':'FM'):instrument.type==='drumx'?'DRUM-X':instrument.type==='super'?'Super':'Analog';
@@ -44,19 +59,27 @@ export class SamplerFusion {
     this.addOfficial=button('Add Official sampler',()=>this.addRef(studio.draft.baseRef));
     sourceTools.append(this.addPart,this.addTrack,this.addOfficial);
     this.list=el('div','ww-sampler-fusion-list');this.list.setAttribute('role','group');this.list.setAttribute('aria-label','Fusion sources');
-    this.masterFx=el('input');this.masterFx.type='checkbox';
+    this.masterFx=el('input');this.masterFx.type='checkbox';this.masterSnapshot=[];
+    this.masterFx.onchange=()=>{this.masterSnapshot=this.masterFx.checked?structuredClone(this.daw.snapshot.master.fx):[];this.sync();};
+    this.fxNames=el('span','ww-muted');
     const fx=el('div','ww-sampler-actions');control(fx,'Include DAW master FX',this.masterFx);
     this.listen=button('Listen to Fusion',()=>this.listenSources());
     this.stop=button('Release Fusion keyboard',()=>this.release());
-    fx.append(this.listen,this.stop);
+    fx.append(this.fxNames,this.listen,this.stop);
     const captureTools=el('div','ww-sampler-fields');
     this.title=control(captureTools,'Fusion name',el('input'));this.title.value='New Fusion';this.title.maxLength=120;
-    this.mode=select(captureTools,'Fusion capture mode',[['single','Single Sample'],['texture','Sustained Texture']]);
+    this.mode=select(captureTools,'Fusion capture mode',[['single','Single Sample'],['texture','Texture'],['multi','Multisample instrument']]);
     this.note=number(captureTools,'Capture note (MIDI)',60,0,127);
     this.velocity=number(captureTools,'Capture velocity',100,1,127);
-    this.duration=number(captureTools,'Note duration (s)',1,.001,120,.001);
-    this.sustain=number(captureTools,'Pedal hold (s)',0,0,120,.001);
-    this.releaseTime=number(captureTools,'Release window (s)',.3,0,120,.001);
+    this.multiFields=el('div','ww-sampler-fields');
+    this.roots=control(this.multiFields,'Multisample roots (MIDI)',el('input'));this.roots.value='48, 60, 72';
+    const rangeHint=el('small','ww-muted','List or range in semitones · 48-72/6');rangeHint.id='ww-fusion-root-format';
+    this.roots.setAttribute('aria-describedby',rangeHint.id);this.roots.parentNode.append(rangeHint);
+    this.velocities=control(this.multiFields,'Multisample velocities',el('input'));this.velocities.value='50, 100';
+    this.repeats=number(this.multiFields,'Repetitions per zone',1,1,16);
+    this.duration=number(captureTools,'Note duration (s)',1,.001,LIMITS.sourceFrames/RATE,'any');
+    this.sustain=number(captureTools,'Pedal hold (s)',0,0,LIMITS.sourceFrames/RATE,'any');
+    this.releaseTime=number(captureTools,'Release window (s)',.3,0,LIMITS.sourceFrames/RATE,'any');
     this.tail=select(captureTools,'FX tail (s)',[0,2,4,8].map(n=>[n,String(n)]));
     this.phraseTools=el('div','ww-sampler-actions');
     this.phraseName=el('span','ww-muted','Sustained note');
@@ -70,11 +93,14 @@ export class SamplerFusion {
     this.phraseTools.append(this.takePhrase,this.clearPhrase,this.phraseName);
     this.mode.onchange=()=>{this.duration.value=this.mode.value==='texture'?5:1;this.sync();};
     this.capture=action('Capture Fusion WAV',()=>this.captureSources());
-    this.config.append(sourceTools,this.list,fx,captureTools,this.phraseTools,this.capture);
+    this.restore=button('Restore source snapshots',()=>this.restoreSources());
+    this.recipeLabel=el('span','ww-muted');const recipe=el('div','ww-sampler-actions');recipe.append(this.restore,this.recipeLabel);
+    this.captureReport=el('output','ww-sampler-fusion-report');this.captureReport.setAttribute('aria-label','Fusion signal report');
+    this.config.append(recipe,sourceTools,this.list,fx,captureTools,this.multiFields,this.phraseTools,this.capture);
     this.cancel=action('Cancel Fusion capture',()=>this.controller?.abort(new DOMException('Capture cancelled.','AbortError')));
     this.progress=el('progress');this.progress.max=1;this.progress.setAttribute('aria-label','Fusion capture progress');
     const feedback=el('div','ww-sampler-actions');feedback.append(this.progress,this.cancel);
-    this.node.append(this.config,feedback,this.message);this.sync();
+    this.node.append(this.config,feedback,this.captureReport,this.message);this.sync();
   }
   report(text){this.message.textContent=text;this.studio.status.textContent=text;}
   readyToAdd(){
@@ -95,7 +121,25 @@ export class SamplerFusion {
   snapshots(){
     return this.sources.map(({includeFx,fx,...source})=>({...structuredClone(source),fx:includeFx?structuredClone(fx):[]}));
   }
-  effects(){return this.masterFx.checked?structuredClone(this.daw.snapshot.master.fx):[];}
+  effects(){return this.masterFx.checked?structuredClone(this.masterSnapshot):[];}
+  async restoreSources(){
+    const s=this.studio,recipe=s.draft?.source.provenance?.fusion;
+    if(!recipe?.sources?.length)throw Error('Open a captured Fusion take with its source recipe.');
+    if(this.sources.length&&!confirm('Replace the current Fusion sources with the captured snapshots?'))return;
+    const restored=structuredClone(recipe.sources);
+    for(const source of restored){
+      if(source.instrument.type==='sampler')source.instrument=await prepareSampler(this.daw.player,s.root,source.instrument);
+      source.includeFx=!!source.fx?.length;
+    }
+    this.sources=restored;this.title.value=recipe.name;this.mode.value=recipe.mode;
+    this.note.value=recipe.note??60;this.velocity.value=recipe.velocity??100;
+    this.roots.value=(recipe.notes??[recipe.note??60]).join(', ');
+    this.velocities.value=(recipe.velocities??[recipe.velocity??100]).join(', ');this.repeats.value=recipe.repeats??1;
+    this.duration.value=recipe.duration;this.sustain.value=recipe.sustain??0;
+    this.releaseTime.value=recipe.release;this.tail.value=recipe.tail??0;this.phrase=structuredClone(recipe.phrase??null);
+    this.masterSnapshot=structuredClone(recipe.masterFx??[]);this.masterFx.checked=!!this.masterSnapshot.length;
+    this.paint();this.report('Fusion source snapshots restored. Use Listen to activate the sources.');
+  }
   paint(){
     this.list.replaceChildren();
     for(const source of this.sources){
@@ -112,7 +156,7 @@ export class SamplerFusion {
       };
       makeNumber('Level',source.volume,0,2,.01,v=>{source.volume=v;});
       makeNumber('Pan',source.pan,-1,1,.01,v=>{source.pan=v;});
-      makeNumber('Transpose',source.transpose,-48,48,1,v=>{source.transpose=v;});
+      makeNumber('Transpose',source.transpose,-127,127,1,v=>{source.transpose=v;});
       for(const [key,lo,hi] of [['key',0,127],['velocity',1,127]]){
         const label=key==='key'?'key':'velocity';
         makeNumber('Low '+label,source[key][0],lo,source[key][1],1,v=>{source[key]=[v,source[key][1]];});
@@ -165,12 +209,16 @@ export class SamplerFusion {
       try{
         await this.release();s.audition.stop();
         this.report('Capturing the source mix…');
+        const multi=this.mode.value==='multi';
         const result=await fusion.captureFusion(this.daw,s.root,this.snapshots(),{name:this.title.value.trim(),mode:this.mode.value,
-          phrase:this.mode.value==='texture'?this.phrase:undefined,notes:[this.note.valueAsNumber],velocities:[this.velocity.valueAsNumber],repeats:1,duration:this.duration.valueAsNumber,
+          phrase:this.mode.value==='texture'?this.phrase:undefined,notes:multi?midiValues(this.roots.value,0,{ranges:true}):[this.note.valueAsNumber],velocities:multi?midiValues(this.velocities.value,1):[this.velocity.valueAsNumber],repeats:multi?this.repeats.valueAsNumber:1,duration:this.duration.valueAsNumber,
           sustain:this.sustain.valueAsNumber,release:this.releaseTime.valueAsNumber,tail:Number(this.tail.value),masterFx:this.effects(),signal:token.signal,
-          onProgress:({completed,total,stage,progress})=>{this.progress.value=((completed||0)+(progress||0))/Math.max(1,total);this.message.textContent='Fusion · '+stage+' · '+completed+' / '+total;}
+          onProgress:({completed,total,stage,progress})=>{this.progress.value=progress||0;this.message.textContent='Fusion · '+stage+' · '+completed+' / '+total;}
         });
+        const peakDb=20*Math.log10(result.report.peak);
+        this.captureReport.textContent='Peak '+peakDb.toFixed(1)+' dBFS · '+result.report.clipped+' clipped samples · '+result.report.completed+'/'+result.report.total+' takes';
         await s.adopt(result.draft,await readSampleFile(s.root,result.draft.source),{dirty:true});
+        if(result.draft.instrument)s.sections.get('Mapping Editor').open=true;
         await s.browser.page();this.report('Fusion captured · '+result.takes.length+' take(s) · '+result.report.frames+' frames · sources idle. The Working Copy plays the captured audio.');
       }catch(error){this.report(error.name==='AbortError'?'Fusion capture cancelled.':error.message);throw error;}
       finally{this.controller=null;this.sync();}
@@ -178,11 +226,17 @@ export class SamplerFusion {
   }
   reset(){this.sources=[];this.paint();}
   sync(){
+    const multi=this.mode.value==='multi';this.multiFields.hidden=!multi;
+    this.velocity.parentNode.hidden=this.note.parentNode.hidden=multi;
     const pending=!!this.controller,n=this.sources.length,live=!!this.lease;
+    const recipe=this.studio.draft?.source.provenance?.fusion;
+    this.restore.hidden=!recipe;this.restore.disabled=live;
+    this.recipeLabel.textContent=recipe?'Capture recipe · '+recipe.sources.length+' source(s) · '+recipe.mode:'';
+    this.fxNames.textContent=this.masterFx.checked?(this.masterSnapshot.map(f=>f.type).join(', ')||'No master FX in snapshot'):'';
     this.config.disabled=pending;this.cancel.hidden=this.progress.hidden=!pending;
     this.addPart.disabled=this.addTrack.disabled=live||n>=8;this.addOfficial.disabled=live||n>=8||!this.studio.draft?.baseRef;
-    this.masterFx.disabled=live;this.listen.disabled=live||n<2;this.stop.disabled=!live;
-    this.capture.disabled=!this.studio.library||n<2;
+    this.masterFx.disabled=live;this.listen.disabled=live||n<1;this.stop.disabled=!live;
+    this.capture.disabled=!this.studio.library||n<1;this.capture.textContent=multi?'Capture Fusion multisample':'Capture Fusion WAV';
     const texture=this.mode.value==='texture',phrase=texture&&this.phrase;
     this.phraseTools.hidden=!texture;this.clearPhrase.hidden=!phrase;
     this.phraseName.textContent=phrase?phrase.clip.name+' · '+phrase.clip.notes.length+' notes · '+phrase.bpm+' BPM':'Sustained note';

@@ -141,7 +141,7 @@ export class DawAudioExport {
   }
   async capture(job,dir,plan,controller,revision,progress){
     const p=this.w.player,{signal,token}=job;
-    const interrupt=()=>{p.generation++;p.stopSources();};
+    const interrupt=()=>{if(p.exporting===job){p.generation++;p.stopSources();}};
     signal.addEventListener('abort',interrupt,{once:true});
     let worker,node,sources=[],watchdog,readyTimer,context,abortCapture,workerClosed,workerDone=false;
     try{

@@ -31,7 +31,7 @@ function sourceProject(sources, masterFx) {
   const project = emptyProject();
   project.name = 'Sound Fusion';
   project.master.fx = structuredClone(masterFx);
-  project.tracks = sources.map((s,i)=>({...makeTrack('midi',s.name),id:project.id+'-'+i,instrument:s.instrument,
+  project.tracks = sources.map((s,i)=>({...makeTrack('midi',String(s.name||'Instrument').slice(0,80)),id:project.id+'-'+i,instrument:s.instrument,
     volume:s.volume,pan:s.pan,fx:s.fx}));
   validateProject(project);
   validateEffects(project);
@@ -90,45 +90,77 @@ function unlock(workspace,job) {
 
 export async function captureFusion(workspace,root,entries,options={}) {
   const {mode='single',name='Fusion',notes=[60],velocities=[100],repeats=1,duration=.6,release=.3,sustain=0,tail=0,
-    masterFx=[],signal,onProgress=()=>{}} = options;
-  if (!['single','texture'].includes(mode) || notes.length!==1 || velocities.length!==1 || repeats!==1)
-    throw Error('Choose one note and velocity for a single Fusion take.');
-  if (typeof name !== 'string' || !name.trim() || name.length>120 || !Number.isFinite(sustain) || sustain<0 ||
+    masterFx=[],phrase,signal,onProgress=()=>{}} = options;
+  if (!['single','texture','multi'].includes(mode) ||
+      (mode!=='multi' && (notes.length!==1 || velocities.length!==1 || repeats!==1))) {
+    throw Error('Use Multisample to capture several notes, velocities or repeats.');
+  }
+  if (phrase && mode!=='texture') throw Error('Choose Texture to render a MIDI phrase.');
+  if (typeof name!=='string' || !name.trim() || name.length>120 || !Number.isFinite(sustain) || sustain<0 ||
       !Number.isFinite(release) || release<0 || !Number.isFinite(duration) || duration<=0) throw Error('Check the Fusion name and note or release lengths.');
   const sources=normalizeSources(entries),template=sourceProject(sources,masterFx);
   const plan=planCapture({notes,velocities,repeats,duration,release:sustain+release+tail,
     destination:'Samples/Originals/Fusion/'+uuid()});
+  if (repeats>samplerLimits.variationMembers || (repeats>1 && notes.length*velocities.length>samplerLimits.variations)) {
+    throw Error('This multisample exceeds the sampler round-robin set or take limit.');
+  }
+  const jobs=plan.takes.map(take=>{
+    const project=phrase ? applyFusionPhrase(structuredClone(template),sources,phrase,{duration,release,sustain})
+      : takeProject(template,sources,take,{duration,release,sustain});
+    const audioPlan=planAudioExport(project,{scope:'mix',format:'wav',tail});
+    if (mode==='multi' && audioPlan.frames*4>samplerLimits.memoryBytes) throw Error('This stereo take exceeds the sampler PCM memory budget.');
+    return {take,project,audioPlan};
+  });
   const library=await readLibrary(root);
-  const take=plan.takes[0];
-  const project=options.phrase
-    ? (await import('./sampler-fusion-phrase.js')).applyFusionPhrase(structuredClone(template),sources,options.phrase,{duration,release,sustain})
-    : takeProject(template,sources,take,{duration,release,sustain});
-  const audioPlan=planAudioExport(project,{scope:'mix',format:'wav',tail});
-  const job=reserve(workspace,signal);
-  let temporary;
+  const job=reserve(workspace,signal),takes=[];
+  const report={frames:0,peak:0,clipped:0,completed:0,total:jobs.length};
+  const progress=(stage,fraction)=>onProgress({stage,progress:(report.completed+fraction)/report.total,
+    completed:report.completed,total:report.total});
   try {
-    temporary=await (await navigator.storage.getDirectory()).getDirectoryHandle('waswan-daw-exports-v1',{create:true});
-    return await navigator.locks.request('waswan-daw-export:'+job.token,async()=>{
-      const dir=await temporary.getDirectoryHandle(job.token,{create:true});
+    const storage=await navigator.storage.getDirectory();
+    const scratch=await storage.getDirectoryHandle('waswan-daw-exports-v1',{create:true});
+    const {quota,usage}=await navigator.storage.estimate();
+    const largest=Math.max(...jobs.map(({audioPlan})=>44+audioPlan.frames*4));
+    if (Number.isFinite(quota)&&Number.isFinite(usage)&&quota-usage<largest) throw Error('Not enough temporary storage for one Fusion take.');
+    await navigator.locks.request('waswan-daw-export:'+job.token,async()=>{
+      const batch=await scratch.getDirectoryHandle(job.token,{create:true});
       try {
-        job.signal.throwIfAborted();
-        const info=await workspace.audioExport.exporter.capture(job,dir,audioPlan,
-          {snapshot:()=>project,assets:new Map(),revision:0},0,(stage,progress)=>onProgress({stage,progress,completed:0,total:1}));
-        job.signal.throwIfAborted();
-        const peak=info.peaks[0],clipped=info.clipped[0];
-        if (peak < 1/32768) throw Error('The Fusion take is silent. Check the source zones, levels and instruments.');
-        if (clipped) throw Error('The Fusion take clipped '+clipped+' samples. Lower source levels before recording.');
-        const file=await (await dir.getFileHandle('0.wav')).getFile();
-        const fusion={version:1,mode,name,sources,masterFx:structuredClone(masterFx),...(options.phrase?{phrase:options.phrase}:{}),note:take.note,
-          velocity:take.velocity,repeat:take.repeat,duration,sustain,release,tail};
-        const sample=await importOriginal(root,file,take.path,{name,provenance:{fusion}});
-        job.signal.throwIfAborted();
-        const draft=createWorking({libraryId:library.id,source:sample,name,rootNote:take.note});
-        const result={...take,sample,peak,clipped,frames:info.frames};
-        onProgress({stage:'Captured',progress:1,completed:1,total:1});
-        return {draft,takes:[result],report:{frames:info.frames,peak,clipped,completed:1,total:1}};
-      }finally{await temporary.removeEntry(job.token,{recursive:true});}
+        for (const {take,project,audioPlan} of jobs) {
+          job.signal.throwIfAborted();
+          const dir=await batch.getDirectoryHandle(take.id,{create:true});
+          const info=await workspace.audioExport.exporter.capture({...job,token:uuid()},dir,audioPlan,
+            {snapshot:()=>project,assets:new Map(),revision:0},0,progress);
+          job.signal.throwIfAborted();
+          const peak=info.peaks[0],clipped=info.clipped[0];
+          if (peak<1/32768) throw Error('The Fusion take '+take.id+' is silent. Check its source zones and levels.');
+          if (clipped) throw Error('The Fusion take '+take.id+' clipped '+clipped+' samples. Lower its source levels.');
+          const file=await (await dir.getFileHandle('0.wav')).getFile();
+          const fusion={version:1,mode,name,sources,masterFx:structuredClone(masterFx),...(phrase?{phrase}:{}),
+            notes:[...notes],velocities:[...velocities],repeats,note:take.note,velocity:take.velocity,repeat:take.repeat,duration,sustain,release,tail};
+          const sample=await importOriginal(root,file,take.path,{name:mode==='multi'?name+' '+take.id:name,provenance:{fusion}});
+          takes.push({...take,sample,peak,clipped,frames:info.frames});
+          report.frames+=info.frames;
+          report.peak=Math.max(report.peak,peak);
+          report.completed=takes.length;
+          await batch.removeEntry(take.id,{recursive:true});
+          progress('Captured '+take.id,0);
+        }
+      }finally{await scratch.removeEntry(job.token,{recursive:true});}
     });
+    job.signal.throwIfAborted();
+    let instrument=null;
+    if (mode==='multi') {
+      const {samples,regions,variations}=mapCaptureTakes(plan,new Map(takes.map(t=>[t.id,t.sample])));
+      instrument=createInstrument({name,samples,regions,variations});
+      compile(instrument);
+    }
+    const first=takes[0];
+    const draft=createWorking({libraryId:library.id,source:first.sample,name,rootNote:first.note,instrument});
+    return {draft,takes,report};
+  }catch(cause){
+    const error=cause instanceof Error?cause:new Error(String(cause));
+    error.completedTakes=takes;
+    throw error;
   }finally{unlock(workspace,job);}
 }
 

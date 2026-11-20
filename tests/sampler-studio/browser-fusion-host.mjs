@@ -78,7 +78,21 @@ try {
    const failure=await openFusionMonitor(w,sources);
    try {await failure.note({owner:'bad',channel:34,note:10,velocity:80});}catch{}
    await failure.closed;
+   const {compile,explainNote}=await import('./sampler-instrument.js');
+   const multi={name:'Short roots',mode:'multi',notes:[57,64],velocities:[45,100],repeats:2,
+     duration:.06,sustain:.02,release:.1,tail:0};
+   const bank=await captureFusion(w,dir,[sources[0]],multi);
+   const plan=compile(bank.draft.instrument),firstHit=explainNote(plan,{type:'noteOn',note:64,velocity:90});
+   const secondHit=explainNote(plan,{type:'noteOn',note:64,velocity:90},firstHit.state);
+   const abort=new AbortController();
+   let partial;
+   try{
+     await captureFusion(w,dir,sources,{...multi,signal:abort.signal,onProgress:({completed})=>{
+       if(completed===1)abort.abort();
+     }});
+   }catch(e){partial={error:e.name,count:e.completedTakes.length};}
    const result={frames:wav.frames,peak:first.report.peak,emptyRestored,restored,both,sustained,changed,released,occupied,
+     multi:bank.report,rr:[firstHit,secondHit].map(hit=>hit.voices.map(v=>v.regionId)),partial,
      actualSourceCount:first.draft.source.provenance.fusion.sources.length,unchanged:before===JSON.stringify(active.snapshot()),
      releasedOnFailure:!p.exporting&&!w.busy,contexts:audit.contexts,hosts:audit.hosts,
      left220:magnitude(220,0,2304,4096),right517:magnitude(517,1,2304,4096),
@@ -91,6 +105,10 @@ try {
  assert.deepEqual(result.both,[2,2]);assert.deepEqual(result.sustained,[1,1]);
  assert.deepEqual(result.changed,[0,1]);assert.deepEqual(result.released,[0,0]);
  assert.match(result.occupied,/Finish|Stop/);
+ assert.equal(result.multi.completed,8);
+ assert.equal(result.multi.total,8);
+ assert.deepEqual(result.rr,[['n064-v100-t001'],['n064-v100-t002']]);
+ assert.deepEqual(result.partial,{error:'AbortError',count:1});
  await writeFile('.local/validation/sampler-ux-4/fusion-host.json',JSON.stringify(result,null,2));
  console.log('PASS real-time Fusion keyboard ownership, sustain, cancellation, project and mixer restoration and single stereo capture',result);
 }finally{await browser.close();}

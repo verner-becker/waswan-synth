@@ -7,6 +7,7 @@ import {chromium} from '../../.tools/browser/node_modules/playwright/index.mjs';
 import {startSynth} from '../browser-foundation-controls.mjs';
 import {clickDawFile} from '../daw-browser-controls.mjs';
 import {pcmWav} from './fixtures.mjs';
+import {printMixedFusion} from './fusion-mixed-engines.mjs';
 
 const evidence=process.env.SAMPLER_VALIDATION_ROOT||'.local/validation/sampler-studio-5';
 const url=process.env.SAMPLER_BROWSER_URL||'http://localhost:8737/simulator/';
@@ -250,10 +251,11 @@ try{
   assert(Buffer.from(beforeClip.pcm.buffer,beforeClip.pcm.byteOffset,beforeClip.pcm.byteLength)
     .equals(Buffer.from(afterClip.pcm.buffer,afterClip.pcm.byteOffset,afterClip.pcm.byteLength)),
     'Sampler waveform changed after relocating the library');
+  const fusion=await printMixedFusion(page,evidence);
   const runtime=await page.evaluate(()=>({contexts:audit.contexts,hostNodes:audit.hostNodes,picks:audit.picks}));
   assert.deepEqual(runtime,{contexts:1,hostNodes:1,picks:1});
   assert.deepEqual(errors,[]);
-  const report={result:'PASS',chrome:await context.browser().version(),tracks:loaded.tracks,peaks,stereo,
+  const report={result:'PASS',chrome:await context.browser().version(),tracks:loaded.tracks,peaks,stereo,fusion,
     samplerPcmIdenticalAfterAlignment:true,onsetDifferenceFrames,revision:loaded.sampler.revision,tapeFiles:tapes.length,
     tapeSource:fs.existsSync(exportedTape)?'sampler-converted-WAVs':'synthetic-WAV',directoryHandle:'OPFS',
     restartedBrowser:true,physicalHardware:false,...runtime};
