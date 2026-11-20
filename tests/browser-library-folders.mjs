@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {writeFixture} from './mellotron-a/fixture.mjs';
 import {chromium} from '../.tools/browser/node_modules/playwright/index.mjs';
 
 const profile=fs.mkdtempSync(path.join(os.tmpdir(),'waswan-library-folders-'));
@@ -23,7 +24,7 @@ async function open(prompt=false){
     if(prompt){
       const original=FileSystemHandle.prototype.queryPermission;
       FileSystemHandle.prototype.queryPermission=function(options){
-        return this.name==='My tapes'&&!window.allowed?Promise.resolve('prompt'):original.call(this,options);
+        return ['My tapes','CHOIR'].includes(this.name)&&!window.allowed?Promise.resolve('prompt'):original.call(this,options);
       };
       FileSystemHandle.prototype.requestPermission=async function(){
         window.prompts++;
@@ -108,6 +109,35 @@ try{
   assert.equal(await page.getByLabel('Instrument',{exact:true}).inputValue(),'Flute');
   assert.equal(await page.getByLabel('Layer',{exact:true}).inputValue(),'Cello');
   assert.deepEqual(await page.evaluate(()=>[picks,prompts]),[0,0]);
+  // Older versions saved an empty list when the musician picked CHOIR itself.
+  await page.evaluate(async base64=>{
+    const {librarySetting}=await import('/simulator/tone-bank.js');
+    const library=await(await navigator.storage.getDirectory()).getDirectoryHandle('My tapes');
+    const folder=await library.getDirectoryHandle('CHOIR',{create:true});
+    const writer=await(await folder.getFileHandle('60 CHOIR.wav',{create:true})).createWritable();
+    await writer.write(Uint8Array.from(atob(base64),c=>c.charCodeAt(0)));await writer.close();
+    await librarySetting({folder,names:[],id:crypto.randomUUID()},'tapeLibrary');
+  },writeFixture().toString('base64'));
+  await context.close();await open(true);
+  const tapes=page.locator('.ww-tapes');
+  await page.getByRole('button',{name:'Start audio',exact:true}).click();
+  await page.locator('.ww-midi-continue').click();
+  await tapes.locator(':scope > summary').click();
+  const allow=tapes.getByRole('button',{name:'Allow folder access'});
+  await allow.click();
+  await tapes.getByText('Allow access to the tape folder to read its instruments.').waitFor();
+  await page.evaluate(()=>{window.allowed=true;});
+  await allow.click();
+  await tapes.getByText('Instrument folder · CHOIR').waitFor();
+  assert.deepEqual(await page.evaluate(()=>[picks,prompts]),[0,2]);
+  assert.equal(await tapes.getByLabel('Instrument',{exact:true}).inputValue(),'CHOIR');
+  await tapes.getByRole('button',{name:'Play selection'}).click();
+  await tapes.getByText('CHOIR · playing on Part A').waitFor();
+  assert(await tapes.getByLabel('Layer',{exact:true}).isDisabled());
+  await tapes.getByRole('button',{name:'Open library folder…'}).click();
+  const instruments=tapes.getByLabel('Instrument',{exact:true});
+  await instruments.getByRole('option',{name:'Flute',exact:true}).waitFor({state:'attached'});
+  assert.deepEqual(await instruments.locator('option').allTextContents(),['Choose an instrument…','CHOIR','Cello','Flute']);
   assert.deepEqual(errors,[]);
   console.log('PASS three folders survive a Chrome restart, disk changes visible in TONES, permission retry, no picker on restore');
 }finally{

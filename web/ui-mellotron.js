@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action} from './ui-primitives.js';
 import {librarySetting} from './tone-bank.js';
-import {preparePair,rehearsalBanks} from './mellotron-library.js';
+import {preparePair,rehearsalBanks,scanTapeFolder} from './mellotron-library.js';
 import {tapeDefaults,tapeControls,validTapeSettings} from './mellotron-settings.js';
 
 export class MellotronPanel {
@@ -27,7 +27,9 @@ export class MellotronPanel {
       await this.request('daw-tape-live',{enabled:false,settings:this.settings});
       this.live=false;this.update();
     }));
-    this.fields.append(this.play,this.switch);
+    this.allow=action('Allow folder access',()=>this.run(()=>this.reopenFolder()));
+    this.openLibrary=action('Open library folder…',()=>this.run(()=>this.choose()));
+    this.fields.append(this.play,this.switch,this.allow,this.openLibrary);
     this.advanced=el('details');
     this.advanced.append(el('summary','','Tape settings and library'));
     const openFolder=action('Open tape folder',()=>this.run(()=>this.choose()));
@@ -35,11 +37,7 @@ export class MellotronPanel {
     const rehearsal=action('Use rehearsal instruments',()=>this.run(()=>{
       this.folder=null;this.populate(rehearsalBanks);
     }));
-    this.savedFolder=action('Use saved tape folder',()=>this.run(async()=>{
-      const {folder}=this.library;
-      if(await folder.requestPermission({mode:'read'})!=='granted')throw Error('Allow access to the tape folder.');
-      await this.configureLibrary(folder);
-    }));
+    this.savedFolder=action('Use saved tape folder',()=>this.run(()=>this.reopenFolder()));
     this.reload=action('Reload from disk',()=>this.applySelection());
     this.advanced.append(openFolder,this.savedFolder,rehearsal,this.reload);
     this.controls=new Map();
@@ -75,9 +73,10 @@ export class MellotronPanel {
     this.instrument.replaceChildren(new Option(names.length?'Choose an instrument…':'No instruments found',''),...names.map(n=>new Option(n,n)));
     this.instrument.options[0].disabled=true;
     this.layer.replaceChildren(new Option('None',''),...names.map(n=>new Option(n,n)));
-    this.instrument.value=names.includes(selected[0])?selected[0]:'';
+    this.instrument.value=this.directFolder?names[0]:names.includes(selected[0])?selected[0]:'';
     this.layer.value=names.includes(selected[1])&&selected[1]!==selected[0]?selected[1]:'';
-    this.feedback.textContent=names.length?'':'Add one subfolder per instrument, then refresh the tape folder in Instrument setup.';
+    this.feedback.textContent=this.folder&&this.needsAccess?'Allow folder access to check the saved folder.':
+      names.length?'':'Choose an instrument folder containing WAVs or a library with one subfolder per instrument.';
     this.update();
   }
   async restoreLibrary(){
@@ -91,11 +90,13 @@ export class MellotronPanel {
       if(validTapeSettings(saved?.settings))this.settings=saved.settings;
       const rehearsalSelected=!saved?.folder&&this.library?.id&&saved?.libraryId===this.library.id;
       if(this.library&&!rehearsalSelected){
-        const {folder,names}=this.library;
+        const {folder}=this.library;
         const same=saved?.folder&&await folder.isSameEntry(saved.folder);
-        this.folder=folder;this.populate(names,same?saved.banks:[]);
-        if(await folder.queryPermission({mode:'read'})==='granted'){
-          this.library.names=await this.bankNames(folder);
+        this.folder=folder;
+        this.needsAccess=await folder.queryPermission({mode:'read'})!=='granted';
+        this.populate(this.library.names,same?saved.banks:[]);
+        if(!this.needsAccess){
+          Object.assign(this.library,await scanTapeFolder(folder));
           this.populate(this.library.names,same?saved.banks:[]);
         }
       }else if(saved)this.populate(rehearsalBanks,saved.banks);
@@ -106,15 +107,17 @@ export class MellotronPanel {
     await this.initialized;
     this.loaded=null;this.live=false;this.audioReady=true;this.update();
   }
-  async bankNames(folder){
-    const names=[];
-    for await(const handle of folder.values())if(handle.kind==='directory')names.push(handle.name);
-    return names.sort();
+  get directFolder(){return !!(this.folder&&this.library?.direct);}
+  async reopenFolder(){
+    const {folder}=this.library;
+    if(await folder.requestPermission({mode:'read'})!=='granted')throw Error('Allow access to the tape folder to read its instruments.');
+    await this.configureLibrary(folder);
   }
   async configureLibrary(folder){
-    const names=await this.bankNames(folder);
+    const {names,direct}=await scanTapeFolder(folder);
     const selected=this.folder&&await folder.isSameEntry(this.folder)?this.selectedBanks():[];
-    const library={folder,names,id:crypto.randomUUID()};
+    const library={folder,names,direct,id:crypto.randomUUID()};
+    this.needsAccess=false;
     this.library=library;this.folder=folder;this.populate(names,selected);
     try{await librarySetting(library,'tapeLibrary');}
     catch{throw Error('Tapes available for this session. The browser could not remember the folder.');}
@@ -122,6 +125,7 @@ export class MellotronPanel {
   async choose(){
     const folder=await showDirectoryPicker({mode:'read',id:'waswan-tapes'});
     await this.configureLibrary(folder);
+    if(this.directFolder&&this.audioReady)await this.load(this.selectedBanks(),this.revision);
   }
   selectedBanks(){return [this.instrument.value,this.layer.value||this.instrument.value];}
   sameSelection(){
@@ -148,8 +152,11 @@ export class MellotronPanel {
   }
   async load(banks,revision){
     if(!banks[0])throw Error('Choose an instrument first.');
-    if(this.folder&&await this.folder.requestPermission({mode:'read'})!=='granted')throw Error('Allow folder access, then retry the selection.');
-    const {regions,id}=await preparePair(this.folder,banks);
+    if(this.folder){
+      this.needsAccess=await this.folder.requestPermission({mode:'read'})!=='granted';
+      if(this.needsAccess)throw Error('Allow folder access, then retry the selection.');
+    }
+    const {regions,id}=await preparePair(this.folder,banks,this.directFolder);
     if(revision!==this.revision)return;
     const tape={banks,id,settings:{...this.settings}};
     const token=await this.request('daw-tape-begin',{regions:regions.map(({bank,root,pcm})=>({bank,root,frames:pcm.length}))});
@@ -169,10 +176,12 @@ export class MellotronPanel {
   snapshot(){return this.loaded?{id:this.loaded.id,banks:[...this.loaded.banks],settings:{...this.settings}}:null;}
   save(){return librarySetting({...this.loaded,settings:this.settings},'mellotron');}
   update(){
-    this.source.textContent='Library · '+(this.folder?(this.folder.name||'Tape folder'):'Rehearsal instruments');
+    this.source.textContent=(this.directFolder?'Instrument folder · ':'Library · ')+(this.folder?(this.folder.name||'Tape folder'):'Rehearsal instruments');
     this.pickers.disabled=!this.audioReady||(this.busy&&!this.selecting);
     this.fields.disabled=!this.audioReady||!!this.busy;
-    this.layer.disabled=!this.instrument.value;
+    this.layer.disabled=!this.instrument.value||this.names.length<2;
+    this.allow.hidden=!this.folder||!this.needsAccess;
+    this.openLibrary.hidden=!this.directFolder||!globalThis.showDirectoryPicker;
     const mix=this.controls.get('mix');
     mix.parentNode.hidden=!this.layer.value;mix.disabled=!!this.busy;
     this.savedFolder.hidden=!this.library||this.folder===this.library.folder;

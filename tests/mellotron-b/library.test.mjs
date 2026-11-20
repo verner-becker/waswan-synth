@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from 'node:assert/strict';
 import {createHash,webcrypto} from 'node:crypto';
-import {preparePair} from '../../web/mellotron-library.js';
+import {preparePair,scanTapeFolder} from '../../web/mellotron-library.js';
 import {readSample} from '../../web/mellotron-wav.js';
 import {writeFixture} from '../mellotron-a/fixture.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
@@ -18,6 +18,12 @@ assert.equal(solo.regions.length,1);
 const hash=data=>createHash('sha256').update(data).digest('hex');
 const sampleHash=hash(bytes.subarray(44));
 assert.equal(solo.id,hash(JSON.stringify([[0,'A',60,sampleHash],[1,'A',60,sampleHash]])),'Existing two-bank preset ID');
+const choir={name:'CHOIR',async *values(){yield file('60 CHOIR.WAV');}};
+assert.deepEqual(await scanTapeFolder(choir),{names:['CHOIR'],direct:true});
+const fromLeaf=await preparePair(choir,['CHOIR','CHOIR'],true);
+const fromLibrary=await preparePair(folder(['60 CHOIR.WAV']),['CHOIR','CHOIR']);
+assert.equal(fromLeaf.id,fromLibrary.id);
+assert.deepEqual(await scanTapeFolder({async *values(){yield file('README.txt');}}),{names:[],direct:false});
 await assert.rejects(preparePair(folder(['60.wav','60-high.wav']),['A','B']),/Duplicate/);
 await assert.rejects(preparePair(folder(['128.wav']),['A','B']),/MIDI root/);
 await assert.rejects(preparePair(folder([]),['A','B']),/No WAVs/);

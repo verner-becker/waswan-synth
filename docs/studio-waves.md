@@ -8,6 +8,8 @@ Em 20/11/2026 o cadastro de pastas passou para **Instrument setup → Library fo
 
 Em 20/11/2026, a revisão com o agente de UX reproduziu a escolha de VIOLINS enquanto o motor continuava em CELLO + CHOIR. **Instrument** passou a aplicar a escolha diretamente e **Layer** permite combinar uma segunda fita. Em Chrome, o ensaio com as gravações ML1 confirmou áudio distinto para a mesma nota e o teclado virtual visível com o painel aberto em 1366 × 768. A suíte verificou troca com tecla sustentada, reabertura e exportação. Evidência em `.local/validation/mellotron-selection-ux/`. A escuta física segue pendente.
 
+A captura do usuário mostrou `CHOIR` cadastrada diretamente com o seletor vazio. O painel passou a reconhecer os WAVs nessa pasta e a recuperar o cadastro anterior após a leitura. No Chrome com os 12 WAVs do coral, o teste confirmou sinal na saída e os quatro timbres ao voltar à biblioteca principal. Evidência local em `.local/validation/mellotron-selection-ux/choir-folder.png`.
+
 Atualizado em 2026-11-17. Referência inicial: `97ab4ecb4b12521aaac8db7c1e990d83db16d2fc` (main local). Branch de planejamento e investigação: `docs/studio-waves-plan`.
 
 ## Integração e encerramento Git — 17/11/2026

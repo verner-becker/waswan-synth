@@ -13,6 +13,17 @@ function rehearsal(index){
   }
   return {pcm,root:60};
 }
+export async function scanTapeFolder(folder){
+  const names=[];
+  let hasWav=false;
+  for await(const entry of folder.values()){
+    if(entry.kind==='directory')names.push(entry.name);
+    else if(entry.kind==='file'&&entry.name.toLowerCase().endsWith('.wav'))hasWav=true;
+  }
+  const direct=hasWav&&!names.length;
+  return {direct,names:direct?[folder.name]:names.sort()};
+}
+
 async function entries(dir){
   const result=[];
   for await(const entry of dir.values()){
@@ -27,7 +38,7 @@ async function entries(dir){
   if(!result.length)throw Error('No WAVs in '+dir.name);
   return result.sort((a,b)=>a.root-b.root);
 }
-export async function preparePair(folder,banks){
+export async function preparePair(folder,banks,direct=false){
   const regions=[],signature=[];
   let frames=0;
   for(let bank=0;bank<2;bank++){
@@ -37,7 +48,7 @@ export async function preparePair(folder,banks){
       signature.push(...signature.map(([,label,root,hash])=>[1,label,root,hash]));
       break;
     }
-    const files=folder?await entries(await folder.getDirectoryHandle(name)):[{root:60}];
+    const files=folder?await entries(direct?folder:await folder.getDirectoryHandle(name)):[{root:60}];
     if(regions.length+files.length>maxRegions)throw Error('Use up to 48 regions across both banks.');
     for(const {root,entry} of files){
       const {pcm}=folder?await readSample(await entry.getFile(),root):rehearsal(rehearsalBanks.indexOf(name));
