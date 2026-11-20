@@ -65,7 +65,7 @@ export class ToneEditor {
     create.hidden=importDx7.hidden=!globalThis.showDirectoryPicker;
     create.setAttribute('aria-haspopup','dialog');
     importDx7.setAttribute('aria-haspopup','dialog');
-    const bar=el('div','ww-editor-toolbar');bar.append(this.heading,this.sources,programs,create,importDx7);this.node.append(bar);
+    this.toolbar=el('div','ww-editor-toolbar');this.toolbar.append(this.heading,this.sources,programs,create,importDx7);this.node.append(this.toolbar);
     this.status=el('p','ww-muted');this.status.setAttribute('role','status');this.node.append(this.status);
     this.unavailable=el('p','ww-muted');this.node.append(this.unavailable);
     this.nav=el('nav','ww-editor-tabs');this.nav.setAttribute('aria-label','Tone parameter groups');this.node.append(this.nav);

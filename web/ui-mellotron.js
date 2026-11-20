@@ -16,7 +16,9 @@ export class MellotronPanel {
       const select=el('select');this.field(name,select);return select;
     });
     this.populate(rehearsalBanks,rehearsalBanks);
-    this.fields.append(action('Open tape folder',()=>this.run(()=>this.choose())),
+    const openFolder=action('Open tape folder',()=>this.run(()=>this.choose()));
+    openFolder.disabled=!globalThis.showDirectoryPicker;
+    this.fields.append(openFolder,
       action('Use rehearsal banks',()=>this.run(()=>{this.folder=null;this.populate(rehearsalBanks,rehearsalBanks);})),
       action('Load both banks',()=>this.run(()=>this.load())));
     this.switch=action('Use Synth on Part A',()=>this.run(async()=>{
@@ -37,32 +39,66 @@ export class MellotronPanel {
       });
     }
     this.node.append(this.status);this.update();
+    this.initialized=this.restoreLibrary();
   }
   field(name,input,parent=this.fields){const label=el('label','',name);input.setAttribute('aria-label',name);label.append(input);parent.append(label);}
   populate(names,selected){
     this.selects.forEach((s,i)=>{s.replaceChildren(...names.map(n=>new Option(n,n)));s.value=names.includes(selected?.[i])?selected[i]:names[Math.min(i,names.length-1)];});
   }
-  async ready(){
-    this.loaded=null;this.live=false;this.fields.disabled=true;
+  async restoreLibrary(){
     try{
-      const saved=await librarySetting(undefined,'mellotron');
-      if(saved){
-        this.folder=saved.folder;this.populate(saved.names,saved.banks);
-        if(validTapeSettings(saved.settings))this.settings=saved.settings;
+      const [saved,registered]=await Promise.all([librarySetting(undefined,'mellotron'),librarySetting(undefined,'tapeLibrary')]);
+      this.library=registered;
+      if(!registered&&saved?.folder){
+        this.library={folder:saved.folder,names:saved.names,id:crypto.randomUUID()};
+        await librarySetting(this.library,'tapeLibrary');
+      }
+      if(validTapeSettings(saved?.settings))this.settings=saved.settings;
+      const rehearsalSelected=!saved?.folder&&this.library?.id&&saved?.libraryId===this.library.id;
+      if(this.library&&!rehearsalSelected){
+        const {folder,names}=this.library;
+        const same=saved?.folder&&await folder.isSameEntry(saved.folder);
+        this.folder=folder;this.populate(names,same?saved.banks:[]);
+        if(await folder.queryPermission({mode:'read'})==='granted'){
+          const current=await this.bankNames(folder);
+          this.library.names=current;this.populate(current,same?saved.banks:[]);
+        }
+        this.status.textContent='Load both banks to reopen your last selection.';
+      }else if(saved){
+        this.populate(rehearsalBanks,saved.banks);
         this.status.textContent='Load both banks to reopen your last selection.';
       }else this.status.textContent='Rehearsal banks are ready to load.';
     }catch(e){this.status.textContent=e.message;}
-    this.fields.disabled=false;this.update();
+    this.update();
+  }
+  async ready(){
+    await this.initialized;
+    this.loaded=null;this.live=false;this.audioReady=true;
+    this.fields.disabled=!!this.busy;this.update();
+  }
+  async bankNames(folder){
+    const names=[];
+    for await(const handle of folder.values())if(handle.kind==='directory')names.push(handle.name);
+    return names.sort();
+  }
+  async configureLibrary(folder){
+    const names=await this.bankNames(folder);
+    const selected=this.folder&&await folder.isSameEntry(this.folder)?this.selects.map(s=>s.value):[];
+    const library={folder,names,id:crypto.randomUUID()};
+    this.library=library;this.folder=folder;this.populate(names,selected);
+    try{await librarySetting(library,'tapeLibrary');}
+    catch{throw Error('Tapes available for this session. The browser could not remember the folder.');}
+    this.status.textContent=names.length?'Select banks A and B, then load.':'Add bank subfolders, then refresh the folder in Instrument setup.';
   }
   async choose(){
     const folder=await showDirectoryPicker({mode:'read',id:'waswan-tapes'});
-    const names=[];for await(const handle of folder.values())if(handle.kind==='directory')names.push(handle.name);
-    if(!names.length)throw Error('Choose a folder containing bank subfolders.');
-    this.folder=folder;this.populate(names.sort(),[]);this.status.textContent='Select banks A and B, then load.';
+    await this.configureLibrary(folder);
   }
   async load(){
     if(this.folder && await this.folder.requestPermission({mode:'read'})!=='granted')throw Error('Allow folder access or choose the folder again.');
-    const banks=this.selects.map(s=>s.value),{regions,id}=await preparePair(this.folder,banks);
+    const banks=this.selects.map(s=>s.value);
+    if(banks.some(name=>!name))throw Error('Add bank subfolders, then refresh the folder in Instrument setup.');
+    const {regions,id}=await preparePair(this.folder,banks);
     const tape={banks,id,settings:{...this.settings}};
     const token=await this.request('daw-tape-begin',{regions:regions.map(({bank,root,pcm})=>({bank,root,frames:pcm.length}))});
     let offset=0;
@@ -72,7 +108,7 @@ export class MellotronPanel {
       offset+=Math.min(32768,pcm.length-i);
     }
     await this.request('daw-tape-commit',{token,tape});
-    this.loaded={id,banks,folder:this.folder,names:[...this.selects[0].options].map(o=>o.value)};
+    this.loaded={id,banks,folder:this.folder,libraryId:this.library?.id,names:[...this.selects[0].options].map(o=>o.value)};
     this.live=true;this.update();await this.save();
   }
   snapshot(){return this.loaded?{id:this.loaded.id,banks:[...this.loaded.banks],settings:{...this.settings}}:null;}
@@ -85,10 +121,18 @@ export class MellotronPanel {
       if(input.type==='checkbox')input.checked=!!this.settings[key];else input.value=this.settings[key];
     }
   }
-  async run(fn){
-    if(this.fields.disabled)return;
-    this.fields.disabled=true;
-    try{await fn();}catch(e){this.update();if(e.name!=='AbortError')this.status.textContent=e.message;}
-    finally{this.fields.disabled=false;}
+  async run(fn,propagate=false){
+    if(this.busy){
+      if(propagate)throw Error('Finish the current tape operation first.');
+      return;
+    }
+    this.busy=true;this.fields.disabled=true;
+    try{await fn();}
+    catch(e){
+      this.update();
+      if(propagate)throw e;
+      if(e.name!=='AbortError')this.status.textContent=e.message;
+    }
+    finally{this.busy=false;this.fields.disabled=!this.audioReady;}
   }
 }

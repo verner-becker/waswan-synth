@@ -10,6 +10,7 @@ import {StudioWorkspace} from './ui-studio.js';
 import {SequenceWorkspace} from './ui-studio-sequence.js';
 import {DawWorkspace} from './ui-daw.js';
 import {DawTab} from './ui-daw-tab.js';
+import {LibraryFolders} from './ui-library-folders.js';
 import {InstrumentSetup} from './ui-instrument-setup.js';
 import {OutputMonitor} from './ui-output-monitor.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
@@ -39,6 +40,8 @@ class Foundation {
     this.views=new Map();this.buildPerformance();this.studio=new StudioWorkspace(bridge,()=>this.selectWorkspace('seq'));this.addView('studio',this.studio.node);this.sequence=new SequenceWorkspace(bridge,this.studio.recorder);this.addView('seq',this.sequence.node);
     this.toneEditor=new ToneEditor(m=>this.bridge.send(m),()=>{if(this.workspace==='tones')this.focusMidiContext();},this.banks);this.addView('tones',this.toneEditor.node);
     this.instrumentSetup=new InstrumentSetup(bridge,b=>this.hardware(b));this.addView('instrument',this.instrumentSetup.node);
+    this.libraryFolders=new LibraryFolders(this.banks,this.tapes);
+    this.instrumentSetup.fields.before(this.libraryFolders.node);
     this.buildDiagnostics();this.buildSettings();this.buildDock();this.shell.append(this.performanceReadouts);this.buildMidiDialog();
     this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'),()=>this.dock.querySelector('#keys .key')?.focus());
     this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
@@ -293,6 +296,11 @@ class Foundation {
     if(this.dock)this.dock.hidden=id==='daw'&&!this.dawKeyboardVisible;
     this.performanceReadouts.hidden=id!=='perf';
     for(const [key,node] of this.views)node.hidden=key!==id;
+    if(id==='perf'||id==='tones'){
+      const parent=id==='tones'?this.toneEditor.toolbar:this.views.get(id);
+      if(this.tapes.node.parentNode!==parent)parent.append(this.tapes.node);
+    }
+    if(id==='instrument')this.libraryFolders.refresh();
     if(id==='instrument'&&this.frame)this.instrumentSetup.update(this.frame,this.running);
     for(const button of this.workspaceButtons)button.setAttribute('aria-pressed',String(button.dataset.workspace===id));
     document.title=`WASWAN Synth · ${WORKSPACES.find(w=>w[0]===id)[2]}`;

@@ -70,7 +70,7 @@ try{
   await dialog.getByLabel('Tone name').fill('FM TEST');
   await dialog.getByLabel('Destination program').selectOption({value:'99'});
   await dialog.getByRole('button',{name:'Confirm overwrite'}).click();
-  await page.waitForFunction(()=>document.querySelector('.ww-tone-editor [role="status"]').textContent.includes('browser storage updated'));
+  await page.waitForFunction(()=>document.querySelector('.ww-tone-editor > [role="status"]').textContent.includes('browser storage updated'));
   await page.reload();await startSynth(page);await page.locator('[data-workspace="tones"]').click();
   await page.waitForFunction(()=>audit.frame.editor.available);
   await page.getByLabel('Tone program').selectOption({value:'99'});

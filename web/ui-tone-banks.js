@@ -138,7 +138,7 @@ export class ToneBanks {
     document.body.append(this.dialog);
     this.renderTones();
     this.setMode('browse');
-    if(globalThis.showDirectoryPicker)this.restoreLibrary();
+    this.initialized=globalThis.showDirectoryPicker?this.restoreLibrary():Promise.resolve();
   }
   async restoreLibrary(){
     this.restoring=true;
@@ -146,6 +146,10 @@ export class ToneBanks {
     try{
       this.library=await librarySetting();
       this.renderBanks();
+      if(this.library&&await this.library.root.queryPermission({mode:'read'})==='granted'){
+        this.library.banks=await libraryBanks(this.library.root);
+        this.renderBanks();
+      }
     }catch{this.feedback.textContent='Chrome could not read the saved library folder.';}
     finally{this.restoring=false;this.updateButtons();}
   }
@@ -189,18 +193,22 @@ export class ToneBanks {
     }
     this.renderBanks();
   }
-  async configureLibrary(root,preferred,selectedFile){
+  async configureLibrary(root,preferred,selectedFile,requireStorage=false){
     const banks=await libraryBanks(root);
     const bank=banks.find(item=>item.key===preferred)||banks[0];
     if(preferred!=='internal'){
       const directory=bank.key==='root'?root:await root.getDirectoryHandle(bank.name);
       await this.scan(directory,selectedFile);
       this.bankKey=bank.key;
-    }
+    }else this.folder.textContent='Library “'+root.name+'” · Select a folder bank.';
     this.library={root,banks};
     this.renderBanks();
     try{await librarySetting(this.library);}
-    catch{this.report('Library available for this session. Chrome could not remember the folder.');}
+    catch{
+      const message='Library available for this session. Chrome could not remember the folder.';
+      if(requireStorage)throw Error(message);
+      this.report(message);
+    }
   }
   report(message){
     (this.dialog.open?this.status:this.feedback).textContent=message;
@@ -241,15 +249,21 @@ export class ToneBanks {
     // fingerprints the applied patch, including FM and the part's shared effects.
     return instrument.edited&&(loaded?.scope!==instrument.scope||loaded?.token!==instrument.programToken);
   }
-  async run(task){
-    if(this.busy)return;
+  async run(task,propagate=false){
+    if(this.busy){
+      if(propagate)throw Error('Finish the current tone bank operation first.');
+      return;
+    }
     this.busy=true;
     this.updateButtons();
     this.status.textContent='';
     this.feedback.textContent='';
     let focusTarget;
     try{focusTarget=await task();}
-    catch(error){if(error.name!=='AbortError')this.report(error.name==='NotFoundError'?'Bank folder missing. Refresh banks or choose the library folder again.':error.message);}
+    catch(error){
+      if(propagate)throw error;
+      if(error.name!=='AbortError')this.report(error.name==='NotFoundError'?'Bank folder missing. Refresh banks or choose the library folder again.':error.message);
+    }
     finally{this.busy=false;this.updateButtons();}
     if(this.dialog.open)focusTarget?.focus();
   }

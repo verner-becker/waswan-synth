@@ -136,7 +136,7 @@
 .ww-automation-curve {display:block;width:100%;height:180px;cursor:crosshair;border:1px solid var(--ww-border);}
 .ww-studio-actions input[type="number"] {width:72px;font:inherit;background:var(--ww-bg);color:var(--ww-text);border:1px solid var(--ww-border);padding:6px;border-radius:6px;}
 .ww-editor-toolbar {display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-.ww-editor-toolbar p {flex:1;min-width:160px;overflow-wrap:anywhere;}
+.ww-editor-toolbar>p {flex:1;min-width:160px;overflow-wrap:anywhere;}
 .ww-editor-tabs {display:flex;gap:6px;flex-wrap:wrap;margin:16px 0;}
 .ww-editor-tabs button {font-size:12px;}
 .ww-editor-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;}
@@ -357,7 +357,7 @@
 .ww-osc-editing>.ww-section-header {float:left;margin:0 16px 0 0;padding:0;height:36px;align-items:center;border:0;}
 .ww-osc-editing>.ww-section-header .ww-muted,.ww-osc-editing>#ww-tones-help {display:none;}
 .ww-osc-editing .ww-editor-toolbar {min-height:36px;}
-.ww-osc-editing .ww-editor-toolbar p {margin:0;color:var(--ww-muted);}
+.ww-osc-editing .ww-editor-toolbar>p {margin:0;color:var(--ww-muted);}
 .ww-tone-editor>p:empty {display:none;}
 .ww-osc-editing .ww-editor-tabs {clear:both;margin:8px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--ww-border);}
 .ww-osc-editing .ww-editor-tabs button {min-height:30px;padding:4px 10px;}
@@ -464,3 +464,14 @@
 .ww-tapes button { margin: .25rem; }
 .ww-tape-controls { display: grid; grid-template-columns: repeat(auto-fit,minmax(8rem,1fr)); }
 .ww-tape-controls input { min-width: 0; max-width: 8rem; }
+.ww-library-folders {margin-bottom:12px}
+.ww-library-folders fieldset {min-width:0;margin:8px 0;padding:6px 10px 10px;border:1px solid var(--ww-border)}
+.ww-library-folders [role=status] {display:block;overflow-wrap:anywhere}
+
+.ww-editor-toolbar>.ww-tapes {margin:0;padding:4px 8px;font-size:12px}
+.ww-editor-toolbar>.ww-tapes[open] {flex-basis:100%}
+@media(min-width:961px) and (max-width:1150px){
+  .ww-editor-toolbar {gap:6px}
+  .ww-editor-toolbar>p {min-width:115px}
+  .ww-editor-toolbar>button,.ww-editor-toolbar .ww-program-actions button {font-size:12px;padding-inline:8px}
+}
