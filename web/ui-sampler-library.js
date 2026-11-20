@@ -61,6 +61,10 @@ export class SamplerLibraryBrowser {
       if(entry.kind==='directory')row.append(this.studio.button(label,()=>this.browse(entry.path)));
       else if(['sample','instrument','kit'].includes(entry.kind))row.append(this.studio.button(label,()=>this.studio.openEntry(entry)));
       else row.append(el('span','ww-muted',label));
+      if(entry.kind==='sample'){
+        const add=this.studio.button('Add to builder',()=>this.studio.builder.fromLibrary(entry.path));
+        add.setAttribute('aria-label','Add '+label+' to builder');row.append(add);
+      }
       row.append(el('small','ww-muted',entry.diagnostic?.message||(entry.kind==='directory'?'Folder':entry.kind+(entry.revision?' · r'+entry.revision:''))));
       this.list.append(row);
     }

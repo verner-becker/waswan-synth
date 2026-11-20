@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+.ww-sampler-mapping {min-width:0}
+.ww-sampler-keymap {display:block;width:100%;height:clamp(200px,32vh,400px);background:#0c161b;border-radius:5px;touch-action:none}
+.ww-sampler-map-controls,.ww-sampler-map-inspector {border:0;padding:0;min-width:0;margin:8px 0}
+.ww-sampler-map-controls select {max-width:min(21rem,100%)}
+.ww-sampler-map-inspector legend {color:var(--ww-muted);font-size:13px}
+.ww-sampler-map-fades {margin:8px 0;}
+.ww-sampler-map-probe ul {max-height:11rem;overflow:auto;overflow-wrap:anywhere;}
+.ww-sampler-map-fades input[type=checkbox] {min-height:auto;align-self:start;}

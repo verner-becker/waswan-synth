@@ -9,6 +9,10 @@ import {createSamplerAudition} from './ui-sampler-audition.js';
 import {SamplerHistory} from './ui-sampler-history.js';
 import {createProcessingStack} from './ui-sampler-processing.js';
 import {createSamplerWaveform} from './ui-sampler-waveform.js';
+import {validateInstrument} from './sampler-instrument.js';
+import {SamplerBuilder} from './ui-sampler-builder.js';
+import {createSamplerMapping} from './ui-sampler-mapping.js';
+import {createSamplerGroupInspector} from './ui-sampler-groups.js';
 import {SamplerLibraryBrowser} from './ui-sampler-library.js';
 
 const preferenceKey='waswan.sampler.studio.sections.v1';
@@ -79,7 +83,7 @@ export class SamplerStudio {
     this.route=el('strong','ww-sampler-route',routeIdle);
     const versionTools=el('div','ww-sampler-actions');versionTools.append(this.save,this.render,this.continueRender,this.promote);
     const playback=el('div','ww-sampler-actions');
-    const source=el('label','','Keyboard source ');this.keyboardSource=el('select');
+    const source=el('label','','Keyboard source ');this.keyboardSource=el('select');this.keyboardSource.setAttribute('aria-label','Keyboard source');
     this.keyboardSource.append(new Option('Working Copy','working'),new Option('Official revision','official'));
     source.append(this.keyboardSource);
     this.assignTrack=this.button('Assign Official to selected DAW track',async()=>{
@@ -91,7 +95,14 @@ export class SamplerStudio {
     sample.append(this.history.versions,this.history.latest);
     versions.append(this.versionLabel,this.identity,versionTools,playback,this.history.node);
     this.main.append(sample,processing,versions);
-    for(const title of ['Mapping Editor','Instrument Builder','Sound Fusion','Advanced Tools']){
+    const mapping=this.section('Mapping Editor',false),builder=this.section('Instrument Builder',false);
+    const controls={change:(model,options)=>this.changeInstrument(model,options),
+      select:id=>this.selectRegion(id),run:fn=>this.run(fn)};
+    this.map=createSamplerMapping(controls);this.groups=createSamplerGroupInspector(controls);
+    this.builder=new SamplerBuilder(this);this.builder.paint();
+    mapping.append(this.map.node);builder.append(this.builder.node,this.groups.node);
+    this.main.append(mapping,builder);
+    for(const title of ['Sound Fusion','Advanced Tools']){
       const section=this.section(title,false);section.firstElementChild.append(el('small','ww-muted','Planned'));this.main.append(section);
     }
     this.sync();
@@ -136,7 +147,7 @@ export class SamplerStudio {
       try{library=initialize?await initializeLibrary(root,{name:root.name}):await readLibrary(root);}
       catch(error){if(error.code!=='missing-library')throw error;}
     }
-    if(!this.root||!await this.root.isSameEntry(root)){this.wave.clear();this.originalFile=null;this.draft=null;this.file=null;this.dirty=false;this.browser.reset();}
+    if(!this.root||!await this.root.isSameEntry(root)){this.wave.clear();this.builder.reset();this.originalFile=null;this.draft=null;this.file=null;this.dirty=false;this.browser.reset();}
     this.root=root;this.library=library;await this.browser.refresh();
     this.status.textContent=library?'Samples folder ready · '+root.name:allowed?'Use Allow folder access to initialize this Samples folder.':'Allow read and write access to your Samples folder.';
   }
@@ -213,7 +224,7 @@ export class SamplerStudio {
       draft=await workingFromRef(this.root,{type:'sampler',libraryId:this.library.id,instrumentId:entry.id,revision:entry.revision,path:entry.path});
     }
     await this.adopt(draft,await readSampleFile(this.root,draft.source));
-    this.sections.get('Sample Editor').open=true;
+    this.sections.get(draft.instrument?'Mapping Editor':'Sample Editor').open=true;
     if(entry.kind!=='sample')this.keyboardSource.value='official';
     this.status.textContent=entry.kind==='sample'?'Sample open · '+draft.name:'Official r'+entry.revision+' opened as a new Working Copy.';
   }
@@ -224,6 +235,22 @@ export class SamplerStudio {
     this.status.textContent='Working Copy reopened · '+draft.name;
   }
   clearSuggestion(){this.suggestion=null;this.pitchInfo.textContent='';}
+  selectRegion(id){
+    if(!this.draft?.instrument?.regions.some(r=>r.id===id))return;
+    this.regionId=id;this.syncMap();
+  }
+  changeInstrument(model,{regionId=this.regionId}={}){
+    const checked=validateInstrument(model);
+    this.regionId=regionId;this.change({instrument:checked});
+  }
+  syncMap(){
+    const model=this.draft?.instrument;
+    if(!model?.regions.some(r=>r.id===this.regionId))this.regionId=model?.regions[0]?.id??null;
+    const mapping=this.sections.get('Mapping Editor');
+    if(model&&this.main.firstElementChild!==mapping)this.main.prepend(mapping);
+    else if(!model&&this.main.firstElementChild===mapping)this.sections.get('Instrument Builder').before(mapping);
+    this.builder.sync();this.map.sync(model??null,this.regionId);this.groups.sync(model??null,this.regionId);
+  }
   change(changes){
     const next=updateWorking(this.draft,changes);
     if(changes.selection||changes.recipe)this.clearSuggestion();
@@ -250,7 +277,7 @@ export class SamplerStudio {
     await this.browser.page();
   }
   async promoteDraft(){
-    const draft=this.draft,path=draft.baseRef?.path||'Instruments/'+draft.name;
+    const draft=this.draft,path=draft.baseRef?.path||(draft.instrument?.kind==='kit'?'Kits/':'Instruments/')+draft.name;
     this.status.textContent='Validating and preparing Official revision…';
     const ref=await promoteWorking(this.root,draft,{path,player:this.player});
     this.draft=updateWorking(draft,{baseRef:ref});this.dirty=true;
@@ -281,7 +308,7 @@ export class SamplerStudio {
     this.onRouteChange?.(this.route.textContent);
   }
   sync(){
-    const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);
+    const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);this.syncMap();
     this.waveMode.disabled=!d;this.waveMode.value=this.displayMode||'source';
     this.continueRender.disabled=!d?.rendered;
     this.importButton.disabled=!this.library;
