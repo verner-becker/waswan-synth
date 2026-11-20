@@ -61,6 +61,13 @@ export class SamplerLibraryBrowser {
       if(entry.kind==='directory')row.append(this.studio.button(label,()=>this.browse(entry.path)));
       else if(['sample','instrument','kit'].includes(entry.kind))row.append(this.studio.button(label,()=>this.studio.openEntry(entry)));
       else row.append(el('span','ww-muted',label));
+      if(['instrument','kit'].includes(entry.kind)){
+        const add=this.studio.button('Add to Fusion',async()=>{
+          await this.studio.fusion.addRef({type:'sampler',libraryId:this.studio.library.id,instrumentId:entry.id,revision:entry.revision,path:entry.path});
+          this.studio.sections.get('Sound Fusion').open=true;
+        });
+        add.setAttribute('aria-label','Add '+label+' to Fusion');row.append(add);
+      }
       if(entry.kind==='sample'){
         const add=this.studio.button('Add to builder',()=>this.studio.builder.fromLibrary(entry.path));
         add.setAttribute('aria-label','Add '+label+' to builder');row.append(add);

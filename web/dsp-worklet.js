@@ -40,8 +40,13 @@ class MonitoredOberVave extends OberVave {
      if(this.tapes?.x!==x)this.tapes=new TapeRuntime(x);
      if(this.samplers?.x!==x)this.samplers=new SamplerRuntime(x);
      let result;
-     if((this.dawExport||m.exportToken)&&m.t!=='daw-export-open'&&
-       (m.exportToken!==this.dawExport?.token||!['daw-export-close','daw-state-request','daw-apply','daw-plan-begin','daw-plan-append','daw-start','daw-stop'].includes(m.t)))throw Error('Audio export has exclusive use of the instrument');
+     if((this.dawExport||m.exportToken)&&m.t!=='daw-export-open'){
+      const rendering=['daw-plan-begin','daw-plan-append','daw-start','daw-stop'];
+      const monitoring=['daw-live-open','daw-live-close','daw-live-note','daw-live-pedal','daw-live-stop-part'];
+      const allowed=['daw-export-close','daw-state-request','daw-apply'].includes(m.t)||
+        (this.dawExport?.fusionMonitor?m.token===m.exportToken&&monitoring.includes(m.t):rendering.includes(m.t));
+      if(!this.dawExport||m.exportToken!==this.dawExport.token||!allowed)throw Error('Audio export has exclusive use of the instrument');
+     }
      if(m.t==='daw-sampler-patch'){
       if(!x.waswan_mel_patch?.())throw Error('Sampler host unavailable');
       const patch=toneBytes(x,0,true);
@@ -65,10 +70,13 @@ class MonitoredOberVave extends OberVave {
       result=this.tapes.command(m);
      }else if(m.t==='daw-export-open'){
       if(typeof m.exportToken!=='string'||!/^[\w-]{1,80}$/.test(m.exportToken)||this.dawExport||this.sequence?.active||this.daw?.active||this.dawLiveSession||this.dawPreview||!x.waswan_daw_export_open())throw Error('Stop other transports and inputs, release keys and sustain, and let the instrument fall silent before exporting');
-      this.dawExport={tapes:this.tapes.routes,samplers:this.samplers.saveSequence(),token:m.exportToken,project:this.dawProject,observed:this.dawObserved,observedToken:this.dawObservedToken,outputs:this.dawOutputs,parts:this.dawParts};
+      this.dawExport={fusionMonitor:m.fusionMonitor===true,tapes:this.tapes.routes,samplers:this.samplers.saveSequence(),token:m.exportToken,project:this.dawProject,observed:this.dawObserved,observedToken:this.dawObservedToken,outputs:this.dawOutputs,parts:this.dawParts};
       this.samplers.applySlots(new Map());
       this.tapes.apply(new Map());audioTransport.exportToken=m.exportToken;result={opened:true};
      }else if(m.t==='daw-export-close'){
+      if(this.dawExport.fusionMonitor&&this.dawLiveSession?.token===this.dawExport.token){
+       x.waswan_daw_live_stop(0xffffffff,1);this.dawLiveSession=null;audioTransport.liveSession=null;
+      }
       this.daw?.stop('export-closed');this.dawPending=null;
       Object.assign(audioTransport,{playing:false,recording:false,planId:null,exportToken:null,exportPlan:null});
       x.waswan_daw_export_close();const previous=this.dawExport;this.tapes.apply(previous.tapes);this.samplers.restoreSequence(previous.samplers);this.dawExport=null;

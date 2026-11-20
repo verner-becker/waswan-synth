@@ -10,6 +10,7 @@ import {SamplerHistory} from './ui-sampler-history.js';
 import {createProcessingStack} from './ui-sampler-processing.js';
 import {createSamplerWaveform} from './ui-sampler-waveform.js';
 import {validateInstrument} from './sampler-instrument.js';
+import {SamplerFusion} from './ui-sampler-fusion.js';
 import {SamplerBuilder} from './ui-sampler-builder.js';
 import {createSamplerMapping} from './ui-sampler-mapping.js';
 import {createSamplerGroupInspector} from './ui-sampler-groups.js';
@@ -28,7 +29,7 @@ function field(parent,label,type,options={}){
 }
 
 export class SamplerStudio {
-  constructor({bridge,player,liveConflict,assignOfficial}) {
+  constructor({bridge,player,daw,liveConflict,assignOfficial}) {
     Object.assign(this,{bridge,player,liveConflict,assignOfficial});
     this.prefs=readPreferences();this.sections=new Map();
     this.node=Panel('Sampler Studio');this.node.classList.add('ww-sampler-studio');
@@ -102,7 +103,9 @@ export class SamplerStudio {
     this.builder=new SamplerBuilder(this);this.builder.paint();
     mapping.append(this.map.node);builder.append(this.builder.node,this.groups.node);
     this.main.append(mapping,builder);
-    for(const title of ['Sound Fusion','Advanced Tools']){
+    const fusion=this.section('Sound Fusion',false);this.fusion=new SamplerFusion(this,daw);
+    fusion.append(this.fusion.node);this.main.append(fusion);
+    for(const title of ['Advanced Tools']){
       const section=this.section(title,false);section.firstElementChild.append(el('small','ww-muted','Planned'));this.main.append(section);
     }
     this.sync();
@@ -116,16 +119,19 @@ export class SamplerStudio {
     this.sections.set(title,box);return box;
   }
   focus(){this.heading.focus({preventScroll:true});}
-  async run(fn) {
+  async run(fn,activePanel) {
     if(this.busy)return;
-    this.busy=true;this.body.disabled=true;this.body.inert=true;this.node.setAttribute('aria-busy','true');
+    this.busy=true;this.body.disabled=this.body.inert=!activePanel;
+    if(activePanel)for(const panel of this.sections.values())panel.inert=!panel.contains(activePanel);
+    this.node.setAttribute('aria-busy','true');
     try{
       const result=await fn();
       if(this.displayMode==='working'&&this.resultStale)await this.showWave('working');
       return result;
     }
     catch(error){if(error.name!=='AbortError')this.status.textContent=error.message||String(error);}
-    finally{this.busy=false;this.body.disabled=false;this.body.inert=false;this.node.removeAttribute('aria-busy');this.sync();}
+    finally{if(activePanel)for(const panel of this.sections.values())panel.inert=false;
+      this.busy=false;this.body.disabled=false;this.body.inert=false;this.node.removeAttribute('aria-busy');this.sync();}
   }
   activate(){
     if(this.busy)return;
@@ -147,7 +153,9 @@ export class SamplerStudio {
       try{library=initialize?await initializeLibrary(root,{name:root.name}):await readLibrary(root);}
       catch(error){if(error.code!=='missing-library')throw error;}
     }
-    if(!this.root||!await this.root.isSameEntry(root)){this.wave.clear();this.builder.reset();this.originalFile=null;this.draft=null;this.file=null;this.dirty=false;this.browser.reset();}
+    if(!this.root||!await this.root.isSameEntry(root)){
+      if(this.fusion.lease)throw Error('Release the Fusion keyboard before changing its sample library.');
+      this.fusion.reset();this.wave.clear();this.builder.reset();this.originalFile=null;this.draft=null;this.file=null;this.dirty=false;this.browser.reset();}
     this.root=root;this.library=library;await this.browser.refresh();
     this.status.textContent=library?'Samples folder ready · '+root.name:allowed?'Use Allow folder access to initialize this Samples folder.':'Allow read and write access to your Samples folder.';
   }
@@ -308,7 +316,7 @@ export class SamplerStudio {
     this.onRouteChange?.(this.route.textContent);
   }
   sync(){
-    const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);this.syncMap();
+    const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);this.syncMap();this.fusion.sync();
     this.waveMode.disabled=!d;this.waveMode.value=this.displayMode||'source';
     this.continueRender.disabled=!d?.rendered;
     this.importButton.disabled=!this.library;

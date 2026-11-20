@@ -149,7 +149,7 @@ export class DawPlayer {
     this.exporting=job;
     try{
       await this.graph();await this.context.resume();job.signal.throwIfAborted();
-      await this.requests().request('daw-export-open',{exportToken:job.token});job.opened=true;
+      await this.requests().request('daw-export-open',{exportToken:job.token,fusionMonitor:job.fusionMonitor===true});job.opened=true;
       job.binding={projectId:this.projectId,planId:this.planId,slots:this.slots,boundPatches:this.boundPatches,lastProject:this.lastProject,position:this.position};
       this.speaker.gain.value=0;this.clearEffects();
     }catch(error){if(!job.opened)this.exporting=null;throw error;}
@@ -160,9 +160,19 @@ export class DawPlayer {
       if(!job.opened)return;
       await this.requests().request('daw-export-close',{exportToken:job.token});
     }finally{
-      this.playing=false;this.clearEffects();if(this.speaker)this.speaker.gain.value=1;
-      this.exporting=null;
-      if(job.binding){Object.assign(this,job.binding);if(this.lastProject)this.updateMix(this.lastProject);}
+      this.playing=false;this.clearEffects();
+      try{
+        if(job.binding){
+          Object.assign(this,job.binding);
+          if(job.restoreGraph){
+            if(this.lastProject)await this.configureTracks(this.lastProject,this.slots,this.planId??crypto.randomUUID());
+            else await this.disconnectTracks();
+          }else if(this.lastProject)this.updateMix(this.lastProject);
+        }
+      }finally{
+        if(this.speaker)this.speaker.gain.value=1;
+        this.exporting=null;
+      }
     }
   }
   async prepareLive(controller){

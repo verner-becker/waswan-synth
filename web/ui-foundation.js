@@ -65,7 +65,7 @@ class Foundation {
       this.dock.hidden=!this.dawKeyboardVisible;
       return this.dawKeyboardVisible;
     }});this.addView('daw',this.daw.node);this.settingsPanel.append(this.daw.midiProfiles.panel);bridge.isDawBusy=()=>this.daw.player.playing||this.daw.player.starting||this.daw.recorder.busy||this.daw.recorder.audioTrackId||this.daw.monitor.enabled||this.daw.audition?.busy||this.daw.audioExport?.exporter.busy;bridge.isStudioBusy=()=>!!(this.sequence.playing||this.sequence.starting||this.sequence.rendering||this.sequence.capture||this.studio.recorder.busy||this.studio.recorder.player||this.studio.recorder.playbackPreparing);
-    this.sampler=new SamplerStudio({bridge,player:this.daw.player,assignOfficial:prepare=>this.daw.assignSampler(prepare),liveConflict:()=>{
+    this.sampler=new SamplerStudio({bridge,player:this.daw.player,daw:this.daw,assignOfficial:prepare=>this.daw.assignSampler(prepare),liveConflict:()=>{
       if(this.daw.monitor.enabled&&this.daw.monitor.target())return 'DAW input monitoring owns the keyboard. Release the DAW input before assigning Part A.';
       if(this.daw.audioExport.exporter.busy)return 'Finish the DAW export before changing the keyboard route.';
       if(this.tapes.live)return 'Release the Mellotron in Performance before assigning Part A.';

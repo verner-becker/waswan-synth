@@ -59,6 +59,19 @@ assert s.count(focus_anchor) == 1
 s = s.replace(focus_anchor, "function releaseAll(){midi.release();releaseBrowserKeys();}\nfunction releaseBrowserKeys(){")
 s = s.replace("window.addEventListener('blur',releaseAll)", "window.addEventListener('blur',releaseBrowserKeys)")
 s = s.replace("if(document.hidden)releaseAll()", "if(document.hidden)releaseBrowserKeys()")
+# Keep the existing keybed, click, touch and QWERTY handlers. During an
+# explicitly armed Fusion listen, their owners feed the reversible live lease.
+screen_keys = "hold(el,()=>send({t:'key',k,down:true}),()=>send({t:'key',k,down:false}))"
+assert s.count(screen_keys) == 1
+s = s.replace(screen_keys, "hold(el,()=>performanceKey('screen',k,true),()=>performanceKey('screen',k,false))")
+for down in ('true','false'):
+    command = "send({t:'key',k,down:" + down + "})"
+    assert s.count(command) == 1
+    s = s.replace(command, "performanceKey('computer',k," + down + ")")
+s = s.replace("function releaseBrowserKeys(){", """function performanceKey(owner,k,down){
+  if(!midi.fusionInput?.virtual(owner,k,down,Number($('#velocity').value)))send({t:'key',k,down});
+}
+function releaseBrowserKeys(){midi.fusionInput?.releaseBrowser();""")
 midi_focus_anchor = "isListening:()=>!document.hidden"
 assert s.count(midi_focus_anchor) == 1
 s = s.replace(midi_focus_anchor, "isListening:()=>audioOwner.owned")

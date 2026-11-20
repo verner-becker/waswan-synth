@@ -75,7 +75,17 @@ export class MidiInputController extends OriginalMidiInputController {
       }
     });
     if(entry)entry.disposition=consumed?(contextConsumed?'context-profile':learning?'learned-no-output':entry.commands.length?'mapped-command-sent':'mapped-no-command'):'original-path';
-    const routed=!consumed&&!!this.dawRouter?.route(data,timeStamp);observeDawInput(data,timeStamp,{running,listening,consumed,routed,deviceId:this.input?.id,deviceName:this.input?.name});
+    const fusion=!consumed&&!!this.fusionInput?.routeMidi(data,this.input?.id);
+    if(fusion){
+      const kind=data[0]&240;
+      if(kind===128||kind===144){
+        (this.fusionKeys??=new Set()).add(data[1]);
+        this.refreshFusionKey(data[1]);
+      }else if(kind===176&&(data[1]===120||data[1]===123)){
+        for(const note of this.fusionKeys||[])this.refreshFusionKey(note);
+      }
+    }
+    const routed=fusion||(!consumed&&!!this.dawRouter?.route(data,timeStamp));observeDawInput(data,timeStamp,{running,listening,consumed,routed,deviceId:this.input?.id,deviceName:this.input?.name});
     if(consumed||routed)return;
     if(this.samplerInput){
       const control=midiControl(data);
@@ -83,10 +93,19 @@ export class MidiInputController extends OriginalMidiInputController {
     }
     super.message(data);
   }
+  refreshFusionKey(note) {
+    const held=this.fusionInput.midiDown(note);
+    this.onNote(note,held||[...this.notes.values()].includes(note));
+    if(!held)this.fusionKeys.delete(note);
+  }
   release() {
     this.diagnostic?.reset();
     this.profile?.reset();
     this.contextProfiles?.reset();
+    if(this.fusionInput?.releaseMidi()){
+      for(const note of this.fusionKeys||[])this.refreshFusionKey(note);
+      return;
+    }
     if(this.dawRouter?.protect()){this.dawRouter.release();return;}
     super.release();
   }
