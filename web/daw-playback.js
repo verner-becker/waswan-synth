@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {RATE,PPQ,clipSeconds,clipDuration,validateProject} from './daw-project.js';
 import {midiWindow} from './daw-clip-window.js';
-import {prepareSchedule,timelineFrame,eventPriority} from './daw-transport.js';
+import {prepareSchedule,timelineFrame,eventPriority,heldKey} from './daw-transport.js';
 // Shared only inside one AudioWorkletGlobalScope. The main-thread import has its
 // own copy and cannot change the audio gate through UI state.
 export const audioTransport={playing:false,startFrame:0};
@@ -24,7 +24,7 @@ export function assignSlots(project,capacity=8,reservedPart){
   return slots;
 }
 export function compileProject(project,slots=assignSlots(project),{endFrame}={}){
-  validateProject(project);const events=[],audio=[],base=project.length*60/(project.bpm*PPQ);let duration=base;
+  validateProject(project);const events=[],audio=[],base=project.length*60/(project.bpm*PPQ);let duration=base,noteId=0;
   for(const clip of project.clips){
     const track=project.tracks.find(t=>t.id===clip.trackId),start=clipSeconds(clip,project.bpm),seconds=clipDuration(clip,project.bpm);duration=Math.max(duration,start+seconds);
     // Muting is a mixer operation. Keep schedules alive so unmuting does not
@@ -35,7 +35,12 @@ export function compileProject(project,slots=assignSlots(project),{endFrame}={})
       Math.min(clip.length,Math.ceil((endFrame/RATE-start)*project.bpm*PPQ/60));
     if(length<=0)continue;
     const view=midiWindow({...clip,length},131072-events.length);
-    for(const n of view.notes){const on=Math.round((start+n.start*60/(project.bpm*PPQ))*RATE),off=Math.round((start+(n.start+n.duration)*60/(project.bpm*PPQ))*RATE);events.push({frame:on,part,note:n.pitch,velocity:n.velocity},{frame:Math.max(on+1,off),part,note:n.pitch,velocity:0});}
+    for(const n of view.notes){
+      const on=Math.round((start+n.start*60/(project.bpm*PPQ))*RATE),off=Math.round((start+(n.start+n.duration)*60/(project.bpm*PPQ))*RATE);
+      const note={part,note:n.pitch};
+      if(track.instrument.type==='sampler'){note.noteId=++noteId;note.channel=n.channel??0;}
+      events.push({...note,frame:on,velocity:n.velocity},{...note,frame:Math.max(on+1,off),velocity:0});
+    }
     for(const e of view.events)events.push({frame:Math.round((start+e.tick*60/(project.bpm*PPQ))*RATE),part,type:e.type,value:e.value});
   }
   const length=endFrame??Math.ceil(duration*RATE);if(length<1||length>RATE*1200)throw Error('Playback supports at most 20 minutes');
@@ -49,19 +54,20 @@ export class DawClock {
   start(data,frame){this.startPrepared(prepareSchedule(data,this.capacity),frame);}
   startPrepared(data,frame){
     if(!Number.isSafeInteger(frame)||frame<0)throw Error('Invalid DAW start frame');
-    this.stop('replaced');Object.assign(this,data);this.startFrame=frame;this.index=data.initialIndex;this.pendingChase=data.initial;this.pendingExpression=data.initialExpression;this.bend.fill(0);this.mod.fill(0);this.cycle=0;this.lastNotify=frame;this.active=true;this.position=data.fromFrame;this.notify({playing:true,frame:this.position,startFrame:frame,reason:'started'});
+    this.stop('replaced');Object.assign(this,data);this.samplerChase=data.samplerChase;this.samplerChase?.enter(data.fromFrame);this.startFrame=frame;this.index=data.initialIndex;this.pendingChase=data.initial;this.pendingExpression=data.initialExpression;this.bend.fill(0);this.mod.fill(0);this.cycle=0;this.lastNotify=frame;this.active=true;this.position=data.fromFrame;this.notify({playing:true,frame:this.position,startFrame:frame,reason:'started'});
   }
   stop(reason='user'){if(!this.active)return;this.stopNotes();this.held.clear();this.active=false;this.notify({playing:false,frame:this.position||0,reason});}
   dispatch(until,inclusive,count){
     while(this.index<this.events.length&&(inclusive?this.events[this.index].frame<=until:this.events[this.index].frame<until)){
       if(++count>512){this.stop('clock-event-budget');return count;}
-      const e=this.events[this.index++],key=e.part*128+e.note;
+      const e=this.events[this.index++],key=heldKey(e);
       if(e.type){this[e.type][e.part]=e.value;if(!this.expression(e.part,this.bend[e.part],this.mod[e.part])){this.stop('instrument-unavailable');return count;}}
-      else if(e.velocity){this.held.set(key,(this.held.get(key)||0)+1);if(!this.note(e.part,e.note,e.velocity)){this.stop('instrument-unavailable');return count;}}
-      else if(this.held.has(key)){const n=this.held.get(key)-1;if(n>0)this.held.set(key,n);else{this.held.delete(key);this.note(e.part,e.note,0);}}
+      else if(e.velocity){this.held.set(key,(this.held.get(key)||0)+1);if(!this.playNote(e)){this.stop('instrument-unavailable');return count;}}
+      else if(this.held.has(key)){const n=this.held.get(key)-1;if(n>0)this.held.set(key,n);else{this.held.delete(key);this.playNote(e);}}
     }
     return count;
   }
+  playNote(e){return e.noteId===undefined?this.note(e.part,e.note,e.velocity):this.note(e.part,e.note,e.velocity,e.channel,e.noteId);}
   tick(frame){
     if(!this.active||frame<this.startFrame)return;
     const elapsed=frame-this.startFrame,absolute=this.fromFrame+elapsed,cycle=this.loop&&absolute>=this.loopEnd?1+Math.floor((absolute-this.loopEnd)/(this.loopEnd-this.loopStart)):0;
@@ -73,11 +79,12 @@ export class DawClock {
       // MIDI is quantum/buffer bounded; do not silently drop the right edge.
       dispatched=this.dispatch(this.loopEnd,false,dispatched);if(!this.active)return;
       this.stopNotes();this.held.clear();
+      this.samplerChase?.enter(this.loopStart);
       this.cycle=cycle;this.index=this.loopIndex;this.pendingChase=this.repeated;this.pendingExpression=this.loopExpression;this.bend.fill(0);this.mod.fill(0);
     }
     const relative=timelineFrame({playing:true,startFrame:this.startFrame,fromFrame:this.fromFrame,length:this.length,loop:this.loop,loopStart:this.loopStart,loopEnd:this.loopEnd},frame);this.position=relative;
     if(this.pendingExpression){for(const e of this.pendingExpression){if(++dispatched>512){this.stop('clock-event-budget');return;}this.bend[e.part]=e.bend;this.mod[e.part]=e.mod;if(!this.expression(e.part,e.bend,e.mod)){this.stop('instrument-unavailable');return;}}this.pendingExpression=null;}
-    if(this.pendingChase){for(const n of this.pendingChase){if(++dispatched>512){this.stop('clock-event-budget');return;}this.held.set(n.part*128+n.note,n.count);if(!this.note(n.part,n.note,n.velocity)){this.stop('instrument-unavailable');return;}}this.pendingChase=null;}
+    if(this.pendingChase){for(const n of this.pendingChase){if(++dispatched>512){this.stop('clock-event-budget');return;}this.held.set(heldKey(n),n.count);this.samplerChase?.beforeHeld(n);if(!this.playNote(n)){this.stop('instrument-unavailable');return;}}this.pendingChase=null;this.samplerChase?.afterHeld();}
     this.dispatch(relative,true,dispatched);if(!this.active)return;
     if(frame-this.lastNotify>=1764){this.lastNotify=frame;this.notify({playing:true,frame:relative,cycle:this.cycle,startFrame:this.startFrame});}
   }

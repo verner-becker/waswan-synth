@@ -4,6 +4,13 @@ import {validateEffects} from './daw-fx-catalog.js';
 import {RATE} from './daw-project.js';
 import {compileProject,assignSlots,trackAudible} from './daw-playback.js';
 import {prepareSchedule} from './daw-transport.js';
+import {prepareProjectSamplers} from './sampler.js';
+
+// Two sampler revisions can use identical backing patch bytes.
+export function instrumentBinding(instrument){
+  if(instrument?.type==='sampler')return [...instrument.patch,instrument.libraryId,instrument.instrumentId,instrument.revision];
+  return instrument?.patch;
+}
 class InstrumentRequests {
   constructor(node,reply='daw-reply'){
     this.node=node;this.pending=new Map();
@@ -48,11 +55,16 @@ export class DawPlayer {
   async currentTone(part=0){
     const tape=this.bridge.liveTape?.(part);
     if(tape)return this.tapeInstrument(tape);
-    const state=await this.requests().request('daw-state-request');const patch=state.patches[part];return {patch,type:patch[74]===79&&patch[78]===2?'drumx':patch[0]===4?'super':'analog'};}
+    const state=await this.requests().request('daw-state-request');
+    if(part===0&&state.liveSampler){
+      if(!state.liveSampler.path)throw Error('Publish the preview sample as an instrument before assigning it to a track');
+      return state.liveSampler;
+    }
+    const patch=state.patches[part];return {patch,type:patch[74]===79&&patch[78]===2?'drumx':patch[0]===4?'super':'analog'};}
   invalidateBinding(){this.discardStaleGraph();this.clearEffects();this.projectId=null;this.planId=null;this.slots.clear();this.boundPatches.clear();this.generation++;this.stopSources();this.playing=false;}
   synchronize(controller,changes){
     const project=controller.snapshot();if(this.projectId!==project.id)return 0;const commands=[];
-    for(const change of changes){const id=[...this.slots].find(([,part])=>part===change.part)?.[0],track=project.tracks.find(t=>t.id===id),bound=this.boundPatches.get(id);if(!track?.instrument||track.instrument.type==='mellotron'||!bound)continue;
+    for(const change of changes){const id=[...this.slots].find(([,part])=>part===change.part)?.[0],track=project.tracks.find(t=>t.id===id),bound=this.boundPatches.get(id);if(!track?.instrument||['mellotron','sampler'].includes(track.instrument.type)||!bound)continue;
       const followsLive=track.instrument.patch.length===bound.length&&track.instrument.patch.every((v,i)=>v===bound[i]),changed=change.patch.length!==bound.length||change.patch.some((v,i)=>v!==bound[i]);this.boundPatches.set(id,[...change.patch]);
       if(followsLive&&changed){const patch=change.patch,type=patch[74]===79&&patch[78]===2?'drumx':patch[0]===4?'super':'analog';commands.push({type:'track.update',payload:{id,changes:{instrument:{type,patch:[...patch]}}}});}
     }
@@ -157,9 +169,10 @@ export class DawPlayer {
     if(this.exporting)throw Error('Wait for audio export to finish');
     const project=controller.snapshot(),slots=assignSlots(project);validateEffects(project);await this.graph();await this.context.resume();
     if(this.playing||this.starting){if(this.projectId!==project.id)throw Error('Stop playback before changing the input project');return;}
+    await prepareProjectSamplers(this,project);
     await this.requests().request('daw-stop',{hard:true});const state=await this.requests().request('daw-state-request');this.synchronize(controller,state.patches.map((patch,part)=>({part,patch})));
     const current=controller.snapshot();await this.requests().request('daw-apply',{projectId:project.id,revision:controller.revision,token:state.token,slots:[...slots].map(([id,part])=>({...current.tracks.find(t=>t.id===id).instrument,trackId:id,part}))});
-    this.projectId=project.id;this.slots=slots;this.boundPatches=new Map([...slots].map(([id])=>[id,[...current.tracks.find(t=>t.id===id).instrument.patch]]));this.planId||=crypto.randomUUID();await this.configureTracks(current,slots,this.planId);
+    this.projectId=project.id;this.slots=slots;this.boundPatches=new Map([...slots].map(([id])=>[id,[...instrumentBinding(current.tracks.find(t=>t.id===id).instrument)]]));this.planId||=crypto.randomUUID();await this.configureTracks(current,slots,this.planId);
   }
   async openLive(controller,token){await this.prepareLive(controller);await this.requests().request('daw-live-open',{projectId:controller.snapshot().id,token});this.liveSessionToken=token;for(const track of this.tracks.values())await track.gateRpc.request('live-session',{token});}
   async closeLive(token){if(this.liveSessionToken!==token)return;await this.requests().request('daw-live-close',{token});this.liveSessionToken=null;for(const track of this.tracks.values())track.gate.parameters.get('live').setTargetAtTime(0,this.context.currentTime,.01);}
@@ -201,13 +214,14 @@ export class DawPlayer {
     this.planId=planId;this.position=schedule.fromFrame;if(emit)this.onState({playing:false,preparing:true,frame:schedule.fromFrame});
     try{
       await this.graph();await this.context.resume();await this.buffers(project,controller.assets,token);
+      if(!options.exportToken)await prepareProjectSamplers(this,project,{signal:options.signal});
       check();if(controller.revision!==revision)throw Error('Project changed during playback preparation');
       const rpc=this.requests();
       const request=(type,data)=>rpc.request(type,{...data,exportToken:options.exportToken});
       await request('daw-stop',{hard:true});const state=await request('daw-state-request');
       if(emit)this.synchronize(controller,state.patches.map((patch,part)=>({part,patch})));if(controller.revision!==revision)throw Error('Project or live instrument changed during preparation; press Play again');
       await request('daw-apply',{projectId:project.id,revision,token:state.token,slots:[...slots].map(([id,part])=>({...project.tracks.find(t=>t.id===id).instrument,trackId:id,part}))});
-      this.slots=slots;this.boundPatches=new Map([...slots].map(([id])=>[id,[...project.tracks.find(t=>t.id===id).instrument.patch]]));
+      this.slots=slots;this.boundPatches=new Map([...slots].map(([id])=>[id,[...instrumentBinding(project.tracks.find(t=>t.id===id).instrument)]]));
       check();
       await this.configureTracks(project,slots,planId);
       const clips=data.audio.map(({clip,track,start})=>{

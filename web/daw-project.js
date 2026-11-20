@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {validTape} from './mellotron-settings.js';
+import {validSamplerRef} from './sampler-instrument.js';
 import {validToneBytes} from './fm-patch.js';
 // Musical data only. Track IDs never encode firmware part numbers or UI layout.
 export const RATE=44100,PPQ=960;
@@ -31,7 +32,12 @@ export function validateProject(p){
   for(const t of p.tracks){
     assert(['audio','midi'].includes(t.type)&&text(t.name,80)&&text(t.icon,32)&&/^#[a-fA-F0-9]{6}$/.test(t.color)&&number(t.volume,0,2)&&number(t.pan,-1,1)&&typeof t.mute==='boolean'&&typeof t.solo==='boolean'&&['in','auto','off'].includes(t.monitor),'Invalid track');
     if(t.arm!==undefined)assert(typeof t.arm==='boolean','Invalid track arm');
-    if(t.instrument!==null){assert(t.type==='midi'&&(['analog','super','drumx'].includes(t.instrument?.type)||(t.instrument?.type==='mellotron'&&validTape(t.instrument.tape)))&&validToneBytes(t.instrument.patch),'Invalid instrument snapshot');}
+    if(t.instrument!==null){
+      const sound=t.instrument;
+      const known=['analog','super','drumx'].includes(sound?.type) ||
+        (sound?.type==='mellotron'&&validTape(sound.tape)) || (sound?.type==='sampler'&&validSamplerRef(sound));
+      assert(t.type==='midi'&&known&&validToneBytes(sound.patch),'Invalid instrument snapshot');
+    }
     validateFx(t.fx);
   }
   assert(p.tracks.filter(t=>t.arm).length<=1,'Only one track can be armed');

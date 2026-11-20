@@ -3,6 +3,8 @@ import {RATE} from './daw-project.js';
 const integer=(n,a,b)=>Number.isSafeInteger(n)&&n>=a&&n<=b;
 const limit=512;
 export const eventPriority=e=>e.type?1:e.velocity?2:0;
+// Negative IDs distinguish overlapping sampler gestures from legacy part/pitch keys.
+export const heldKey=e=>e.noteId===undefined?e.part*128+e.note:-e.noteId;
 // All consumers use the same absolute audio-frame origin. -1 means silence.
 export function timelineFrame(transport,frame){
   if(!transport.playing||frame<transport.startFrame)return -1;
@@ -11,8 +13,10 @@ export function timelineFrame(transport,frame){
   return position<transport.length?position:-1;
 }
 const active=(map,e)=>{
-  const key=e.part*128+e.note,old=map.get(key);
-  if(e.velocity)map.set(key,{part:e.part,note:e.note,velocity:e.velocity,count:(old?.count||0)+1});
+  const key=heldKey(e),old=map.get(key);
+  if(e.velocity){const held={part:e.part,note:e.note,velocity:e.velocity,count:(old?.count||0)+1};
+    if(e.noteId!==undefined){held.noteId=e.noteId;held.channel=e.channel;}
+    map.set(key,held);}
   else if(old){if(old.count>1)old.count--;else map.delete(key);}
 };
 // Each append is bounded; the worklet acknowledges it before another is sent.
@@ -31,6 +35,7 @@ export class ScheduleBuilder {
       if(!e||!integer(e.frame,0,m.length)||last&&(e.frame<last.frame||e.frame===last.frame&&eventPriority(e)<eventPriority(last))||!integer(e.part,0,this.capacity-1))throw Error('Invalid DAW event');
       if(e.type){if(!['bend','mod'].includes(e.type)||!integer(e.value,e.type==='bend'?-8192:0,e.type==='bend'?8191:127))throw Error('Invalid DAW expression event');}
       else if(!integer(e.note,0,127)||!integer(e.velocity,0,127))throw Error('Invalid DAW note event');
+      if(e.noteId!==undefined&&(!integer(e.noteId,1,131072)||!integer(e.channel,0,15)))throw Error('Invalid sampler gesture');
       if((e.type||e.velocity)&&e.frame===m.length)throw Error('Event is outside the playback interval');
       this.events.push(e);while(this.events[this.head].frame<=e.frame-128)this.head++;
       if(this.events.length-this.head>limit)throw Error('DAW event density exceeds the audio budget');

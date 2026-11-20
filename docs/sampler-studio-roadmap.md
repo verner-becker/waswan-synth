@@ -1,6 +1,6 @@
 # WASWAN Sampler Studio · roadmap de implementação
 
-Em 20/11/2026, a Onda 0 entrega a [auditoria do código e das referências](sampler-studio-discovery.md) e a [proposta de instrumento, biblioteca e API](sampler-studio-api.md). O pedido prevê a apresentação do plano antes da Onda 1. A execução das ondas seguintes aguarda a revisão do usuário. Cada uma terá uma branch dedicada, empilhada sobre a revisão testada da anterior. A integração na `main` exige autorização própria.
+Em 20/11/2026, a Onda 0 entrega a [auditoria do código e das referências](sampler-studio-discovery.md) e a [proposta de instrumento, biblioteca e API](sampler-studio-api.md). O pedido prevê a apresentação do plano antes da Onda 1. O usuário aprovou em 20/11/2026 a execução das ondas em branches empilhadas. A [Onda 1](sampler-studio-wave-1.md) registra os contratos entregues e a validação. Cada uma terá uma branch dedicada, empilhada sobre a revisão testada da anterior. A integração na `main` exige autorização própria.
 
 | Onda | O que o músico poderá fazer no aceite | Dependência |
 |---|---|---|

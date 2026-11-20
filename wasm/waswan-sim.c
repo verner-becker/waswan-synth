@@ -170,6 +170,14 @@ EXPORT uint32_t waswan_daw_apply(uint32_t mask,uint32_t token) {
     daw_slots=retained;return 1;
 }
 static uint32_t daw_can_trigger(uint32_t part,uint32_t owner,uint32_t note);
+#ifdef WASWAN_SAMPLER
+EXPORT uint32_t waswan_sampler_note_id(uint32_t part,uint32_t note,uint32_t velocity,uint32_t channel,uint32_t id) {
+    if(part>=NPART||!(daw_slots>>part&1u)||(velocity&&mm_on))return 0;
+    uint8_t previous=seq_note_source;seq_note_source=3;
+    int applied=sam_sequence_note(part,note,velocity,channel,id,0);
+    seq_note_source=previous;return applied;
+}
+#endif
 EXPORT uint32_t waswan_daw_note(uint32_t part,uint32_t note,uint32_t velocity) {
     if(part>=NPART||!(daw_slots>>part&1u)||note>127u||velocity>127u||(velocity&&mm_on))return 0;
     if(velocity&&!daw_can_trigger(part,3,note))return 0;
@@ -209,6 +217,9 @@ EXPORT uint32_t waswan_daw_live_pedal(uint32_t part,uint32_t down) {return waswa
 EXPORT uint32_t waswan_daw_live_held(uint32_t part) {return part<NPART?daw_live_count(part):0;}
 EXPORT void waswan_daw_live_stop_channel(uint32_t part,uint32_t channel,uint32_t hard) {
     if(part>=NPART||channel>15u)return;uint32_t owner=channel+4u,s=channel+1u;uint8_t previous=seq_note_source;seq_note_source=(uint8_t)owner;
+#ifdef WASWAN_SAMPLER
+    sam_forget(part,s);
+#endif
     memset(daw_held[s][part],0,sizeof daw_held[s][part]);daw_held_count[s][part]=0;daw_live_sustain[channel][part]=0;
     for(uint32_t i=0;i<NV;i++)if(vc[i].seq_owned==owner&&vc[i].part==part&&vc[i].gate)voice_release(part,vc[i].note,0);
     for(uint32_t i=0;i<NV;i++)if(vc[i].seq_owned==owner&&vc[i].part==part){vc[i].gate=0;if(hard){vc[i].ae.stage=vc[i].fe.stage=E_IDLE;vc[i].ae.level=vc[i].fe.level=0;vc[i].amp0=vc[i].amp1=0;vc[i].guard_l=vc[i].guard_r=0;vc[i].guard_in=0;vc[i].grp=0;ui_vlevel[i]=0;}}
@@ -226,6 +237,9 @@ EXPORT uint32_t waswan_daw_parameter(uint32_t part,uint32_t parameter,uint32_t v
     live_p[part].v[parameter]=(uint8_t)value;if(part<NTRK){trk_edited[part]=1;dirty_hdr=dirty_page=1;}return 1;
 }
 EXPORT void waswan_daw_stop(uint32_t hard) {
+#ifdef WASWAN_SAMPLER
+    for(uint32_t p=0;p<NPART;p++)sam_forget(p,0);
+#endif
     memset(daw_held[0],0,sizeof daw_held[0]);memset(daw_held_count[0],0,sizeof daw_held_count[0]);
     /* Preserve the firmware's MONO/UNISON last-physical-key restoration. Directly
      * clearing a DAW-tagged mono group could otherwise erase a still-held key. */

@@ -1,6 +1,6 @@
 # WASWAN Studio — controle das ondas
 
-Em 20/11/2026, o usuário solicitou o discovery do **WASWAN Sampler Studio** e a apresentação da arquitetura antes da Onda 1. A Onda 0 foi concluída na branch `docs/sampler-studio-discovery`, sobre `5c2338b`. A auditoria inclui regressões Node, WASM e Chrome da base. O próximo passo depende da aprovação do plano. [Roadmap e critérios de aceite](sampler-studio-roadmap.md) · [Auditoria e evidência](sampler-studio-discovery.md) · [Modelo e API](sampler-studio-api.md)
+Em 20/11/2026, o usuário solicitou o discovery do **WASWAN Sampler Studio** e a apresentação da arquitetura antes da Onda 1. A Onda 0 foi concluída na branch `docs/sampler-studio-discovery`, sobre `5c2338b`. A auditoria inclui regressões Node, WASM e Chrome da base. O usuário aprovou a execução do roadmap em branches empilhadas e a publicação dessas branches no GitHub. A [Onda 1](sampler-studio-wave-1.md) implementa e testa instrumentos tocáveis. [Roadmap e critérios de aceite](sampler-studio-roadmap.md) · [Auditoria e evidência](sampler-studio-discovery.md) · [Modelo e API](sampler-studio-api.md)
 
 Novo desafio em análise: [WASWAN DAW MVP — controle, orientações de autonomia e branches empilhadas](daw-mvp-discovery/README.md). Série separada das ondas Studio abaixo; a autorização histórica do Studio não aprova automaticamente sua implementação.
 

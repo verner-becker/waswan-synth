@@ -1,0 +1,67 @@
+--- a/firmware/src/obv_engine.h
++++ b/firmware/src/obv_engine.h
+@@ -271,16 +271,18 @@
+  if(pick==NV || (!vc[v].gate&&vc[pick].gate) || (vc[v].gate==vc[pick].gate && ((!vc[v].gate&&vc[v].ae.level<vc[pick].ae.level) || ((vc[v].gate||vc[v].ae.level==vc[pick].ae.level)&&vc[v].seq<vc[pick].seq))))pick=v;
+  }return pick;}
+ static void super_retire(unsigned n){voice_t*v=&vc[n];unsigned p=v->part%NPART;
+- int32_t *tail=daw_is_live(v->seq_owned)?daw_live_guard_tail[v->seq_owned-4u][p]:v->seq_owned==3u?daw_guard_tail[p]:guard_tail[p];
+- unsigned *left=daw_is_live(v->seq_owned)?&daw_live_guard_left[v->seq_owned-4u][p]:v->seq_owned==3u?&daw_guard_left[p]:&guard_left[p];
++ int32_t *tail=daw_is_live(v->seq_owned)?daw_live_guard_tail[v->seq_owned-4u][p]:(v->seq_owned==3u||v->seq_owned==20u)?daw_guard_tail[p]:guard_tail[p];
++ unsigned *left=daw_is_live(v->seq_owned)?&daw_live_guard_left[v->seq_owned-4u][p]:(v->seq_owned==3u||v->seq_owned==20u)?&daw_guard_left[p]:&guard_left[p];
+  tail[0]=(int32_t)(((int64_t)tail[0]*(*left))/STEAL_FADE)+v->guard_l;
+  tail[1]=(int32_t)(((int64_t)tail[1]*(*left))/STEAL_FADE)+v->guard_r;
+  *left=STEAL_FADE;v->guard_l=v->guard_r=0;v->guard_in=STEAL_FADE;
+  v->gate=0;v->ae.stage=v->fe.stage=E_IDLE;v->ae.level=v->fe.level=0;v->amp0=v->amp1=0;v->grp=0;
+ }
++static void sam_stolen(voice_t *v);
+ static void voice_start(voice_t *v, uint32_t part, uint32_t note, uint32_t vel, int32_t det8, int32_t pan)
+ {
+     const uint8_t *pv = pt[part].p->v;
++    sam_stolen(v);
+     if(super_part(part)&&super_count()>=SUPER_LIMIT&&super_voice((unsigned)(v-vc)))super_retire((unsigned)(v-vc));
+     v->seq_owned = seq_note_source;v->key_combined=seq_note_source?0:keyboard_source;
+     v->part = (uint8_t)part;
+@@ -364,6 +366,8 @@
+ static uint8_t grp_v[NPART][NV];                /* each sound's group: its cards, in spread order */
+ static uint32_t grp_n[NPART];
+
++#include "sampler-voice.h"
++
+ static void voice_trigger(uint32_t part, uint32_t note, uint32_t vel)
+ {
+     obv_engine_check_patch(part);
+@@ -379,6 +383,7 @@
+     }
+     }
+ #endif
++    if (sam_attack(part,note,vel,sam_source(),0)) return;
+     if (obv_engines[es->active]->hit) {
+         obv_engines[es->active]->hit(part, note, vel);
+         return;
+@@ -470,6 +475,7 @@
+     if (!obv_flushing[part] && obv_engine_track[part].phase == OBV_ENGINE_OUT && obv_engine_track[part].target != OBV_DRUMS)
+         for(uint32_t j=0;j<obv_pending_n[part];j++)if(obv_pending[part][j].note==note&&obv_pending[part][j].sequenced==seq_note_source)obv_pending[part][j].vel=0;
+
++    if(sam_release(part,note,sam_source(),0))return;
+     if(obv_engine_track[part].active==OBV_DRUMS)return; /* one-shot tails ignore note-off */
+     const uint8_t *pv = pt[part].p->v;
+     uint32_t v, mode = pv[P_MODE];
+@@ -726,6 +732,7 @@
+     if (ctl_panic) {
+         uint32_t hard = ctl_panic > 1u;
+         ctl_panic = 0;
++        sam_panic();
+         memset(daw_held,0,sizeof daw_held);memset(daw_held_count,0,sizeof daw_held_count);memset(daw_live_sustain,0,sizeof daw_live_sustain);
+         if (hard) { memset(daw_live_guard_left,0,sizeof daw_live_guard_left);memset(daw_live_guard_tail,0,sizeof daw_live_guard_tail);memset(daw_guard_left,0,sizeof daw_guard_left);memset(daw_guard_tail,0,sizeof daw_guard_tail);nq_r = nq_w; memset(vc, 0, sizeof vc); memset(guard_left,0,sizeof guard_left); memset(guard_tail,0,sizeof guard_tail); }
+         for (p = 0; p < NPART; p++) {
+@@ -1132,8 +1139,9 @@
+             }
+             p = vc[v].part % NPART;
+             used |= 1u << p;
++            int32_t *destination=(daw_is_live(vc[v].seq_owned)?daw_live_bus[p]:(vc[v].seq_owned==3u||vc[v].seq_owned==20u)?daw_bus[p]:bus[p])+2u*b;
++            if (sam_voice_active(v)) {sam_render(&vc[v],destination);continue;}
+             voice_block(&vc[v], v);
+-            int32_t *destination=(daw_is_live(vc[v].seq_owned)?daw_live_bus[p]:vc[v].seq_owned==3u?daw_bus[p]:bus[p])+2u*b;
+             if (obv_engines[obv_voice_engine[v]]->render)
+                 obv_engines[obv_voice_engine[v]]->render(&vc[v], destination);
+             else voice_render(&vc[v], destination);

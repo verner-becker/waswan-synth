@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {DawMidiRouter} from './daw-input.js';
 import {assignSlots} from './daw-playback.js';
-const samePatch=(a,b)=>a?.length===b?.length&&a.every((v,i)=>v===b[i]);
+import {instrumentBinding} from './daw-player.js';
+const samePatch=(a,b)=>a===b||!!a&&a.length===b?.length&&a.every((v,i)=>v===b[i]);
 export class DawMonitor {
   constructor(workspace){
     this.w=workspace;this.enabled=false;this.ready=false;this.channel=null;
@@ -46,7 +47,7 @@ export class DawMonitor {
   invalidate(){this.enabled=false;this.ready=false;this.router.disable();this.token=null;this.w.player.liveSessionToken=null;}
   needsPreparation(project){
     const slots=assignSlots(project),player=this.w.player;if(player.projectId!==project.id||slots.size!==player.slots.size||project.tracks.length!==player.tracks.size)return true;
-    return project.tracks.some(t=>t.type==='midi'&&t.instrument&&(!samePatch(t.instrument.patch,player.boundPatches.get(t.id))||slots.get(t.id)!==player.slots.get(t.id)));
+    return project.tracks.some(t=>t.type==='midi'&&t.instrument&&(!samePatch(instrumentBinding(t.instrument),player.boundPatches.get(t.id))||slots.get(t.id)!==player.slots.get(t.id)));
   }
   async refresh(){
     this.updateMix();
@@ -55,7 +56,7 @@ export class DawMonitor {
     let needed;try{needed=this.needsPreparation(project);}catch(error){this.ready=false;this.w.error(error);return;}if(!needed){this.ready=true;return;}
     this.preparing=true;this.ready=false;
     try{
-      for(const [id,part] of this.w.player.slots){const track=project.tracks.find(t=>t.id===id);if(!track||!samePatch(track.instrument?.patch,this.w.player.boundPatches.get(id)))this.router.dropPart(part);}
+      for(const [id,part] of this.w.player.slots){const track=project.tracks.find(t=>t.id===id);if(!track||!samePatch(instrumentBinding(track.instrument),this.w.player.boundPatches.get(id)))this.router.dropPart(part);}
       await this.w.player.prepareLive(this.w.controller);this.ready=true;this.updateMix();
     }catch(error){this.w.error(error);}finally{this.preparing=false;this.w.refreshControls();if(this.pending){this.pending=false;queueMicrotask(()=>void this.refresh());}}
   }

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {prepareProjectSamplers} from './sampler.js';
 import {PPQ,RATE,clipDuration,clipSeconds} from './daw-project.js';
 
 const maxFrames=RATE*1200;
@@ -144,6 +145,7 @@ export class DawAudioExport {
     signal.addEventListener('abort',interrupt,{once:true});
     let worker,node,sources=[],watchdog,readyTimer,context,abortCapture,workerClosed,workerDone=false;
     try{
+      await prepareProjectSamplers(p,controller.snapshot(),{signal});
       await p.beginExport(job);
       context=p.context;
       await context.audioWorklet.addModule(new URL('./daw-export-capture.js',import.meta.url));
