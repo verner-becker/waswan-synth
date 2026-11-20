@@ -21,7 +21,7 @@ import {beatFrame,frameBeat,arrangementBeats,musicalPosition,secondsPosition} fr
 const patchName=patch=>patch?String.fromCharCode(...patch.slice(63,73)).replace(/[^\x20-\x7e]/g,'').trim()||'Saved sound':'Choose an instrument';
 const db=value=>value>0?(20*Math.log10(value)).toFixed(1)+' dB':'−∞ dB';
 export class DawWorkspace {
-  constructor(bridge,{toggleKeyboard=()=>false,openSettings=()=>{},openStudioFile=()=>{}}={}){
+  constructor(bridge,{toggleKeyboard=()=>false,openSettings=()=>{},openStudioFile=()=>{},openSampler=()=>{}}={}){
     this.bridge=bridge;this.files=new ProjectFiles({
       openPicker:options=>this.pick('showOpenFilePicker',options),
       savePicker:options=>this.pick('showSaveFilePicker',options)
@@ -63,7 +63,7 @@ export class DawWorkspace {
     this.keyboard=action('Show Synth keyboard',()=>{
       const visible=toggleKeyboard();
       if(!this.linked)this.keyboard.textContent=visible?'Hide Synth keyboard':'Show Synth keyboard';
-    });trackTools.append(this.addMidi,this.keyboard);
+    });trackTools.append(this.addMidi,this.keyboard,action('Open Sampler Studio',openSampler));
     this.trackScroll=el('div','ww-daw-track-scroll');this.trackList=el('div','ww-daw-tracks');this.trackScroll.append(this.trackList);
     const editor=Panel('Clip editor');this.editor=editor;
     this.notes=el('select');this.notes.size=5;this.notes.setAttribute('aria-label','DAW notes');this.notes.onchange=()=>{this.selectedNote=this.notes.value;this.inspectNote();};editor.append(this.notes);
@@ -270,6 +270,17 @@ export class DawWorkspace {
     if(sound.engine<0)throw Error('This sound is not supported');
     this.controller.command('track.update',{id,changes:{instrument:{type:sound.engine===2?'drumx':sound.patch[0]===4?'super':'analog',patch:sound.patch}}});
   }
+  async assignSampler(prepare){
+    const controller=this.controller,track=this.selectedTrack();
+    if(track?.type!=='midi')throw Error('Select a MIDI track in the DAW first.');
+    const available=()=>this.controller===controller&&this.selectedTrack()?.id===track.id&&
+      this.rows.get(track.id)?.instrument.disabled===false&&!this.audioExport.exporter.busy;
+    if(!available())throw Error('Start audio and finish the current DAW operation before assigning this instrument.');
+    const instrument=await prepare();
+    if(!available())throw Error('The selected track or DAW state changed. Choose the target again.');
+    controller.command('track.update',{id:track.id,changes:{instrument}});
+    return track.name;
+  }
   selectedTrack(){return this.snapshot.tracks.find(t=>t.id===this.selected);}
   playProject(){
     if(this.audition?.busy||this.importer?.busy||this.recorder?.busy||this.audioExport?.exporter.busy)throw Error('Finish the current recording, import or piano audition before Play');const p=this.snapshot,transport=p.transport||{loop:false,start:0,end:p.length},end=beatFrame(arrangementBeats(p),p),loopStart=beatFrame(transport.start/PPQ,p),loopEnd=beatFrame(transport.end/PPQ,p);let fromFrame=this.cursor||0;
@@ -308,7 +319,7 @@ export class DawWorkspace {
     p.tracks.forEach((t,i)=>{const row=this.rows.get(t.id)||this.row(t);if(this.trackList.children[i]!==row.node)this.trackList.insertBefore(row.node,this.trackList.children[i]||null);row.node.classList.toggle('is-selected',this.selected===t.id);row.choose.setAttribute('aria-pressed',String(this.selected===t.id));
       if(row.name.ownerDocument.activeElement!==row.name)row.name.value=t.name;if(row.volume.ownerDocument.activeElement!==row.volume)row.volume.value=t.volume;if(row.pan.ownerDocument.activeElement!==row.pan)row.pan.value=t.pan;row.volume.title=db(t.volume);row.pan.title=t.pan.toFixed(2);row.mute.setAttribute('aria-pressed',String(t.mute));row.solo.setAttribute('aria-pressed',String(t.solo));
       row.meter.setAttribute('aria-label','Track peak · '+t.name);
-      const label=patchName(t.instrument?.patch);if(row.library!==this.programs||row.kits!==this.drumKits||row.sound!==label){row.instrument.replaceChildren(...this.instrumentOptions(label));row.library=this.programs;row.kits=this.drumKits;row.sound=label;row.instrument.value='';}row.instrument.hidden=t.type!=='midi';
+      const label=t.instrument?.type==='sampler'?t.instrument.path.split('/').at(-1)+' · Sampler r'+t.instrument.revision:patchName(t.instrument?.patch);if(row.library!==this.programs||row.kits!==this.drumKits||row.sound!==label){row.instrument.replaceChildren(...this.instrumentOptions(label));row.library=this.programs;row.kits=this.drumKits;row.sound=label;row.instrument.value='';}row.instrument.hidden=t.type!=='midi';
     });
     if(!event||!['track.update','project.update','master.update'].includes(event.type)&&event.kind!=='saved')this.refreshEditor();this.refreshControls();this.layout?.render(event);this.clipTools?.refresh();this.editors?.refresh();this.mix?.refresh();void this.monitor?.refresh();
   }

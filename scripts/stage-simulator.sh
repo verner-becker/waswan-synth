@@ -13,7 +13,7 @@ cp "$upstream"/web/simulator/* .local/www/simulator/
 cp ".local/build/waswan-$voices.wasm" .local/www/simulator/obervave-voice.wasm
 cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
 cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
-cp web/mellotron-*.js web/fm-*.js web/tone-bank.js web/ui-*.js web/ui-foundation.css .local/www/simulator/
+cp web/mellotron-*.js web/fm-*.js web/tone-bank.js web/ui-*.js web/ui-foundation.css web/ui-sampler*.css .local/www/simulator/
 cp web/sampler*.js .local/www/simulator/
 cp web/studio-*.js .local/www/simulator/
 cp web/daw-*.js web/daw-tab.html .local/www/simulator/
@@ -119,7 +119,7 @@ s = s.replace(pad_frame, """
  }
 }
 let samplerPads=null;
-""" + receive + "if(m.t==='sampler-pads'){midi.samplerInput=!!m.active;samplerPads=m.pads?new Map(m.pads):null;previousBank=-1;if(state)frame(state);return;}")
+""" + receive + "if(m.t==='sampler-pads'){updateFoundation(m);midi.samplerInput=!!m.active;samplerPads=m.pads?new Map(m.pads):null;previousBank=-1;if(state)frame(state);return;}")
 assert s.count("node.onprocessorerror=()=>log(") == 1
 s = s.replace("node.onprocessorerror=()=>log(", "node.onprocessorerror=()=>{updateFoundation({t:'error',message:'Audio processor stopped'});updateDspMonitor({t:'error'});log(").replace("Reinicie o simulador.');gain=", "Reinicie o simulador.');};gain=")
 # Report the existing browser write, without a second persistence mechanism.

@@ -27,7 +27,7 @@ try {
   await p.getByRole('button',{name:'Start audio',exact:true}).click();await p.waitForFunction(()=>audit.frame?.ms>5000&&audit.frame?.instrument?.controls.length===12);
   await p.getByRole('button',{name:'Use keyboard & pads',exact:true}).click();
   await p.waitForFunction(()=>document.activeElement?.matches('#keys .key'));
-  assert.deepEqual(await p.locator('.ww-navigation [data-workspace]').evaluateAll(nodes=>nodes.map(n=>n.textContent)),['Performance','TONES','Quick capture','DAW']);
+  assert.deepEqual(await p.locator('.ww-navigation [data-workspace]').evaluateAll(nodes=>nodes.map(n=>n.textContent)),['Performance','TONES','Quick capture','DAW','Sampler Studio']);
   assert.equal(await p.locator('.ww-performance .ww-midi-badge:visible').count(),0);
   assert.equal(await p.evaluate(()=>audit.frame.polyphony.limit),256);assert.equal(await p.evaluate(()=>audit.context.state),'running');
   await p.locator('.ww-topbar').getByRole('button',{name:'Settings',exact:true}).click();await p.locator('#midiConnect').click();await p.waitForFunction(()=>!!audit.source.onmidimessage);

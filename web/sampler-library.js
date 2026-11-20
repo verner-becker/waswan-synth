@@ -508,9 +508,8 @@ export async function verify(root, ref, options) {
   return {...report, ok: report.items.every(item => item.status === 'ok')};
 }
 
-export async function prepare(root, ref, {signal, onProgress, limits, capabilities, maxFileBytes = maxPlaybackFileBytes} = {}) {
+export async function prepareInstrument(root, instrument, {signal, onProgress, limits, capabilities, maxFileBytes = maxPlaybackFileBytes} = {}) {
   checkAbort(signal);
-  const {instrument, ref: resolved} = await resolve(root, ref);
   const plan = compile(instrument, capabilities, limits);
   const samples = new Map();
   const pcmByDigest = new Map();
@@ -529,7 +528,13 @@ export async function prepare(root, ref, {signal, onProgress, limits, capabiliti
     onProgress?.({completed: samples.size, total, sampleId: sample.id, memoryBytes: plan.memoryBytes});
   }
   checkAbort(signal);
-  return {ref: resolved, instrument: plan.instrument, plan, samples};
+  return {instrument: plan.instrument, plan, samples};
+}
+
+export async function prepare(root, ref, options = {}) {
+  checkAbort(options.signal);
+  const {instrument, ref: resolved} = await resolve(root, ref);
+  return {ref: resolved, ...await prepareInstrument(root, instrument, options)};
 }
 
 function summary(entry) {

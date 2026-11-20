@@ -6,6 +6,7 @@ import {ToneSelector} from './ui-tone-selector.js';
 import {ToneBanks} from './ui-tone-banks.js';
 import {ToneEditor} from './ui-tone-editor.js';
 import {MidiSetup} from './ui-midi-setup.js';
+import {SamplerStudio} from './ui-sampler-studio.js';
 import {StudioWorkspace} from './ui-studio.js';
 import {SequenceWorkspace} from './ui-studio-sequence.js';
 import {DawWorkspace} from './ui-daw.js';
@@ -19,7 +20,7 @@ import {trackIcon} from './daw-icons.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,RotaryKnob,VerticalFader,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
 
 const SYNTH_VIEWS=[['perf','Performance','Performance'],['tones','TONES','Tone Editor'],['studio','Quick capture','Quick capture']];
-const WORKSPACES=[...SYNTH_VIEWS,['seq','Studio original','Original Studio composition'],['daw','DAW','DAW'],['diag','Diagnostics','Diagnostics'],['instrument','Instrument setup','Instrument setup']];
+const WORKSPACES=[...SYNTH_VIEWS,['seq','Studio original','Original Studio composition'],['daw','DAW','DAW'],['sampler','Sampler Studio','Sampler Studio'],['diag','Diagnostics','Diagnostics'],['instrument','Instrument setup','Instrument setup']];
 let app;
 export function updateFoundation(message) { app?.receive(message); }
 export function mountFoundation(bridge) {
@@ -45,7 +46,7 @@ class Foundation {
     this.buildDiagnostics();this.buildSettings();this.buildDock();this.shell.append(this.performanceReadouts);this.buildMidiDialog();
     this.midiSetup=new MidiSetup(this.bridge.midi,document.querySelector('.midi-panel'),()=>this.dock.querySelector('#keys .key')?.focus());
     this.sequence.openTonePart=part=>{if(this.frame&&this.frame.track!==part)this.bridge.send({t:'enc',e:5,steps:part-this.frame.track});this.selectWorkspace('tones');};
-    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{openStudioFile:async file=>{
+    this.dawKeyboardVisible=false;this.daw=new DawWorkspace(bridge,{openSampler:()=>{window.focus();this.selectWorkspace('sampler');this.sampler.focus();},openStudioFile:async file=>{
       if(!await this.studio.recorder.open(file))return;
       window.focus();
       const id=this.studio.recorder.take.project.sequence?'seq':'studio';
@@ -64,6 +65,15 @@ class Foundation {
       this.dock.hidden=!this.dawKeyboardVisible;
       return this.dawKeyboardVisible;
     }});this.addView('daw',this.daw.node);this.settingsPanel.append(this.daw.midiProfiles.panel);bridge.isDawBusy=()=>this.daw.player.playing||this.daw.player.starting||this.daw.recorder.busy||this.daw.recorder.audioTrackId||this.daw.monitor.enabled||this.daw.audition?.busy||this.daw.audioExport?.exporter.busy;bridge.isStudioBusy=()=>!!(this.sequence.playing||this.sequence.starting||this.sequence.rendering||this.sequence.capture||this.studio.recorder.busy||this.studio.recorder.player||this.studio.recorder.playbackPreparing);
+    this.sampler=new SamplerStudio({bridge,player:this.daw.player,assignOfficial:prepare=>this.daw.assignSampler(prepare),liveConflict:()=>{
+      if(this.daw.monitor.enabled&&this.daw.monitor.target())return 'DAW input monitoring owns the keyboard. Release the DAW input before assigning Part A.';
+      if(this.daw.audioExport.exporter.busy)return 'Finish the DAW export before changing the keyboard route.';
+      if(this.tapes.live)return 'Release the Mellotron in Performance before assigning Part A.';
+      if(this.frame?.midiMode||this.frame?.track!==0||this.frame?.engines[0]!==0)return 'Select an Analog backing patch on Synth Part A before playing the sampler.';
+      return '';
+    }});
+    this.sampler.onRouteChange=label=>{this.samplerSummary.textContent=label;};
+    this.addView('sampler',this.sampler.node);
     this.dawTab=new DawTab(this.daw,{
       onMove:node=>this.views.set('daw',node),focusSynth:()=>this.selectWorkspace('perf'),showDaw:()=>this.selectWorkspace('daw'),
       onError:message=>{this.notice.textContent=message;}
@@ -93,7 +103,8 @@ class Foundation {
     const daw=WorkspaceNavigation([['daw','DAW','DAW']],id=>this.selectWorkspace(id),'DAW');
     this.openDawTab=action('Open DAW in new tab',()=>this.dawTab.open(),'ww-daw-new-tab');
     daw.append(this.openDawTab);
-    bar.append(synth,daw);this.shell.append(bar);
+    const sampler=WorkspaceNavigation([['sampler','Sampler Studio','Sampler Studio']],id=>this.selectWorkspace(id),'Sampler');
+    bar.append(synth,daw,sampler);this.shell.append(bar);
     this.workspaceButtons=[...bar.querySelectorAll('[data-workspace]')];
   }
   buildHeader() {
@@ -145,6 +156,10 @@ class Foundation {
     this.tapes=new MellotronPanel((...args)=>this.daw.player.requests().request(...args));
     this.bridge.tapeSnapshot=()=>this.tapes.snapshot();
     this.bridge.liveTape=part=>part===0&&this.tapes.live&&this.frame?.engines[part]===0?this.tapes.snapshot():null;
+    const samplerStrip=el('div','ww-sampler-strip');
+    this.samplerSummary=el('span','ww-muted','Part A · Synth keyboard');
+    samplerStrip.append(action('Open Sampler Studio',()=>{this.selectWorkspace('sampler');this.sampler.focus();}),this.samplerSummary,this.mapToggle);
+    panel.firstElementChild.append(samplerStrip);
     view.append(this.tapes.node);
     middle.append(this.outputMonitor.node,notes,state);this.performanceReadouts=middle;this.addView('perf',view);
   }
@@ -305,6 +320,7 @@ class Foundation {
       const parent=id==='tones'?this.toneEditor.toolbar:this.views.get(id);
       if(this.tapes.node.parentNode!==parent)parent.append(this.tapes.node);
     }
+    if(id==='sampler')this.sampler.activate();
     if(id==='instrument')this.libraryFolders.refresh();
     if(id==='instrument'&&this.frame)this.instrumentSetup.update(this.frame,this.running);
     for(const button of this.workspaceButtons)button.setAttribute('aria-pressed',String(button.dataset.workspace===id));
@@ -330,6 +346,7 @@ class Foundation {
     this.studio.update(m);
     this.sequence.update(m);
     this.daw.receive(m);
+    if(m.t==='sampler-pads'&&!m.active)this.sampler.resetLive();
     if(m.t==='daw-notice'){this.notice.textContent=m.message;return;}
     if(m.t==='tone-store'){this.toneEditor.stored(m.data,m.ok);return;}
     if(m.t==='ready'){
@@ -361,7 +378,7 @@ class Foundation {
     const held=gate.filter(v=>v.part===part&&!v.sequenced).map(v=>v.note),chord=chordLabel(held);
     this.chord.textContent=m.engines[part]===2?'DRUM-X':chord.name;this.notes.textContent=m.engines[part]===2?'Chord view applies to ANALOG voices.':chord.notes;
     this.voiceState.textContent=`${gate.length} gated · ${active.length-gate.length} release · sustain included`;
-    this.performanceState.textContent=`Part ${'ABCD'[part]} · ${m.engines[part]===2?'DRUM-X':part===0&&this.tapes.live?'Mellotron':m.fm?(m.fm.bytes[3]?'ANALOG + FM':'FM'):'ANALOG'}`;
+    this.performanceState.textContent=`Part ${'ABCD'[part]} · ${m.engines[part]===2?'DRUM-X':part===0&&this.sampler.liveName?'Sampler · '+this.sampler.liveName:part===0&&this.tapes.live?'Mellotron':m.fm?(m.fm.bytes[3]?'ANALOG + FM':'FM'):'ANALOG'}`;
     this.patternState.textContent=`Pattern ${m.pattern} · ${f?.playing?'playing':'stopped'}${m.patternQueue?' · queued '+m.patternQueue:''}${m.patternPending?' · save pending':''}`;
     this.sustain.textContent=`Sustain MIDI · ${poly.midiSustain?'on':'off'}`;this.sustain.setAttribute('aria-pressed',String(poly.midiSustain));this.sustain.disabled=m.midiMode;this.transport.disabled=m.midiMode;
     this.updateBadges();

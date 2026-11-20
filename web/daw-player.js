@@ -57,7 +57,7 @@ export class DawPlayer {
     if(tape)return this.tapeInstrument(tape);
     const state=await this.requests().request('daw-state-request');
     if(part===0&&state.liveSampler){
-      if(!state.liveSampler.path)throw Error('Publish the preview sample as an instrument before assigning it to a track');
+      if(!state.liveSampler.path)throw Error('The keyboard is previewing a Working Copy. Release it in Sampler Studio or activate an Official revision before adding the track.');
       return state.liveSampler;
     }
     const patch=state.patches[part];return {patch,type:patch[74]===79&&patch[78]===2?'drumx':patch[0]===4?'super':'analog'};}

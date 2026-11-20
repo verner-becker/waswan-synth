@@ -12,7 +12,7 @@ export function mapSample(sample, rootNote, {name=sample.id, mode='gate'}={}) {
     regions:[{id:'region', group:'main', sample:sample.id, root:rootNote, mode}]});
 }
 
-async function upload(player, ref, packed, samples, signal) {
+async function upload(player, ref, packed, samples, signal, checkOnly = false) {
   const rpc = player.requests();
   const {patch} = await rpc.request('daw-sampler-patch');
   signal?.throwIfAborted();
@@ -35,7 +35,7 @@ async function upload(player, ref, packed, samples, signal) {
       }
     }
     signal?.throwIfAborted();
-    await rpc.request('daw-sampler-commit', {token});
+    await rpc.request(checkOnly ? 'daw-sampler-cancel' : 'daw-sampler-commit', {token});
   } catch (error) {
     await rpc.request('daw-sampler-cancel', {token}).catch(() => {});
     throw error;
@@ -46,6 +46,15 @@ async function upload(player, ref, packed, samples, signal) {
 export async function prepareSampler(player, root, ref, options = {}) {
   const prepared = await prepare(root, ref, options);
   return upload(player, prepared.ref, packSamplerPlan(prepared.plan), prepared.samples, options.signal);
+}
+
+// A draft never borrows the identity of a published revision. A preflight
+// allocates, maps and uploads in the real host, then releases its own staging.
+export async function stageWorkingSampler(player, prepared, {signal, checkOnly = false} = {}) {
+  const packed = packSamplerPlan(prepared.plan);
+  packed.revision = 1;
+  const ref = {libraryId:'working-' + crypto.randomUUID(), instrumentId:packed.id, revision:1};
+  return upload(player, ref, packed, prepared.samples, signal, checkOnly);
 }
 
 // Audition an unpublished WAV on the live route. The transient reference is

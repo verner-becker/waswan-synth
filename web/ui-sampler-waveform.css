@@ -1,0 +1,14 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+.ww-sampler-waveform {min-width:0; display:grid; gap:.6rem;}
+.ww-sampler-wave-title,.ww-sampler-wave-fields,.ww-sampler-wave-tools {display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem;}
+.ww-sampler-wave-title {justify-content:space-between;}
+.ww-sampler-wave-title strong {overflow-wrap:anywhere;}
+.ww-sampler-waveform canvas {display:block; width:100%; height:clamp(130px,24vh,300px); background:#0b1419; border-radius:5px; cursor:crosshair; touch-action:none;}
+.ww-sampler-wave-ruler {display:flex; justify-content:space-between; color:var(--ww-muted); font-size:.85em; font-variant-numeric:tabular-nums;}
+.ww-sampler-wave-fields label {display:grid; gap:.25rem; color:var(--ww-muted);}
+.ww-sampler-wave-fields input,.ww-sampler-wave-fields select {width:9rem; max-width:100%;}
+.ww-sampler-wave-duration {margin-inline-start:auto; font-variant-numeric:tabular-nums;}
+.ww-sampler-wave-tools {gap:.45rem;}
+.ww-sampler-wave-tools button:last-child {border-color:var(--ww-accent);}
+.ww-sampler-wave-status {margin:0; color:var(--ww-muted);}
+.ww-sampler-wave-status:empty {display:none;}

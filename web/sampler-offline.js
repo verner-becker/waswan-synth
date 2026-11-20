@@ -6,6 +6,7 @@ import {checkAudio, splitFrames} from './sampler-edit.js';
 import {renderRecipe} from './sampler-transform.js';
 import {analyzeSample, suggestLoops} from './sampler-analysis.js';
 import {pcm16, wavHeader} from './studio-format.js';
+import {waveformPeaks} from './sampler-waveform.js';
 
 export function encodeSample(audio) {
   const frames = checkAudio(audio), {channels,sampleRate} = audio;
@@ -23,6 +24,7 @@ export function encodeSample(audio) {
 export async function processWav(file, job) {
   const blob = asBlob(file);
   const layout = await inspectWav(blob,{anyRate:true});
+  if (job.type === 'waveform') return waveformPeaks(blob, layout, job);
   let recipe = job.recipe;
   let start = 0, end = layout.frames;
   // A leading trim is a frame range on the original. Read it before allocating

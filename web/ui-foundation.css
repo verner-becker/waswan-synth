@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+@import url('./ui-sampler-studio.css');
 /* UI Foundation tokens. */
 .ww-page {
   --ww-bg:#0a0f12; --ww-panel:#121b20; --ww-raised:#1a252b; --ww-border:#34454d;

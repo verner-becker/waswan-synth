@@ -1,0 +1,30 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+@import url('./ui-sampler-waveform.css');
+
+.ww-sampler-layout {padding:0;border:0;margin:0;min-width:0;display:grid;grid-template-columns:minmax(210px,24%) minmax(0,1fr);gap:12px;align-items:start}
+.ww-sampler-section {padding:10px 14px;min-width:0;border:1px solid var(--ww-border);border-radius:8px;background:var(--ww-bg)}
+.ww-sampler-section summary {font-weight:650;font-size:14px;cursor:pointer}
+.ww-sampler-section summary small {margin-left:10px;font-weight:400}
+.ww-sampler-section[open]>summary {margin-bottom:10px}
+.ww-sampler-main {display:grid;gap:8px;min-width:0}
+.ww-sampler-studio input,.ww-sampler-studio select {box-sizing:border-box;max-width:100%;min-height:32px;border:1px solid var(--ww-border);border-radius:6px;padding:4px 8px;color:var(--ww-text);background:var(--ww-panel);font:inherit}
+.ww-sampler-studio button,.ww-sampler-strip button {min-height:32px;padding:5px 9px;font-size:12px}
+.ww-sampler-studio button.ww-primary {font-weight:650}
+.ww-sampler-actions,.ww-sampler-fields,.ww-sampler-strip {display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.ww-sampler-actions {margin:7px 0}
+.ww-sampler-fields {align-items:end;margin:7px 0}
+.ww-sampler-fields>label {display:grid;gap:3px;font-size:12px;color:var(--ww-muted)}
+.ww-sampler-fields input[type=number] {width:108px}
+.ww-sampler-browser {overflow-wrap:anywhere}
+.ww-sampler-browser ul {padding:0;margin:6px 0 10px;list-style:none;max-height:320px;overflow:auto}
+.ww-sampler-browser li {display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--ww-border)}
+.ww-sampler-browser li button {text-align:left;overflow-wrap:anywhere;min-width:0}
+.ww-sampler-browser li small {font-size:11px;flex:none}
+.ww-sampler-browser input[type=search] {flex:1;min-width:75px}
+.ww-sampler-browser h3 {font-size:14px;margin:16px 0 6px}
+.ww-sampler-status,.ww-sampler-route,.ww-sampler-versions {font-size:13px;overflow-wrap:anywhere}
+.ww-sampler-route {color:var(--ww-accent)}
+.ww-sampler-strip {font-size:12px}
+@media(max-width:760px) {.ww-sampler-layout {grid-template-columns:minmax(0,1fr)}.ww-sampler-browser ul {max-height:155px}}
+.ww-performance .ww-section-header:has(.ww-sampler-strip) {align-items:center}
+.ww-sampler-strip button {min-height:28px;padding-block:3px}
