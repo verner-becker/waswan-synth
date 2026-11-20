@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Control-side bridge from a physical library to the single WASM instrument.
 import {prepare} from './sampler-library.js';
-import {packSampler} from './sampler-runtime.js';
+import {packSampler,packSamplerPlan} from './sampler-runtime.js';
 import {createInstrument} from './sampler-instrument.js';
 import {decodeWav, inspectWav} from './sampler-wav.js';
 import {librarySetting} from './tone-bank.js';
@@ -12,12 +12,20 @@ export function mapSample(sample, rootNote, {name=sample.id, mode='gate'}={}) {
     regions:[{id:'region', group:'main', sample:sample.id, root:rootNote, mode}]});
 }
 
-async function upload(player, ref, instrument, samples, signal) {
+async function upload(player, ref, packed, samples, signal) {
   const rpc = player.requests();
   const {patch} = await rpc.request('daw-sampler-patch');
   signal?.throwIfAborted();
-  const {token, sampleIds} = await rpc.request('daw-sampler-begin', {ref, packed:packSampler(instrument)});
+  const {regions, ...header} = packed;
+  const incremental=regions.length>16;
+  const {token, sampleIds, resident} = await rpc.request('daw-sampler-begin',
+    {ref, packed:incremental?{...header,regionCount:regions.length}:packed, incremental});
   try {
+    if (incremental && !resident) for (let offset=0;offset<regions.length;offset+=16) {
+      signal?.throwIfAborted();
+      const rows=regions.slice(offset,offset+16);
+      await rpc.request('daw-sampler-map',{token,offset,rows},rows.map(row=>row.weights.buffer));
+    }
     for (const sampleId of sampleIds) {
       const source = samples.get(sampleId);
       for (let offset = 0; offset < source.length; offset += 32768) {
@@ -37,7 +45,7 @@ async function upload(player, ref, instrument, samples, signal) {
 
 export async function prepareSampler(player, root, ref, options = {}) {
   const prepared = await prepare(root, ref, options);
-  return upload(player, prepared.ref, prepared.instrument, prepared.samples, options.signal);
+  return upload(player, prepared.ref, packSamplerPlan(prepared.plan), prepared.samples, options.signal);
 }
 
 // Audition an unpublished WAV on the live route. The transient reference is
@@ -51,7 +59,7 @@ export async function prepareSamplePreview(player, file, rootNote=60, options={}
   const id='preview-'+hash+'-'+rootNote;
   const instrument={...mapSample(sample,rootNote,{mode:'oneShot'}),id,revision:1};
   const {pcm}=await decodeWav(file);
-  return upload(player,{libraryId:'preview',instrumentId:id,revision:1},instrument,new Map([[sample.id,pcm]]),options.signal);
+  return upload(player,{libraryId:'preview',instrumentId:id,revision:1},packSampler(instrument),new Map([[sample.id,pcm]]),options.signal);
 }
 
 export async function setLiveSampler(player, ref) {

@@ -3,8 +3,9 @@
 export const samplerFormat = 'waswan-sampler-instrument';
 export const samplerLimits = Object.freeze({
   memoryBytes: 64 * 1024 * 1024,
-  regions: 128,
-  variations: 16,
+  regions: 512,
+  groups: 128,
+  variations: 64,
   variationMembers: 16,
   articulations: 16,
   voices: 256,
@@ -105,7 +106,7 @@ function reference(index, id, field) {
 const byId = list => new Map(list.map(entry => [entry.id, entry]));
 
 function fades(entry, range, field) {
-  const result = {fadeLaw: option(entry.fadeLaw ?? 'equalPower', ['equalPower', 'linear'], `${field}.fadeLaw`)};
+  const result = {fadeLaw: option(entry.fadeLaw ?? 'equalPower', samplerCapabilities.fadeLaws, `${field}.fadeLaw`)};
   for (const key of ['fadeIn', 'fadeOut']) {
     if (entry[key] !== undefined) result[key] = interval(entry[key], ...range, `${field}.${key}`, true);
   }
@@ -122,9 +123,24 @@ function tone(entry, field) {
 
 // Modulation depths are in destination units: dB, cents, octave change of cutoff,
 // normalized resonance, or signed stereo balance. CC sources use MIDI controller numbers.
-export const modulationDestinations = ['gainDb', 'pitchCents', 'cutoffOctaves', 'resonance', 'pan'];
-export const modulationSources = ['velocity', 'wheel', 'bend', 'channelPressure', 'polyPressure',
-  'ampEnvelope', 'filterEnvelope', 'auxEnvelope', 'lfo'];
+export const modulationDestinations = Object.freeze(['gainDb', 'pitchCents', 'cutoffOctaves', 'resonance', 'pan']);
+export const modulationSources = Object.freeze(['velocity', 'wheel', 'bend', 'channelPressure', 'polyPressure',
+  'ampEnvelope', 'filterEnvelope', 'auxEnvelope', 'lfo']);
+
+// The editor and the validator can enumerate the same playable controls.
+export const samplerCapabilities = Object.freeze({
+  limits: samplerLimits, modulationSources, modulationDestinations,
+  fadeLaws: Object.freeze(['equalPower', 'linear']),
+  filterTypes: Object.freeze(['lowpass','highpass','bandpass']),
+  lfoShapes: Object.freeze(['sine','triangle']),
+  retriggerModes: Object.freeze(['layer','cut']),
+  variationModes: Object.freeze(['sequential', 'random']),
+  triggers: Object.freeze(['attack', 'release']),
+  playbackModes: Object.freeze(['gate', 'oneShot']),
+  velocityCurves: Object.freeze(['fixed', 'linear', 'concave', 'convex']),
+  loopModes: Object.freeze(['forward','reverse','pingPong']),
+});
+
 function soundOptions(entry, at) {
   const result = {};
   for (const name of ['envelope', 'filterEnvelope', 'auxEnvelope']) {
@@ -139,13 +155,13 @@ function soundOptions(entry, at) {
   }
   if (entry.filter != null) {
     const f = object(entry.filter, at+'.filter');
-    result.filter = {type:option(f.type, ['lowpass','highpass','bandpass'], at+'.filter.type'),
+    result.filter = {type:option(f.type, samplerCapabilities.filterTypes, at+'.filter.type'),
       cutoffHz:number(f.cutoffHz, 10, 19845, at+'.filter.cutoffHz'),
       resonance:number(f.resonance ?? 0, 0, 1, at+'.filter.resonance')};
   }
   if (entry.lfo != null) {
     const l = object(entry.lfo, at+'.lfo');
-    result.lfo = {shape:option(l.shape ?? 'sine', ['sine','triangle'], at+'.lfo.shape'),
+    result.lfo = {shape:option(l.shape ?? 'sine', samplerCapabilities.lfoShapes, at+'.lfo.shape'),
       rateHz:number(l.rateHz, .01, 40, at+'.lfo.rateHz')};
   }
   if (entry.modulation != null) {
@@ -207,7 +223,7 @@ export function validateInstrument(model) {
   const groups = items(model.groups ?? [], 'groups', (group, at) => {
     if (group.choke != null) check(validSamplerId(group.choke),at+'.choke','Expected a choke group identifier.');
     if (group.voiceLimit != null) integer(group.voiceLimit,1,256,at+'.voiceLimit');
-    if (group.retrigger != null) option(group.retrigger,['layer','cut'],at+'.retrigger');
+    if (group.retrigger != null) option(group.retrigger,samplerCapabilities.retriggerModes,at+'.retrigger');
     const output = group.output ?? 'main';
     reference(outputIndex, output, `${at}.output`);
     return {...group, output, ...tone(group, at), ...soundOptions(group,at)};
@@ -241,7 +257,7 @@ export function validateInstrument(model) {
   });
   const layerIndex = byId(layers);
   const variations = items(model.variations ?? [], 'variations', (variation, at) => {
-    const mode = option(variation.mode, ['sequential', 'random'], `${at}.mode`);
+    const mode = option(variation.mode, samplerCapabilities.variationModes, `${at}.mode`);
     const seed = integer(variation.seed ?? 0, 0, 0xffffffff, `${at}.seed`);
     const avoidRepeat = variation.avoidRepeat ?? false;
     check(typeof avoidRepeat === 'boolean', `${at}.avoidRepeat`, 'Expected a boolean.');
@@ -292,11 +308,11 @@ export function validateInstrument(model) {
     reference(groupIndex, region.group, `${at}.group`);
     const key = interval(region.key ?? [0, 127], 0, 127, `${at}.key`);
     const root = integer(region.root, 0, 127, `${at}.root`);
-    const trigger = option(region.trigger ?? 'attack', ['attack', 'release'], `${at}.trigger`);
+    const trigger = option(region.trigger ?? 'attack', samplerCapabilities.triggers, `${at}.trigger`);
     const mode = option(region.mode === 'one-shot' ? 'oneShot' : region.mode ?? 'gate',
-      ['gate', 'oneShot'], `${at}.mode`);
+      samplerCapabilities.playbackModes, `${at}.mode`);
     const frames = interval(region.frames ?? [0, sample.frames], 0, sample.frames, `${at}.frames`, true);
-    const velocityCurve = option(region.velocityCurve ?? 'fixed', ['fixed', 'linear', 'concave', 'convex'], `${at}.velocityCurve`);
+    const velocityCurve = option(region.velocityCurve ?? 'fixed', samplerCapabilities.velocityCurves, `${at}.velocityCurve`);
     const velocity = region.layer === undefined ? interval(region.velocity ?? [1, 127], 1, 127, `${at}.velocity`) : undefined;
     if (region.layer !== undefined) {
       check(region.velocity === undefined, `${at}.velocity`, 'Choose a named velocity layer or a region velocity range.');
@@ -313,10 +329,10 @@ export function validateInstrument(model) {
     if (velocity) normalized.velocity = velocity;
     if (region.keyFadeIn !== undefined) normalized.keyFadeIn = interval(region.keyFadeIn, ...key, `${at}.keyFadeIn`, true);
     if (region.keyFadeOut !== undefined) normalized.keyFadeOut = interval(region.keyFadeOut, ...key, `${at}.keyFadeOut`, true);
-    normalized.keyFadeLaw = option(region.keyFadeLaw ?? 'equalPower', ['equalPower', 'linear'], `${at}.keyFadeLaw`);
+    normalized.keyFadeLaw = option(region.keyFadeLaw ?? 'equalPower', samplerCapabilities.fadeLaws, `${at}.keyFadeLaw`);
     if (region.loop != null) {
       object(region.loop, `${at}.loop`);
-      const loopMode=option(region.loop.mode ?? 'forward', ['forward','reverse','pingPong'], `${at}.loop.mode`);
+      const loopMode=option(region.loop.mode ?? 'forward', samplerCapabilities.loopModes, `${at}.loop.mode`);
       const [start, end] = interval([region.loop.start, region.loop.end], ...frames, `${at}.loop`, true);
       check(mode === 'gate' && trigger === 'attack', `${at}.loop`, 'A forward loop requires an attack region in gate mode.');
       check(loopMode!=='pingPong' || end-start>=2,at+'.loop','A ping-pong loop needs at least two frames.');
@@ -365,6 +381,7 @@ export function compile(model, capabilities = {}, requestedLimits = {}) {
   const notes = {attack: Array.from({length: 128}, () => []), release: Array.from({length: 128}, () => [])};
   const used = new Set(), resolvedRegions = [];
   const destinations = capabilities.outputs ?? ['main'];
+  check(groups.size <= limits.groups,'groups','The instrument exceeds the group limit.','budget-exceeded');
   check(instrument.regions.length <= limits.regions, 'regions', 'The instrument exceeds the region limit.', 'budget-exceeded');
   check(instrument.articulations.length <= limits.articulations, 'articulations', 'The instrument exceeds the articulation limit.', 'budget-exceeded');
   check(instrument.variations.length <= limits.variations, 'variations', 'The instrument exceeds the variation set limit.', 'budget-exceeded');

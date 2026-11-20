@@ -82,7 +82,7 @@ static inline void sam_direct_read(const sam_region_t *r,unsigned frame,float fr
     pair[1]=stride==1?pair[0]:sam_cubic(p[1-(int)stride],p[1],p[1+stride],p[1+2*stride],frac);
 }
 static void sam_render(voice_t *v,int32_t *out) {
-    sam_voice_t *h=&sam_voices[v-vc];sam_region_t *r=&sam_banks[h->bank-1]->regions[h->region];
+    sam_voice_t *h=&sam_voices[v-vc];sam_region_t *r=sam_row(sam_banks[h->bank-1],h->region);
     const sam_controls_t *controls=&sam_state(v->part,h->source)->controls;
     int bend=daw_is_live(v->seq_owned)?daw_live_bend8[v->seq_owned-4][v->part]:v->seq_owned==3?daw_bend8[v->part]:pt[v->part].bend8;
     if(controls->has_bend)bend=(controls->bend*(int)pt[v->part].p->v[P_BEND]*256)>>13;

@@ -2,6 +2,8 @@
 
 Em 20/11/2026, a Onda 0 entrega a [auditoria do código e das referências](sampler-studio-discovery.md) e a [proposta de instrumento, biblioteca e API](sampler-studio-api.md). O pedido prevê a apresentação do plano antes da Onda 1. O usuário aprovou em 20/11/2026 a execução das ondas em branches empilhadas. A [Onda 1](sampler-studio-wave-1.md) registra os contratos entregues e a validação. Cada uma terá uma branch dedicada, empilhada sobre a revisão testada da anterior. A integração na `main` exige autorização própria.
 
+Os registros de implementação e validação por onda cobrem [instrumentos](sampler-studio-wave-1.md), [edição e análise](sampler-studio-wave-2.md), [kits e modulação](sampler-studio-wave-3.md), [transformações](sampler-studio-wave-4.md) e [biblioteca e interoperabilidade](sampler-studio-wave-5.md). A futura UX pode partir do [guia de uso da API](sampler-studio-uso.md).
+
 | Onda | O que o músico poderá fazer no aceite | Dependência |
 |---|---|---|
 | 1 · Instrumentos | Abrir um piano multisample da biblioteca, tocar dinâmica, alternar tomadas e articulações e gravar/exportar uma frase | Aprovação da proposta e prova estéreo no host |

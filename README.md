@@ -32,6 +32,10 @@ Em **DAW → File → Open DAW project**, arquivos Studio podem ser abertos no e
 
 Use **DAW** para montar o Arrangement, editar clipes, gravar MIDI e áudio, mixar e exportar. **Open DAW in new tab** usa o mesmo projeto e a sessão de áudio hospedada no Synth. Em ultrawide, o menu **View panels** oferece **Dock editor on right**. Consulte o [aceite do MVP](docs/daw-mvp-discovery/acceptance.md), o [plano de evolução de UX](docs/ux-evolution-plan.md) e o [parecer de seguimento do Astra](docs/ux-evolution-astra-followup.md).
 
+## WASWAN Sampler Studio
+
+A API importa gravações WAV para uma pasta física e permite montar instrumentos cromáticos, pianos multisample, kits de 16 pads e bancos de fitas para o Mellotron. Os exemplos usam o motor WASM, o monitor e o exportador da DAW. [Guia de uso da API](docs/sampler-studio-uso.md) · [Roadmap e resultados por onda](docs/sampler-studio-roadmap.md)
+
 ## Executar no Ubuntu
 
 Pré-requisitos: Git, Python 3, curl, patch e uv para preparar as ferramentas; Node.js para os testes. Chrome/Chromium com Web Audio e Web MIDI para tocar com o teclado.

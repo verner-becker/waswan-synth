@@ -5,8 +5,9 @@
 #define WASWAN_SAMPLER 1
 #define SAM_EXPORT __attribute__((visibility("default")))
 #define SAM_BANKS 16u
-#define SAM_REGIONS 128u
-#define SAM_SETS 16u
+#define SAM_REGIONS 512u
+#define SAM_REGION_CHUNK 32u
+#define SAM_SETS 64u
 #define SAM_SOURCES 18u /* sequencer, 16 DAW input channels, Synth keyboard */
 #define SAM_PREVIEW (SAM_SOURCES+16u)
 #define SAM_KEYBOARD 17u
@@ -22,14 +23,17 @@ typedef struct {
     sam_program_t program;
 } sam_region_t;
 typedef struct {
-    sam_region_t regions[SAM_REGIONS];
+    /* Pages remain reusable when this bank slot receives a smaller revision. */
+    sam_region_t *regions[SAM_REGIONS/SAM_REGION_CHUNK];
+    uint32_t candidates[2][128][SAM_REGIONS/32];
     uint32_t count, initial,cc_switch_count;
     struct { unsigned cc,lo,hi,clear,select; } cc_switches[16];
     uint32_t set_size[SAM_SETS], seed[SAM_SETS], random[SAM_SETS], avoid[SAM_SETS];
     uint32_t keys[128], clear[128];
 } sam_bank_t;
 typedef struct {
-    uint32_t articulation, pos[SAM_SETS], rng[SAM_SETS];
+    uint32_t articulation, rng[SAM_SETS];
+    uint8_t pos[SAM_SETS];
     sam_controls_t controls;
 } sam_selection_t;
 typedef struct {
@@ -46,6 +50,10 @@ typedef struct {
     sam_gesture_t *key;
 } sam_voice_t;
 
+_Static_assert(sizeof(sam_region_t)*SAM_REGION_CHUNK<=65536u,"A region chunk must fit one WASM page");
+static inline sam_region_t *sam_row(sam_bank_t *bank,unsigned index) {
+    return &bank->regions[index/SAM_REGION_CHUNK][index%SAM_REGION_CHUNK];
+}
 static sam_bank_t *sam_banks[SAM_BANKS];
 static uint8_t sam_routes[NPART+1];
 static sam_selection_t sam_states[NPART][SAM_SOURCES];
@@ -73,6 +81,7 @@ SAM_EXPORT int waswan_sampler_bank(unsigned bank,unsigned count,unsigned initial
     if(!sam_banks[bank])sam_banks[bank]=(sam_bank_t*)waswan_sampler_pages((sizeof(sam_bank_t)+65535u)/65536u);
     if(!sam_banks[bank])return 0;
     sam_bank_t *b=sam_banks[bank];
+    memset(b->candidates,0,sizeof b->candidates);
     memset(b->keys,0,sizeof b->keys);memset(b->clear,0,sizeof b->clear);
     b->count=count;b->initial=initial;b->cc_switch_count=0;return 1;
 }
@@ -88,15 +97,19 @@ SAM_EXPORT uintptr_t waswan_sampler_region(unsigned bank,unsigned i,uintptr_t pc
         float tuning,float left,float right) {
     if(bank>=SAM_BANKS||!sam_banks[bank]||i>=sam_banks[bank]->count||!pcm||(channels!=1&&channels!=2)||first>=end||
         (loop_end&&(loop_first<first||loop_first>=loop_end||loop_end>end))||root>127||group>=128||set>SAM_SETS||member>=16)return 0;
-    sam_region_t *r=&sam_banks[bank]->regions[i];
+    sam_bank_t *b=sam_banks[bank];
+    unsigned page=i/SAM_REGION_CHUNK;
+    if(!b->regions[page])b->regions[page]=(sam_region_t*)waswan_sampler_pages(1);
+    if(!b->regions[page])return 0;
+    sam_region_t *r=sam_row(b,i);
     r->pcm=(int16_t*)pcm;r->channels=channels;r->first=first;r->end=end;r->loop_first=loop_first;r->loop_end=loop_end;
     r->root_inc=pitch_inc(root*256);r->flags=flags;r->group=group;r->articulation=art;r->set=set;r->member=member;
     r->tuning=tuning;r->left=left;r->right=right;memset(&r->program,0,sizeof r->program);
     return (uintptr_t)r->key;
 }
 static sam_region_t *sam_region(unsigned bank,unsigned region) {
-    if(bank>=SAM_BANKS||!sam_banks[bank]||region>=sam_banks[bank]->count)return 0;
-    return &sam_banks[bank]->regions[region];
+    if(bank>=SAM_BANKS||!sam_banks[bank]||region>=sam_banks[bank]->count||!sam_banks[bank]->regions[region/SAM_REGION_CHUNK])return 0;
+    return sam_row(sam_banks[bank],region);
 }
 SAM_EXPORT int waswan_sampler_playback(unsigned bank,unsigned region,unsigned mode,unsigned fade,unsigned choke,
                                        unsigned limit,unsigned retrigger,float gain,float pan) {
@@ -128,6 +141,13 @@ SAM_EXPORT int waswan_sampler_cc_switch(unsigned bank,unsigned cc,unsigned lo,un
     sam_bank_t *b=sam_banks[bank];if(b->cc_switch_count>=16)return 0;
     unsigned i=b->cc_switch_count++;b->cc_switches[i].cc=cc;b->cc_switches[i].lo=lo;b->cc_switches[i].hi=hi;
     b->cc_switches[i].clear=clear;b->cc_switches[i].select=select;return 1;
+}
+SAM_EXPORT void waswan_sampler_index_region(unsigned bank,unsigned region) {
+    sam_region_t *r=sam_region(bank,region);
+    if(!r)return;
+    uint32_t bit=1u<<(region&31u);
+    for(unsigned note=0;note<128;note++)if(r->key[note]>0)
+        sam_banks[bank]->candidates[r->flags&1u][note][region>>5]|=bit;
 }
 static sam_selection_t *sam_state(unsigned part,unsigned source) {
     if(source==SAM_PREVIEW)return &sam_preview_states[part];
@@ -196,7 +216,7 @@ static void sam_enforce_group(unsigned part,unsigned source,unsigned bank,const 
     for(unsigned i=0;i<NV;i++){
         sam_voice_t *h=&sam_voices[i];
         if(!sam_voice_active(i)||h->bank!=bank||vc[i].part!=part||sam_domain(h->source)!=sam_domain(source))continue;
-        sam_region_t *other=&sam_banks[bank-1]->regions[h->region];
+        sam_region_t *other=sam_row(sam_banks[bank-1],h->region);
         if(h->gesture!=gesture && ((r->choke && other->choke==r->choke)||
            (r->retrigger && other->group==r->group && vc[i].note==note))){
             sam_stolen(&vc[i]);continue;
@@ -208,18 +228,30 @@ static void sam_enforce_group(unsigned part,unsigned source,unsigned bank,const 
 static void sam_select(unsigned part,unsigned note,unsigned source,sam_gesture_t *key,int release,int silent) {
     unsigned selected_bank=key->bank;sam_bank_t *b=sam_banks[selected_bank-1];
     sam_selection_t *s=sam_state(part,source);
-    unsigned masks[SAM_SETS]={0},ids[SAM_REGIONS],count=0;
-    for(unsigned i=0;i<b->count;i++){
-        sam_region_t *r=&b->regions[i];
-        if((r->flags&1u)!=(unsigned)release || (r->articulation && !(key->art&r->articulation)) ||
-           r->key[note]<=0 || r->velocity[key->velocity]<=0 ||
-           (release && !(key->groups[r->group>>5]>>(r->group&31)&1u)))continue;
-        ids[count++]=i;if(r->set)masks[r->set-1]|=1u<<r->member;
+    uint16_t masks[SAM_SETS]={0},ids[SAM_REGIONS];
+    unsigned count=0,sets[2]={0};
+    const uint32_t *candidates=b->candidates[release][note];
+    for(unsigned word=0;word<(b->count+31u)/32u;word++) {
+        uint32_t remaining=candidates[word];
+        while(remaining){
+            unsigned i=word*32u+(unsigned)__builtin_ctz(remaining);
+            remaining&=remaining-1u;
+            sam_region_t *r=sam_row(b,i);
+            if((r->articulation && !(key->art&r->articulation)) || r->velocity[key->velocity]<=0 ||
+               (release && !(key->groups[r->group>>5]>>(r->group&31)&1u)))continue;
+            ids[count++]=i;
+            if(r->set){unsigned set=r->set-1;masks[set]|=1u<<r->member;sets[set>>5]|=1u<<(set&31);}
+        }
     }
-    for(unsigned i=0;i<SAM_SETS;i++)if(masks[i])masks[i]=sam_choose(b,s,i,masks[i]);
+    for(unsigned word=0;word<2;word++)while(sets[word]){
+        unsigned set=word*32u+(unsigned)__builtin_ctz(sets[word]);
+        sets[word]&=sets[word]-1u;masks[set]=sam_choose(b,s,set,masks[set]);
+    }
+    unsigned selected=0;
     for(unsigned i=0;i<count;i++){
-        unsigned id=ids[i];sam_region_t *r=&b->regions[id];
+        unsigned id=ids[i];sam_region_t *r=sam_row(b,id);
         if(r->set && !(masks[r->set-1]>>r->member&1u))continue;
+        if(selected++>=NV)break;
         key->groups[r->group>>5]|=1u<<(r->group&31);
         if(silent)continue;
         sam_enforce_group(part,source,selected_bank,r,key->id,note);
@@ -237,7 +269,7 @@ static int sam_attack_key(unsigned part,unsigned note,unsigned velocity,unsigned
     sam_selection_t *s=sam_state(part,source);
     if(key->bank && !silent){
         for(unsigned i=0;i<NV;i++)if(sam_voice_active(i) && sam_voices[i].gesture==key->id){
-            sam_region_t *old=&sam_banks[sam_voices[i].bank-1]->regions[sam_voices[i].region];
+            sam_region_t *old=sam_row(sam_banks[sam_voices[i].bank-1],sam_voices[i].region);
             if(!(old->flags&2))vc[i].gate=0;
         }
     }

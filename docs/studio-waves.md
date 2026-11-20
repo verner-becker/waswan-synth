@@ -183,3 +183,5 @@ O [fechamento da Onda 2 do sampler](sampler-studio-wave-2.md) registra as opera�
 A [Onda 3 do sampler](sampler-studio-wave-3.md) acrescenta kits de 16 pads, choke por pista, filtros e envelopes no leitor WASM, MIDI expressivo e planejamento de tomadas de teclado externo.
 
 A [Onda 4 do sampler](sampler-studio-wave-4.md) entrega stretch, pitch-shift, slicing por tempo e texturas granulares reproduzíveis em Worker. A textura foi salva em disco e tocada por três notas no WASM.
+
+A [Onda 5 do sampler](sampler-studio-wave-5.md) fecha biblioteca física, presets, escala em 512 regiões, SFZ e geração de bancos para o Mellotron. O [guia de uso da API](sampler-studio-uso.md) reúne os contratos usados pela futura apresentação.

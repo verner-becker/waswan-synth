@@ -51,7 +51,7 @@ try{
     const tapes=await root.getDirectoryHandle('My tapes',{create:true});
     for(const bank of ['Flute','Cello'])await tapes.getDirectoryHandle(bank,{create:true});
   },fs.readFileSync('banks/DX7 - Aquanode/28-SBass2.wstone','utf8'));
-  const labels=['Tone banks','Mellotron tapes','Samples (sampler planned)'];
+  const labels=['Tone banks','Mellotron tapes','Samples'];
   let panel=await setup();
   for(const label of labels){
     const row=panel.getByRole('group',{name:label,exact:true});

@@ -55,7 +55,7 @@ assert.throws(() => planCapture({...settings,notes:[60,60]}), {code:'invalid-cap
 assert.throws(() => planCapture({...settings,velocities:[0]}), {code:'invalid-capture-plan',field:'velocities'});
 assert.throws(() => planCapture({...settings,duration:0}), {code:'invalid-capture-plan',field:'duration'});
 assert.throws(() => planCapture({...settings,destination:'Samples/../Escape'}), {code:'invalid-path'});
-assert.throws(() => planCapture({...settings,repeats:100}), {code:'invalid-capture-plan',field:'repeats'});
+assert.throws(() => planCapture({...settings,repeats:samplerLimits.regions+1}), {code:'invalid-capture-plan',field:'repeats'});
 
 const plan = planCapture(settings);
 assert.deepEqual(plan, planCapture({...settings,notes:[60,67],velocities:[35,108]}));
@@ -126,11 +126,16 @@ assert.equal(large.takes.length, 72);
 const all = new Map(large.takes.map(take => [take.id,{...descriptors.values().next().value,id:take.id,path:take.path}]));
 const independent = mapCaptureTakes(large, all);
 assert.equal(independent.variations.length, 36);
-assert.deepEqual(independent.diagnostics, [{code:'budget-exceeded',field:'variations',used:36,limit:samplerLimits.variations}]);
+assert.deepEqual(independent.diagnostics, []);
+assert.equal(compile(createInstrument(independent)).instrument.regions.length, 72);
 const shared = mapCaptureTakes(large, all, {variationScope:'velocity'});
 assert.equal(shared.variations.length, 3);
 assert.deepEqual(shared.diagnostics, []);
 assert.equal(compile(createInstrument(shared)).instrument.regions.length, 72);
+const tooManySets = planCapture({...settings,notes:Array.from({length:samplerLimits.variations+1}, (_, i) => i),velocities:[90]});
+const manySamples = new Map(tooManySets.takes.map(take => [take.id,{...descriptors.values().next().value,id:take.id,path:take.path}]));
+assert.deepEqual(mapCaptureTakes(tooManySets,manySamples).diagnostics,
+  [{code:'budget-exceeded',field:'variations',used:samplerLimits.variations+1,limit:samplerLimits.variations}]);
 
 // Abort with a clock that deliberately ignores AbortSignal.
 const early = new AbortController();

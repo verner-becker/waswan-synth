@@ -16,7 +16,7 @@ export class LibraryFolders {
       await tapes.initialized;
       return tapes.library?.folder;
     },folder=>tapes.run(()=>tapes.configureLibrary(folder),true));
-    this.add('Samples (sampler planned)','waswan-samples',
+    this.add('Samples','waswan-samples',
       ()=>librarySetting(undefined,'sampleLibrary'),folder=>librarySetting(folder,'sampleLibrary'));
     this.node.ontoggle=()=>{if(this.node.open)this.refresh();};
   }

@@ -1,6 +1,6 @@
 # WASWAN Sampler Studio · proposta de modelo e API
 
-Contrato de trabalho para as ondas do [roadmap](sampler-studio-roadmap.md). Os nomes abaixo descrevem operações propostas. A implementação deve usar módulos ES e funções de domínio invocáveis em testes, em Worker ou pela futura apresentação. Os contratos entram no código junto com o primeiro uso musical e seu teste.
+O guia de [uso da API implementada](sampler-studio-uso.md) contém exemplos executáveis e módulos de origem. Este documento preserva o contrato de trabalho da discovery para as ondas do [roadmap](sampler-studio-roadmap.md). Os nomes abaixo descrevem operações propostas. A implementação deve usar módulos ES e funções de domínio invocáveis em testes, em Worker ou pela futura apresentação. Os contratos entram no código junto com o primeiro uso musical e seu teste.
 
 ## A biblioteca em disco
 

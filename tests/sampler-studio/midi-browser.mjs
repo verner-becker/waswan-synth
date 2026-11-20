@@ -10,6 +10,20 @@ const url = process.env.SAMPLER_BROWSER_URL || 'http://localhost:8737/simulator/
 const notes = Array.from({length:16}, (_, index) => 36 + index * 2);
 const waveform = pcmWav(Int16Array.from({length:44100}, (_, frame) => Math.sin(frame * 440 * Math.PI / 44100) * 4200), {channels:1});
 const source = Buffer.from(waveform).toString('base64');
+
+function pcmPeak(wav) {
+  assert.equal(wav.toString('ascii',0,4),'RIFF');
+  assert.equal(wav.readUInt16LE(22),2);
+  assert.equal(wav.readUInt32LE(24),44100);
+  assert.equal(wav.readUInt16LE(34),16);
+  assert.equal(wav.toString('ascii',36,40),'data');
+  assert.equal(wav.readUInt32LE(40),wav.length-44);
+  assert(wav.length>44);
+  let peak=0;
+  for(let offset=44;offset<wav.length;offset+=2)peak=Math.max(peak,Math.abs(wav.readInt16LE(offset)));
+  return peak;
+}
+
 const browser = await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true});
 try {
   const page = await browser.newPage({viewport:{width:1560,height:1100}}), errors = [];
@@ -140,10 +154,46 @@ try {
   assert(controls.some(([type,channel,,,value])=>type==='channelPressure'&&channel===4&&value===127));
   assert(controls.some(([type,channel,note,,value])=>type==='polyPressure'&&channel===0&&note===notes[0]&&value===127));
   assert.deepEqual(take.clip.midiEvents.filter(event=>event.controller===64).map(event=>event.value),[127,0]);
+
+  const rendered=await page.evaluate(async()=>{
+    const w=audit.w,trackId=audit.track;
+    await w.monitor.disable();
+    const directory=await (await navigator.storage.getDirectory()).getDirectoryHandle('kit-export',{create:true});
+    window.showSaveFilePicker=async({suggestedName})=>directory.getFileHandle(suggestedName,{create:true});
+    async function render(scope){
+      const {name}=await w.audioExport.exporter.choose({scope,trackId,format:'wav',tail:0});
+      const file=await (await directory.getFileHandle(name)).getFile();
+      return new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(reader.result.split(',')[1]);
+        reader.onerror=()=>reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+    const stem=await render('track');
+    const muteBefore=w.snapshot.tracks.find(track=>track.id===trackId).mute;
+    let mutedMaster;
+    try{
+      w.controller.command('track.update',{id:trackId,changes:{mute:true}});
+      mutedMaster=await render('mix');
+    }finally{
+      w.controller.command('track.update',{id:trackId,changes:{mute:muteBefore}});
+    }
+    return {stem,mutedMaster,muteRestored:w.snapshot.tracks.find(track=>track.id===trackId).mute===muteBefore};
+  });
+  const stem=Buffer.from(rendered.stem,'base64');
+  const mutedMaster=Buffer.from(rendered.mutedMaster,'base64');
+  const stemPeak=pcmPeak(stem),mutedMasterPeak=pcmPeak(mutedMaster);
+  assert(stemPeak>base*32768*2,`Kit stem peak ${stemPeak} did not reproduce recorded pressure`);
+  assert.equal(mutedMasterPeak,0);
+  assert(rendered.muteRestored);
   assert.deepEqual([...errors,...await page.evaluate(()=>audit.errors)],[]);
   const report={result:'PASS',chrome:await browser.version(),virtualPads:notes,ownerSurvivedRebind:true,
-    peaks:{base,otherChannel,pressure,polyPressure,cc},controls,physicalHardware:false,directoryHandle:'OPFS'};
+    peaks:{base,otherChannel,pressure,polyPressure,cc},controls,export:{stemPeak,mutedMasterPeak,muteRestored:true},
+    physicalHardware:false,directoryHandle:'OPFS'};
   fs.mkdirSync(evidence,{recursive:true});
+  fs.writeFileSync(`${evidence}/kit-take-stem.wav`,stem);
+  fs.writeFileSync(`${evidence}/kit-take-muted-master.wav`,mutedMaster);
   fs.writeFileSync(`${evidence}/midi-browser.json`,JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
 }finally{await browser.close();}

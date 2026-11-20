@@ -2,7 +2,7 @@
 
 import {randomUUID} from 'node:crypto';
 import {openAsBlob} from 'node:fs';
-import {lstat, mkdir, open, readdir, realpath, rename, rm, writeFile} from 'node:fs/promises';
+import {lstat, mkdir, open, readdir, realpath, rename, rm, rmdir, writeFile} from 'node:fs/promises';
 import {basename, join} from 'node:path';
 import {SamplerError, samplerPath} from '../../web/sampler-instrument.js';
 
@@ -50,6 +50,9 @@ export async function diskDirectory(path, hooks = {}) {
         if (item.isFile()) yield [item.name, makeFile(dir, item.name)];
       }
     },
+    async *values() {
+      for await (const [, handle] of this.entries()) yield handle;
+    },
     async getDirectoryHandle(name, {create = false} = {}) {
       await ensureDirectory(dir);
       const target = child(dir, name);
@@ -82,7 +85,9 @@ export async function diskDirectory(path, hooks = {}) {
     },
     async removeEntry(name) {
       await ensureDirectory(dir);
-      await rm(child(dir, name));
+      const target = child(dir, name);
+      if ((await present(target))?.isDirectory()) await rmdir(target);
+      else await rm(target);
     },
   });
   const makeFile = (dir, name) => {

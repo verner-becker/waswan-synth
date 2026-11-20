@@ -371,6 +371,13 @@ try {
   assert((await render('mix', 'solo-control')).every(v => v === 0), 'sampler leaked through control solo');
   await page.evaluate(() => audit.node.port.postMessage({t:'dsp-control',action:'stop'}));
   await page.waitForFunction(() => audit.dsp.at(-1)?.final);
+  // DSP statistics and the polyphony panel publish on independent clocks.
+  // Observe the settled voice frame after the final export releases its notes.
+  await page.waitForFunction(() => audit.frame.polyphony.slots.every(voice => !voice.active), null, {timeout:5000})
+    .catch(async error => {
+      const active = await page.evaluate(() => audit.frame.polyphony.slots.filter(voice => voice.active));
+      throw Error('Active voices after export: '+JSON.stringify(active),{cause:error});
+    });
   const observed = await page.evaluate(() => ({contexts:audit.contexts,hosts:audit.hosts,
     directoryPicks:audit.directoryPicks,workletErrors:audit.workletErrors,dsp:audit.dsp,
     voices:audit.frame.polyphony.slots.filter(v => v.active).length}));

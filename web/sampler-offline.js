@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {importOriginal, readSampleFile} from './sampler-library.js';
 import {createInstrument} from './sampler-instrument.js';
-import {decodeWav, inspectWav} from './sampler-wav.js';
+import {asBlob, decodePCM, inspectWav} from './sampler-wav.js';
 import {checkAudio, splitFrames} from './sampler-edit.js';
 import {renderRecipe} from './sampler-transform.js';
 import {analyzeSample, suggestLoops} from './sampler-analysis.js';
@@ -21,14 +21,29 @@ export function encodeSample(audio) {
 }
 
 export async function processWav(file, job) {
-  const {frames,channels}=await inspectWav(file,{anyRate:true});
-  if(frames*channels>32*1024*1024||file.size>128*1024*1024)throw Error('Offline sample budget exceeded');
-  const decoded = await decodeWav(file,{anyRate:true});
-  const source = {channels:decoded.channels,sampleRate:decoded.sampleRate,pcm:Float32Array.from(decoded.pcm,v=>v/32768)};
+  const blob = asBlob(file);
+  const layout = await inspectWav(blob,{anyRate:true});
+  let recipe = job.recipe;
+  let start = 0, end = layout.frames;
+  // A leading trim is a frame range on the original. Read it before allocating
+  // a float buffer, so short excerpts from long field recordings fit in memory.
+  if (job.type === 'edit' && Array.isArray(recipe) && recipe[0]?.type === 'trim') {
+    if (recipe.length > 128) throw Error('Invalid edit recipe');
+    ({start,end} = recipe[0]);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 ||
+        end <= start || end > layout.frames) throw Error('Invalid trim range');
+    recipe = recipe.slice(1);
+  }
+  const frames = end-start, {channels,sampleRate} = layout;
+  if (frames*channels > 32*1024*1024) throw Error('Offline sample budget exceeded');
+  const bytesPerFrame = channels*2;
+  const bytes = await blob.slice(layout.offset+start*bytesPerFrame,layout.offset+end*bytesPerFrame).arrayBuffer();
+  const pcm = decodePCM(bytes,{offset:0,frames,channels});
+  const source = {channels,sampleRate,pcm:Float32Array.from(pcm,value=>value/32768)};
   if (job.type === 'analyze') return analyzeSample(source,job.options);
   if (job.type === 'loops') return suggestLoops(source,job.options);
   if (job.type !== 'edit') throw Error('Unknown offline operation');
-  const {audio,report} = renderRecipe(source,job.recipe);
+  const {audio,report} = renderRecipe(source,recipe);
   return {wav:encodeSample(audio),report};
 }
 

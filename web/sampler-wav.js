@@ -15,7 +15,7 @@ const fourCC = (view, offset) => String.fromCharCode(view.getUint8(offset), view
   view.getUint8(offset + 2), view.getUint8(offset + 3));
 const readSlice = async (file, start, end) => new DataView(await file.slice(start, end).arrayBuffer());
 
-export async function inspectWav(source, {anyRate = false} = {}) {
+export async function inspectWav(source, {anyRate = false, sampleLoops = false} = {}) {
   const file = asBlob(source);
   if (file.size < 12) throw error('invalid-wav', 'The WAV header is truncated.');
   const header = await readSlice(file, 0, 12);
@@ -24,7 +24,7 @@ export async function inspectWav(source, {anyRate = false} = {}) {
   }
   const end = header.getUint32(4, true) + 8;
   if (end < 12 || end > file.size) throw error('invalid-wav', 'The RIFF container is truncated.');
-  let format, data, count = 0;
+  let format, data, count = 0, embeddedLoops = 0;
   for (let offset = 12; offset < end;) {
     if (offset + 8 > end) throw error('invalid-wav', 'The WAV chunk header is truncated.');
     if (++count > 4096) throw error('unsupported-feature', 'The WAV contains too many chunks.');
@@ -46,6 +46,12 @@ export async function inspectWav(source, {anyRate = false} = {}) {
         bits: info.getUint16(14, true),
       };
     }
+    if (kind === 'smpl' && sampleLoops) {
+      if (length < 36) throw error('invalid-wav', 'The WAV sampler chunk is truncated.');
+      const loops = (await readSlice(file, first + 28, first + 32)).getUint32(0, true);
+      if (loops * 24 > length - 36) throw error('invalid-wav', 'The WAV sampler loop records are truncated.');
+      embeddedLoops += loops;
+    }
     if (kind === 'data') {
       if (data) throw error('invalid-wav', 'The WAV has more than one data chunk.');
       data = {offset: first, length};
@@ -59,7 +65,9 @@ export async function inspectWav(source, {anyRate = false} = {}) {
   if (blockAlign !== channels * 2 || bytesPerSecond !== sampleRate * blockAlign || !data.length || data.length % blockAlign) {
     throw error('invalid-wav', 'The WAV frame length or byte rate is invalid.');
   }
-  return {offset: data.offset, frames: data.length / blockAlign, channels, sampleRate, size: file.size};
+  const metadata = {offset: data.offset, frames: data.length / blockAlign, channels, sampleRate, size: file.size};
+  if (sampleLoops) metadata.sampleLoops = embeddedLoops;
+  return metadata;
 }
 
 export function decodePCM(bytes, {offset, frames, channels}) {

@@ -1,114 +1,32 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 import {SamplerError, compile, samplerLimits, samplerPath, validSamplerId, validSamplerRef, validateInstrument} from './sampler-instrument.js';
+import {
+  directory, ensureFreeSpelling, entries, fileAt, folded, maxMetadataBytes, notFound, optionalFile,
+  physicalError, put, readMetadata, withFilesystemLock,
+} from './sampler-filesystem.js';
 import {asBlob, decodePCM, inspectWav} from './sampler-wav.js';
+import {applySamplerPreset, samplerLabel, samplerPresetFormat, samplerTags, validateSamplerPreset} from './sampler-preset.js';
 
 export {decodeWav, inspectWav} from './sampler-wav.js';
+export {applySamplerPreset, createSamplerPreset, validateSamplerPreset} from './sampler-preset.js';
 
 const libraryFormat = 'waswan-sampler-library';
 const rootFile = 'library.json';
 const currentFile = 'instrument.json';
+const sampleFormat = 'waswan-sampler-sample';
+const sidecarSuffix = '.sample.json';
 const instrumentBuckets = ['Instruments', 'Kits'];
 const collections = [...instrumentBuckets, 'Samples', 'Presets'];
-const maxMetadataBytes = 4 * 1024 * 1024;
 const maxPlaybackFileBytes = samplerLimits.memoryBytes + 16 * 1024 * 1024;
-const localLocks = new Map();
 
 const error = (code, message, details) => new SamplerError(code, message, details);
 const json = value => JSON.stringify(value, null, 2) + '\n';
-const folded = value => value.normalize('NFC').toLowerCase();
 const order = (a, b) => a < b ? -1 : Number(a > b);
-const existsError = cause => cause?.name === 'NotFoundError';
-
-function physicalError(cause, path) {
-  if (cause instanceof SamplerError) return cause;
-  const details = {path, cause};
-  if (['NotAllowedError', 'SecurityError', 'EACCES', 'EPERM'].includes(cause?.name) ||
-      ['EACCES', 'EPERM'].includes(cause?.code)) {
-    return error('permission-required', 'Grant access to the sampler library folder again.', details);
-  }
-  if (existsError(cause)) return error('missing-path', 'This path is missing from the sampler library.', details);
-  if (cause?.name === 'TypeMismatchError') return error('path-conflict', 'A file or folder already uses this name.', details);
-  return error('filesystem-error', 'Unable to access the sampler library file.', details);
-}
-
-async function locked(id, run) {
-  const name = 'waswan-sampler-library:' + id;
-  if (globalThis.navigator?.locks) return globalThis.navigator.locks.request(name, run);
-  const task = (localLocks.get(name) ?? Promise.resolve()).then(run);
-  const tail = task.catch(() => {});
-  localLocks.set(name, tail);
-  try {
-    return await task;
-  } finally {
-    if (localLocks.get(name) === tail) localLocks.delete(name);
-  }
-}
+const locked = (id, operation) => withFilesystemLock('waswan-sampler-library:' + id, operation);
 
 function checkAbort(signal) {
   if (signal?.aborted) throw error('cancelled', 'Sampler preparation was cancelled.');
-}
-
-async function* entries(directory) {
-  if (typeof directory.entries === 'function') yield* directory.entries();
-  else for await (const handle of directory.values()) yield [handle.name, handle];
-}
-
-async function ensureFreeSpelling(folder, name, path) {
-  for await (const [actual] of entries(folder)) {
-    if (actual !== name && folded(actual) === folded(name)) {
-      throw error('path-conflict', 'This folder already contains a name that differs only in spelling or case.', {path, actual});
-    }
-  }
-}
-
-async function directory(root, segments, create = false) {
-  let folder = root;
-  for (const name of segments) {
-    if (create) await ensureFreeSpelling(folder, name, segments.join('/'));
-    folder = await folder.getDirectoryHandle(name, {create});
-  }
-  return folder;
-}
-
-async function fileAt(root, path) {
-  const segments = samplerPath(path);
-  const name = segments.pop();
-  return (await directory(root, segments)).getFileHandle(name);
-}
-
-async function optionalFile(folder, name) {
-  try {
-    return await (await folder.getFileHandle(name)).getFile();
-  } catch (cause) {
-    if (existsError(cause)) return undefined;
-    throw cause;
-  }
-}
-
-async function readMetadata(folder, name, {empty = false} = {}) {
-  const file = await optionalFile(folder, name);
-  if (!file || (empty && !file.size)) return undefined;
-  if (file.size > maxMetadataBytes) throw error('invalid-metadata', 'This sampler metadata file is too large.', {path: name});
-  const raw = await file.text();
-  try {
-    return {raw, value: JSON.parse(raw)};
-  } catch (cause) {
-    throw error('invalid-metadata', 'This sampler metadata file cannot be read as JSON.', {path: name, cause});
-  }
-}
-
-async function put(folder, name, payload) {
-  await ensureFreeSpelling(folder, name, name);
-  const handle = await folder.getFileHandle(name, {create: true});
-  const writer = await handle.createWritable();
-  try {
-    await writer.write(payload);
-    await writer.close();
-  } catch (cause) {
-    await writer.abort().catch(() => {});
-    throw cause;
-  }
 }
 
 function rootDocument({id = globalThis.crypto.randomUUID(), name = 'Sampler library'} = {}) {
@@ -171,6 +89,119 @@ function originalPath(path) {
   return segments;
 }
 
+function normalizeSample(model, path) {
+  if (!model || !validSamplerId(model.id) || typeof model.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(model.sha256) ||
+      ![1, 2].includes(model.channels) || ![44100, 48000].includes(model.sampleRate) ||
+      !Number.isSafeInteger(model.frames) || model.frames < 1 ||
+      !Number.isSafeInteger(model.size) || model.size < 44 + model.frames * model.channels * 2) {
+    throw error('invalid-sample', 'The sample metadata has an invalid identity or WAV layout.', {path});
+  }
+  const name = samplerLabel(model.name, samplerPath(path).at(-1).slice(0, -4));
+  const {format, version, ...fields} = model;
+  return {...fields, path, name, tags: samplerTags(model.tags)};
+}
+
+async function sidecarName(wavName) {
+  const label = wavName + sidecarSuffix;
+  const encoder = new TextEncoder();
+  if (encoder.encode(label).length <= 255) return label;
+  return '.' + await digest(encoder.encode(wavName)) + sidecarSuffix;
+}
+
+async function sampleSidecar(folder, wavName, path) {
+  const metadata = await readMetadata(folder, await sidecarName(wavName), {empty: true});
+  if (!metadata) return undefined;
+  if (metadata.value?.format !== sampleFormat || metadata.value.version !== 1) {
+    throw error('unsupported-feature', 'This sample metadata version is unavailable.', {path});
+  }
+  return normalizeSample(metadata.value, path);
+}
+
+async function writeSampleSidecar(folder, wavName, sample) {
+  const payload = json({format: sampleFormat, version: 1, ...sample});
+  if (new Blob([payload]).size > maxMetadataBytes) {
+    throw error('invalid-metadata', 'The sample metadata file is too large.', {path: sample.path});
+  }
+  await put(folder, await sidecarName(wavName), payload);
+}
+
+function sampleLocation(path) {
+  const segments = samplerPath(path);
+  const name = segments.pop();
+  if (!/\.wav$/iu.test(name)) throw error('invalid-path', 'Choose a library WAV path.', {path});
+  return {segments, name};
+}
+
+async function describeFile(root, path, expected = {}, signal) {
+  checkAbort(signal);
+  const {segments, name} = sampleLocation(path);
+  let folder, file;
+  try {
+    folder = await directory(root, segments);
+    file = await (await folder.getFileHandle(name)).getFile();
+  } catch (cause) {
+    if (notFound(cause)) throw error('missing-sample', 'A referenced WAV is missing.', {path});
+    throw cause;
+  }
+  const saved = await sampleSidecar(folder, name, path);
+  const {size, sampleRate, channels, frames} = await inspectWav(file, {anyRate: true});
+  const layout = {size, sampleRate, channels, frames};
+  if (Object.keys(layout).some(key =>
+    (expected[key] !== undefined && expected[key] !== layout[key]) || (saved && saved[key] !== layout[key]))) {
+    throw error('digest-mismatch', 'The WAV layout differs from the recorded sample.', {path});
+  }
+  checkAbort(signal);
+  const sha256 = await digest(await file.arrayBuffer());
+  if ((expected.sha256 && expected.sha256 !== sha256) || (saved && saved.sha256 !== sha256)) {
+    throw error('digest-mismatch', 'The WAV bytes differ from the recorded sample.', {path});
+  }
+  checkAbort(signal);
+  const descriptor = normalizeSample({
+    ...saved, ...expected, id: expected.id ?? saved?.id ?? 'sample-' + sha256.slice(0, 32),
+    sha256, ...layout,
+  }, path);
+  return {descriptor, file, folder, name};
+}
+
+export async function inspectSample(root, path, {verify = false, signal} = {}) {
+  await readLibrary(root);
+  try {
+    checkAbort(signal);
+    const {segments, name} = sampleLocation(path);
+    const folder = await directory(root, segments);
+    const saved = await sampleSidecar(folder, name, path);
+    if (saved) {
+      if (!await optionalFile(folder, name)) throw error('missing-sample', 'A referenced WAV is missing.', {path});
+      if (verify) await readVerified(root, saved, {signal});
+      return saved;
+    }
+    return (await describeFile(root, path, {}, signal)).descriptor;
+  } catch (cause) {
+    throw physicalError(cause, path);
+  }
+}
+
+export async function updateSampleMetadata(root, path, changes, {expectedSha256, signal} = {}) {
+  const library = await readLibrary(root);
+  if (typeof expectedSha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(expectedSha256)) {
+    throw error('invalid-sample', 'Supply the verified sample digest before updating its metadata.', {path});
+  }
+  try {
+    return await locked(library.id, async () => {
+      const {descriptor, folder, name} = await describeFile(root, path, {sha256: expectedSha256}, signal);
+      const properties = Object.entries(changes).filter(([key]) => ['name', 'tags', 'license', 'provenance'].includes(key));
+      if (properties.length !== Object.keys(changes).length) {
+        throw error('invalid-sample', 'Only the name, tags, license and provenance can be edited here.', {path});
+      }
+      const sample = normalizeSample({...descriptor, ...Object.fromEntries(properties)}, path);
+      await writeSampleSidecar(folder, name, sample);
+      return sample;
+    });
+  } catch (cause) {
+    throw physicalError(cause, path);
+  }
+}
+
 async function copySample(root, file, path, sha256) {
   const segments = originalPath(path);
   const name = segments.pop();
@@ -193,8 +224,8 @@ async function copySample(root, file, path, sha256) {
 }
 
 export async function importOriginal(root, source, path, options = {}) {
-  const {id = globalThis.crypto.randomUUID(), provenance, license, recipe, source: sourceIdentity} = options;
-  if (!validSamplerId(id)) throw error('invalid-sample', 'Choose a valid sample identifier.', {path});
+  const {id, provenance, license, recipe, source: sourceIdentity, name: displayName, tags} = options;
+  if (id !== undefined && !validSamplerId(id)) throw error('invalid-sample', 'Choose a valid sample identifier.', {path});
   originalPath(path);
   try {
     const library = await readLibrary(root);
@@ -204,12 +235,21 @@ export async function importOriginal(root, source, path, options = {}) {
       throw error('unsupported-feature', 'The library currently imports PCM16 at 44.1 or 48 kHz.', {path});
     }
     const sha256 = await digest(await file.arrayBuffer());
-    await locked(library.id, () => copySample(root, file, path, sha256));
-    const descriptor = {id, path, sha256, frames, channels, sampleRate, size};
-    for (const [key, value] of Object.entries({provenance, license, recipe, source: sourceIdentity})) {
-      if (value !== undefined) descriptor[key] = structuredClone(value);
+    const additions = {};
+    for (const [key, value] of Object.entries({provenance, license, recipe, source: sourceIdentity, name: displayName, tags})) {
+      if (value !== undefined) additions[key] = structuredClone(value);
     }
-    return descriptor;
+    const fresh = normalizeSample({id: id ?? globalThis.crypto.randomUUID(), path, sha256, frames, channels, sampleRate, size, ...additions}, path);
+    return await locked(library.id, async () => {
+      const {segments, name} = sampleLocation(path);
+      const folder = await directory(root, segments, true);
+      const saved = await sampleSidecar(folder, name, path);
+      if (saved && saved.sha256 !== sha256) throw error('path-conflict', 'Different metadata already uses this WAV path.', {path});
+      await copySample(root, file, path, sha256);
+      if (!saved) await writeSampleSidecar(folder, name, fresh);
+      // A manifest can use its own sample identifier while the catalog keeps the asset identifier.
+      return saved ? normalizeSample({...saved, ...additions, id: id ?? saved.id}, path) : fresh;
+    });
   } catch (cause) {
     throw physicalError(cause, path);
   }
@@ -240,7 +280,7 @@ async function readCurrent(root, path) {
   try {
     folder = await directory(root, samplerPath(path));
   } catch (cause) {
-    if (existsError(cause)) return undefined;
+    if (notFound(cause)) return undefined;
     throw cause;
   }
   const metadata = await readMetadata(folder, currentFile, {empty: true});
@@ -289,7 +329,7 @@ async function locate(root, instrumentId, knownPath) {
     try {
       folder = await root.getDirectoryHandle(bucket);
     } catch (cause) {
-      if (existsError(cause)) continue;
+      if (notFound(cause)) continue;
       throw cause;
     }
     for await (const {folder: parent, path, name, handle} of tree(folder, bucket)) {
@@ -329,7 +369,7 @@ async function resolve(root, ref) {
           const revisions = await found.folder.getDirectoryHandle('revisions');
           revision = await readMetadata(revisions, ref.revision + '.json');
         } catch (cause) {
-          if (!existsError(cause)) throw cause;
+          if (!notFound(cause)) throw cause;
         }
       }
       if (!revision) {
@@ -361,7 +401,7 @@ async function readVerified(root, sample, {maxFileBytes = Infinity, signal} = {}
     try {
       file = await (await fileAt(root, sample.path)).getFile();
     } catch (cause) {
-      if (existsError(cause)) throw error('missing-sample', 'A referenced WAV is missing.', {path: sample.path, sampleId: sample.id});
+      if (notFound(cause)) throw error('missing-sample', 'A referenced WAV is missing.', {path: sample.path, sampleId: sample.id});
       throw cause;
     }
     if (sample.size !== undefined && file.size !== sample.size) {
@@ -510,17 +550,36 @@ async function describe(folder, name, handle, path) {
       item.diagnostic = {code: failure.code, message: failure.message};
     }
   }
-  if (handle.kind === 'file' && path.startsWith('Samples/') && /\.wav$/iu.test(name)) return {...item, kind: 'sample'};
+  if (handle.kind === 'file' && path.startsWith('Samples/') && /\.wav$/iu.test(name)) {
+    try {
+      const sample = await sampleSidecar(folder, name, path);
+      if (sample) return {...item, kind: 'sample', id: sample.id, displayName: sample.name, tags: sample.tags};
+    } catch (cause) {
+      const failure = physicalError(cause, path);
+      item.diagnostic = {code: failure.code, message: failure.message};
+    }
+    return {...item, kind: 'sample'};
+  }
   if (handle.kind === 'file' && path.startsWith('Presets/') && /\.json$/iu.test(name)) {
     const metadata = await readMetadata(folder, name).catch(() => undefined);
+    if (metadata?.value?.format === samplerPresetFormat) {
+      try {
+        const preset = validateSamplerPreset(metadata.value);
+        return {...item, kind: 'preset', id: preset.id, displayName: preset.name, tags: preset.tags, revision: preset.revision, ref: preset.ref};
+      } catch (cause) {
+        item.diagnostic = {code: cause.code, message: cause.message};
+      }
+    }
     return {...item, kind: 'preset', id: metadata?.value?.id, displayName: metadata?.value?.name, tags: metadata?.value?.tags};
   }
   return item;
 }
 
 function hidden(name, path) {
-  return !path ? name === rootFile
-    : instrumentBuckets.includes(path.split('/')[0]) && folded(name) === 'revisions';
+  if (!path) return name === rootFile;
+  const category = path.split('/')[0];
+  return (instrumentBuckets.includes(category) && folded(name) === 'revisions') ||
+    (category === 'Samples' && folded(name).endsWith(sidecarSuffix));
 }
 
 function page(items, cursor, limit) {
@@ -584,7 +643,7 @@ export async function findCandidates(root, missing, {signal} = {}) {
     try {
       folder = await root.getDirectoryHandle('Samples');
     } catch (cause) {
-      if (existsError(cause)) return {status: 'missing-sample', candidates};
+      if (notFound(cause)) return {status: 'missing-sample', candidates};
       throw cause;
     }
     for await (const {handle, path, name} of tree(folder, 'Samples')) {
@@ -636,35 +695,174 @@ export async function relink(root, ref, sampleId, candidate, {expectedRevision =
   }
 }
 
+function presetPath(path) {
+  const segments = samplerPath(path);
+  const name = segments.pop();
+  if (segments[0] !== 'Presets' || !/\.json$/iu.test(name)) {
+    throw error('invalid-path', 'Choose a JSON file under Presets.', {path});
+  }
+  return {segments, name};
+}
+
+async function presetAt(root, path) {
+  const {segments, name} = presetPath(path);
+  let folder;
+  try {
+    folder = await directory(root, segments);
+  } catch (cause) {
+    if (notFound(cause)) return undefined;
+    throw cause;
+  }
+  const saved = await readMetadata(folder, name, {empty: true});
+  if (!saved) return undefined;
+  return {raw: saved.raw, preset: validateSamplerPreset(saved.value)};
+}
+
+export async function loadSamplerPreset(root, path) {
+  const library = await readLibrary(root);
+  try {
+    const saved = await presetAt(root, path);
+    if (!saved?.preset.revision) throw error('missing-preset', 'The sampler preset is unavailable.', {path});
+    if (saved.preset.ref.libraryId !== library.id) {
+      throw error('library-mismatch', 'The preset refers to a different sampler library.', {path, libraryId: saved.preset.ref.libraryId});
+    }
+    return saved.preset;
+  } catch (cause) {
+    throw physicalError(cause, path);
+  }
+}
+
+export async function resolveSamplerPreset(root, source) {
+  const preset = typeof source === 'string' ? await loadSamplerPreset(root, source) : validateSamplerPreset(source);
+  const {instrument, ref} = await resolve(root, preset.ref);
+  return {preset, instrument: applySamplerPreset(instrument, preset), ref};
+}
+
+export async function saveSamplerPreset(root, draft, {path, expectedRevision = 0} = {}) {
+  const {segments, name} = presetPath(path);
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER) {
+    throw error('revision-conflict', 'Supply the last observed preset revision or zero for a new preset.', {path, expectedRevision});
+  }
+  const library = await readLibrary(root);
+  try {
+    return await locked(library.id, async () => {
+      const {preset, ref} = await resolveSamplerPreset(root, draft);
+      const current = await presetAt(root, path);
+      const actualRevision = current?.preset.revision ?? 0;
+      if (expectedRevision !== actualRevision || (current && current.preset.id !== preset.id)) {
+        throw revisionConflict(path, expectedRevision, actualRevision);
+      }
+      const next = {...preset, ref, revision: actualRevision + 1};
+      const payload = json(next);
+      if (new Blob([payload]).size > maxMetadataBytes) throw error('invalid-metadata', 'The sampler preset is too large.', {path});
+      const folder = await directory(root, segments, true);
+      const available = await presetAt(root, path);
+      if (available?.raw !== current?.raw) throw revisionConflict(path, expectedRevision, available?.preset.revision ?? 0);
+      await put(folder, name, payload);
+      return next;
+    });
+  } catch (cause) {
+    throw physicalError(cause, path);
+  }
+}
+
+export async function materializeSamplerPreset(root, source, {id, path, expectedRevision = 0, name} = {}) {
+  const {preset, instrument, ref} = await resolveSamplerPreset(root, source);
+  if (!validSamplerId(id) || id === ref.instrumentId) {
+    throw error('invalid-preset', 'Choose a new instrument ID for this playable preset.', {instrumentId: id});
+  }
+  const draft = {...instrument, id, name: samplerLabel(name, preset.name), revision: 0,
+    preset: {id: preset.id, revision: preset.revision, ref}};
+  return publish(root, draft, {path, expectedRevision});
+}
+
+async function originalReference(root, source, manifest) {
+  if (!source || typeof source !== 'object' || typeof source.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(source.sha256)) {
+    throw error('invalid-source', 'A derived sample needs the original WAV digest.');
+  }
+  if (source.path !== undefined) {
+    sampleLocation(source.path);
+    const known = manifest.find(sample => sample.path === source.path && sample.sha256 === source.sha256);
+    return {...known, ...source};
+  }
+  const matches = manifest.filter(sample => sample.id === source.id && sample.sha256 === source.sha256);
+  if (matches.length === 1) return {...source, path: matches[0].path};
+  if (validSamplerId(source.id)) {
+    const candidates = [];
+    for (let next; next !== null;) {
+      const page = await search(root, {kind: 'sample', cursor: next});
+      for (const item of page.items) {
+        if (item.id !== source.id) continue;
+        if ((await inspectSample(root, item.path)).sha256 === source.sha256) candidates.push(item.path);
+      }
+      next = page.nextCursor;
+    }
+    if (candidates.length === 1) return {...source, path: candidates[0]};
+    if (candidates.length > 1) throw error('ambiguous-sample', 'More than one WAV matches this derivative source.', {paths: candidates});
+  }
+  throw error('missing-sample', 'The original WAV location is missing from this derivative.', {sampleId: source.id});
+}
+
+async function planCollection(root, manifest) {
+  const assets = new Map();
+  const visiting = new Set();
+  const walk = async expected => {
+    const key = JSON.stringify([expected.path, expected.sha256]);
+    if (assets.has(key)) return assets.get(key).descriptor;
+    if (visiting.has(key)) throw error('cyclic-source', 'A sample recipe refers back to a dependent WAV.', {path: expected.path});
+    visiting.add(key);
+    const {file, descriptor: original} = await describeFile(root, expected.path, expected);
+    const descriptor = {...original};
+    const base = sampleLocation(expected.path).name;
+    if (descriptor.source != null) {
+      const link = await originalReference(root, descriptor.source, manifest);
+      const parent = await walk(link);
+      descriptor.source = {...descriptor.source, path: parent.path, sha256: parent.sha256};
+    }
+    const category = descriptor.source || expected.path.startsWith('Samples/Processed/') ? 'Processed' : 'Originals';
+    descriptor.path = `Samples/${category}/Sample ${assets.size + 1}/${base}`;
+    visiting.delete(key);
+    assets.set(key, {descriptor, file});
+    return descriptor;
+  };
+  const samples = [];
+  for (const sample of manifest) {
+    const copied = await walk(sample);
+    samples.push({...sample, ...copied, id: sample.id});
+  }
+  return {assets, samples};
+}
+
 export async function collect(root, ref, destination, {path, libraryName} = {}) {
   const source = await resolve(root, ref);
   if (destination === root || (await destination.isSameEntry?.(root))) {
     throw error('path-conflict', 'Choose a different folder for the self-contained copy.');
   }
-  const book = await initializeLibrary(destination, {name: libraryName ?? source.instrument.name});
   const outputPath = path ?? source.ref.path;
   instrumentPath(outputPath, source.instrument.kind);
   try {
+    const {assets, samples} = await planCollection(root, source.instrument.samples);
+    const book = await initializeLibrary(destination, {name: libraryName ?? source.instrument.name});
     return await locked(book.id, async () => {
-      const samples = [];
-      for (const [index, sample] of source.instrument.samples.entries()) {
-        const {file} = await readVerified(root, sample);
-        const base = samplerPath(sample.path).at(-1);
-        const collection = sample.path.startsWith('Samples/Processed/') ? 'Processed' : 'Originals';
-        const copied = {...sample, path: `Samples/${collection}/Sample ${index + 1}/${base}`};
-        await copySample(destination, file, copied.path, copied.sha256);
-        await readVerified(destination, copied);
-        samples.push(copied);
-      }
       const instrument = {...source.instrument, samples};
       const current = await readCurrent(destination, outputPath);
       const desired = makeRef(book, instrument, outputPath);
-      if (current) {
-        if (json(current.instrument) === json(instrument)) return desired;
-        throw revisionConflict(outputPath, 0, current.instrument.revision);
+      if ((current && json(current.instrument) !== json(instrument)) ||
+          (!current && await locate(destination, instrument.id))) {
+        throw revisionConflict(outputPath, 0, current?.instrument.revision ?? instrument.revision);
       }
-      if (await locate(destination, instrument.id)) throw revisionConflict(outputPath, 0, instrument.revision);
-      await commitManifest(destination, outputPath, instrument, undefined);
+      for (const {descriptor, file} of assets.values()) {
+        await copySample(destination, file, descriptor.path, descriptor.sha256);
+        await readVerified(destination, descriptor);
+        const {segments, name} = sampleLocation(descriptor.path);
+        const folder = await directory(destination, segments);
+        const saved = await sampleSidecar(folder, name, descriptor.path);
+        if (!saved) await writeSampleSidecar(folder, name, descriptor);
+        else if (saved.sha256 !== descriptor.sha256 || JSON.stringify(saved.source) !== JSON.stringify(descriptor.source)) {
+          throw error('path-conflict', 'Different metadata already uses this sample in the destination.', {path: descriptor.path});
+        }
+      }
+      if (!current) await commitManifest(destination, outputPath, instrument, undefined);
       const report = await verify(destination, desired);
       if (!report.ok) throw error('invalid-export', 'The self-contained instrument could not be reopened.', {path: outputPath, items: report.items});
       return desired;
