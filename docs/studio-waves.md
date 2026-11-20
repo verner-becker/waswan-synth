@@ -185,3 +185,5 @@ A [Onda 3 do sampler](sampler-studio-wave-3.md) acrescenta kits de 16 pads, chok
 A [Onda 4 do sampler](sampler-studio-wave-4.md) entrega stretch, pitch-shift, slicing por tempo e texturas granulares reproduzíveis em Worker. A textura foi salva em disco e tocada por três notas no WASM.
 
 A [Onda 5 do sampler](sampler-studio-wave-5.md) fecha biblioteca física, presets, escala em 512 regiões, SFZ e geração de bancos para o Mellotron. O [guia de uso da API](sampler-studio-uso.md) reúne os contratos usados pela futura apresentação.
+
+Com a aprovação do usuário, a `main` avançou por fast-forward de `5c2338b` até `b7cd64a`, incorporando o discovery e as cinco ondas do Sampler Studio. Na árvore integrada, passaram os 19 testes Node/WASM do sampler. O Chrome reabriu o projeto com subtrativo, FM, Mellotron e sampler após reiniciar o navegador e mover a biblioteca. Os quatro stems e o master foram exportados, e o áudio ativo do stem do sampler coincidiu amostra a amostra após alinhar o ataque em 128 frames. Evidência em `.local/validation/sampler-main/`.
