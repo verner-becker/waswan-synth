@@ -2,6 +2,8 @@
 
 Abra **Sampler Studio** na barra do WASWAN e clique em **Start audio** para tocar. Em **Library & Metadata**, escolha a pasta que vai guardar seus samples e instrumentos. Ao reabrir o navegador, use **Allow folder access** se a pasta pedir acesso novamente.
 
+Para transformar um trecho em instrumento com raiz, envelope e loop sugeridos, abra **Auto Instrument Wizard**. [Guia do assistente e ensaios](auto-instrument-wizard.md)
+
 ## Extrair três segundos de uma gravação
 
 1. Em **Sample Editor**, use **Import WAV…**. A waveform mostra os canais separados. Arraste sobre o trecho que quer aproveitar ou digite o início e o fim em frames ou segundos. O fim é exclusivo.
