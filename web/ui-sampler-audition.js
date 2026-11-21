@@ -12,7 +12,7 @@ export function createSamplerAudition(getAudio) {
       state.audio.pause();
       state.audio.removeAttribute('src');
       state.audio.load();
-      state.source?.disconnect();
+      state.source?.disconnect(state.gain);
       URL.revokeObjectURL(state.url);
     }
     for (const fn of listeners) fn(false);
@@ -22,7 +22,7 @@ export function createSamplerAudition(getAudio) {
     stop();
     const {context, gain} = getAudio?.() || {};
     if (!context || !gain) throw Error('Start audio in the Synth to preview this selection.');
-    const state = {onEnded};
+    const state = {onEnded,gain};
     current = state;
     for (const fn of listeners) fn(true);
     try {
@@ -44,7 +44,7 @@ export function createSamplerAudition(getAudio) {
       throw error;
     }
   }
-  return {play, stop, get time() { return current?.audio?.currentTime ?? 0; }, subscribe(fn) {
+  return {play, stop, get source() { return current?.source; }, get time() { return current?.audio?.currentTime ?? 0; }, subscribe(fn) {
     listeners.add(fn);
     fn(!!current);
     return () => listeners.delete(fn);

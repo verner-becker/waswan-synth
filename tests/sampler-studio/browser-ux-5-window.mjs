@@ -67,6 +67,13 @@ try{
   assert.equal(await remote.getByLabel('Working name').inputValue(),'Linked tone');
   assert.equal(await remote.getByText('Processing Stack',{exact:true}).evaluate(e=>e.parentElement.open),true);
   assert.equal(await remote.locator('.ww-sampler-full-history').evaluate(el=>el.open),false);
+  const remoteScope=remote.locator('details').filter({has:popup.locator('summary',{hasText:/^Oscilloscope$/})});
+  await remoteScope.locator('summary').click();
+  await remoteScope.getByRole('img',{name:'Shared output waveform'}).waitFor();
+  await popup.waitForFunction(()=>{
+    const rms=document.querySelector('.ww-sampler-studio .ww-output-monitor .ww-meter output');
+    return rms && parseFloat(rms.value)>-60;
+  });
   await audible();
   await nav('daw');await button(daw,'Sampler player').click();
   const dawMenu=daw.getByRole('dialog',{name:'Sampler player'});

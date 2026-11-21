@@ -6,6 +6,7 @@ import {createWorking,updateWorking,openWorking,saveWorking,renderWorking,promot
 import {runOffline} from './sampler-offline.js';
 import {prepareSamplePreview,prepareSampler,setLiveSampler,mapSample} from './sampler.js';
 import {createSamplerAudition} from './ui-sampler-audition.js';
+import {createSamplerScope} from './ui-sampler-scope.js';
 import {SamplerHistory} from './ui-sampler-history.js';
 import {createProcessingStack} from './ui-sampler-processing.js';
 import {createSamplerWaveform} from './ui-sampler-waveform.js';
@@ -60,6 +61,8 @@ export class SamplerStudio {
     modeWrap.append(this.waveMode);sampleTools.append(modeWrap);
     this.sourceLabel=el('p','ww-muted','No WAV open');
     this.audition=createSamplerAudition(()=>this.bridge.getAudio());
+    this.scope=createSamplerScope(this);
+    this.body.before(this.scope.node);
     this.wave=createSamplerWaveform({audition:this.audition,onMarkers:({file,markers})=>{
       if(this.draft&&!this.busy&&this.displayMode==='source'&&file===this.file)this.change({sliceMarkers:markers});
     },onSelection:({start,end})=>{
@@ -100,7 +103,18 @@ export class SamplerStudio {
       const trackName=await this.assignOfficial(()=>prepareSampler(this.player,this.root,this.draft.baseRef));
       this.status.textContent='Official r'+this.draft.baseRef.revision+' assigned to DAW track · '+trackName;
     });
-    playback.append(source,this.play,this.release,this.route);versionTools.append(this.assignTrack);
+    this.keyboardFx=el('select');
+    this.keyboardFx.setAttribute('aria-label','Keyboard FX');
+    const fxLabel=el('label','','Keyboard FX ');
+    this.keyboardFx.append(new Option('Dry','dry'),new Option('Use Synth FX','synth'));
+    this.defaultKeyboardFx='dry';
+    this.keyboardFx.onchange=()=>this.run(async()=>{
+      const mode=this.keyboardFx.value;
+      await this.changeKeyboardFx(mode);
+      this.defaultKeyboardFx=mode;
+    });
+    fxLabel.append(this.keyboardFx);
+    playback.append(source,fxLabel,this.play,this.release,this.route);versionTools.append(this.assignTrack);
     this.history=new SamplerHistory(this);
     sample.append(this.history.versions,this.history.latest);
     versions.append(this.versionLabel,this.identity,versionTools,playback,this.history.node);
@@ -158,7 +172,7 @@ export class SamplerStudio {
     this.preferenceKey=layout==='window'?preferenceKey+'.window':preferenceKey;
     this.prefs=readPreferences(this.preferenceKey);
     for(const [title,node] of this.sections)node.open=this.prefs[title]??this.defaults.get(title);
-    this.syncSubsections(true);
+    this.syncSubsections(true);this.scope.observe();
   }
   focus(){this.heading.focus({preventScroll:true});}
   async run(fn,activePanel) {
@@ -394,16 +408,23 @@ export class SamplerStudio {
       this.previewWav().then(wav=>prepareSamplePreview(this.player,wav,draft.rootNote));
     await this.playPrepared(prepare,draft.name+(official?' · Official r'+draft.baseRef.revision:' · Working'));
   }
-  async playPrepared(prepare,label,{restorePrevious=false}={}){
+  async changeKeyboardFx(mode){
+    const route=this.liveRoute;
+    if(!route)return;
+    await this.player.requests().request('daw-sampler-keyboard-fx',{ref:route.ref,keyboardFx:mode});
+    route.keyboardFx=mode;
+    this.keyboardFx.value=mode;
+  }
+  async playPrepared(prepare,label,{restorePrevious=false,keyboardFx=this.defaultKeyboardFx}={}){
     const conflict=this.liveConflict();if(conflict)throw Error(conflict);
     this.status.textContent='Preparing keyboard preview…';
     const ref=await prepare();
     const changed=this.liveConflict();if(changed)throw Error(changed);
-    await setLiveSampler(this.player,ref);
+    await setLiveSampler(this.player,ref,keyboardFx);
     if(restorePrevious){
       if(!this.wizardRoute) this.wizardRoute={previous:this.liveRoute};
     }else this.wizardRoute=null;
-    this.liveRoute={ref,label,prepare};
+    this.liveRoute={ref,label,prepare,keyboardFx};this.keyboardFx.value=keyboardFx;
     this.liveName=label;this.release.hidden=false;
     this.status.textContent='Play '+label+' on Synth Part A. Release Synth keyboard to restore its previous sound.';
     this.updateRoute();
@@ -413,7 +434,7 @@ export class SamplerStudio {
     const previous=this.wizardRoute?.previous;
     if(previous){
       const {resident}=await this.player.requests().request('daw-sampler-status',{ref:previous.ref});
-      await this.playPrepared(()=>resident?previous.ref:previous.prepare(),previous.label);
+      await this.playPrepared(()=>resident?previous.ref:previous.prepare(),previous.label,{keyboardFx:previous.keyboardFx});
       return;
     }
     await setLiveSampler(this.player,null);this.resetLive();
@@ -424,6 +445,7 @@ export class SamplerStudio {
     this.onRouteChange?.(this.route.textContent);this.updatePlayers?.();
   }
   sync(){
+    this.keyboardFx.value=this.liveRoute?.keyboardFx??this.defaultKeyboardFx;
     const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);this.syncMap();this.fusion.sync();this.interchange.sync();this.updatePlayers?.();
     this.waveMode.disabled=!d;this.waveMode.value=this.displayMode||'source';
     this.continueRender.disabled=!d?.rendered;

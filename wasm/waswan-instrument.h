@@ -64,6 +64,12 @@ EXPORT uint32_t waswan_instrument_set(uint32_t field, int32_t value) {
         uint8_t *const fields[] = {&set.m_vol,&set.m_dj,&set.m_drive,&set.m_comp,&set.dv_type,&set.dv_amt,&set.dv_tone,&set.dv_mix};
         *fields[field - 7u] = (uint8_t)value;
         mix_apply();
+        /* mix_apply updates the track sends and VIBE. Master controls have
+         * separate render values, also used when a pattern recalls its mix. */
+        if (field == 7u) ctl_m_vol = set.m_vol;
+        if (field == 8u) ctl_m_dj = set.m_dj;
+        if (field == 9u) ctl_m_drive = set.m_drive;
+        if (field == 10u) ctl_m_comp = set.m_comp;
         break;
     }
     default:

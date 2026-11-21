@@ -71,8 +71,8 @@ export async function prepareSamplePreview(player, file, rootNote=60, options={}
   return upload(player,{libraryId:'preview',instrumentId:id,revision:1},packSampler(instrument),new Map([[sample.id,pcm]]),options.signal);
 }
 
-export async function setLiveSampler(player, ref) {
-  await player.requests().request('daw-sampler-live', {ref});
+export async function setLiveSampler(player, ref, keyboardFx='dry') {
+  await player.requests().request('daw-sampler-live', {ref,keyboardFx});
 }
 
 export async function prepareProjectSamplers(player, project, options = {}) {

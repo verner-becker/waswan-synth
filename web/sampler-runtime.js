@@ -209,11 +209,19 @@ export class SamplerRuntime {
     const x = this.x;
     if (!x.waswan_sampler_pages) throw Error('Build the 256-voice sampler host first.');
     if (m.t === 'daw-sampler-status') return {resident:this.banks.has(refKey(m.ref))};
-    if (m.t === 'daw-sampler-live') {
+    if (m.t === 'daw-sampler-live' || m.t === 'daw-sampler-keyboard-fx') {
+      const mode=m.keyboardFx ?? 'dry';
+      if (!['dry','synth'].includes(mode)) throw Error('Choose Dry or Use Synth FX.');
+      if (m.t === 'daw-sampler-keyboard-fx') {
+        if (!this.live || this.banks.get(refKey(m.ref))!==this.live) throw Error('The sampler keyboard route changed.');
+        x.waswan_sampler_keyboard_fx(Number(mode==='synth'));
+        return true;
+      }
       const bank = m.ref == null ? null : this.banks.get(refKey(m.ref));
       if (m.ref && !bank) throw Error('Prepare this sampler revision before playing it');
       if (bank && x.sim_engine(0) !== 0) throw Error('Select an Analog backing patch on Part A first');
       if (this.live !== bank) x.waswan_sampler_bind(x.waswan_daw_capacity(), bank ? bank.index + 1 : 0);
+      if (bank) x.waswan_sampler_keyboard_fx(Number(mode==='synth'));
       this.live = bank;
       return true;
     }

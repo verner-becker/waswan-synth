@@ -46,6 +46,7 @@ elif args.daw:
     for header in ['sampler-voice.h','sampler-modulation.h','sampler-reader.h']:
         shutil.copy2(root / 'wasm' / header, target / 'firmware/src')
     subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / 'patches/sampler-voice.patch')], cwd=target, check=True)
+    subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-i', str(root / 'patches/sampler-keyboard-fx.patch')], cwd=target, check=True)
 # Optional host observation of the dry per-part bus, aligned with the buffered ISR.
 # No algorithm changes; the historical reference compiles with this hook absent.
 sim = target / 'web/sim/sim.c'

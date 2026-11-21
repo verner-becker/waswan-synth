@@ -183,6 +183,35 @@ SAM_EXPORT unsigned waswan_sampler_state_size(void) { return sizeof(sam_seq_stat
 static int sam_voice_active(unsigned i) {
     return sam_voices[i].bank && sam_voices[i].seq==vc[i].seq && (vc[i].gate||vc[i].ae.stage!=E_IDLE);
 }
+static int sam_keyboard_voice(unsigned index) {
+    return vc[index].seq_owned==0 && sam_voice_active(index) && sam_voices[index].source==SAM_KEYBOARD;
+}
+
+#define SAM_FX_RAMP 128
+static int sam_dry_mix=SAM_FX_RAMP, sam_dry_target=SAM_FX_RAMP;
+static int32_t sam_keyboard_bus[2u*HALF_FRAMES];
+
+SAM_EXPORT void waswan_sampler_keyboard_fx(unsigned enabled) {
+    sam_dry_target=enabled?0:SAM_FX_RAMP;
+}
+static void sam_split_keyboard(int32_t *part,unsigned frames) {
+    for(unsigned i=0;i<frames;i++){
+        sam_dry_mix+=(sam_dry_target>sam_dry_mix)-(sam_dry_target<sam_dry_mix);
+        for(unsigned c=0;c<2;c++){
+            unsigned k=2u*i+c;
+            part[k]+=sam_keyboard_bus[k];
+            sam_keyboard_bus[k]=(int32_t)((int64_t)sam_keyboard_bus[k]*sam_dry_mix/SAM_FX_RAMP);
+        }
+    }
+}
+/* Compute the wet contribution with the mixer's original rounding so another
+ * voice on Part A has exactly its usual sends. Reuse the buffer for the return. */
+static int32_t sam_split_channel(unsigned k,int32_t total,int32_t mixed,int32_t gain,int32_t pan,int32_t volume) {
+    int32_t wet=(int32_t)(((int64_t)(total-sam_keyboard_bus[k])*gain>>12)*pan>>12);
+    sam_keyboard_bus[k]=softclip((clampi(mixed-wet,-262144,262143)>>2)*volume>>10);
+    return wet;
+}
+
 SAM_EXPORT unsigned waswan_sampler_bank_used(unsigned bank) {
     if(bank>=SAM_BANKS)return 1;
     for(unsigned r=0;r<=NPART;r++)if(sam_routes[r]==bank+1)return 1;

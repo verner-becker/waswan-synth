@@ -41,6 +41,14 @@ Abra **Sound Fusion** e adicione snapshots de uma parte do Synth, da pista MIDI 
 
 Os efeitos de pista selecionados e os efeitos de master incluídos ficam gravados no WAV. O mapa consolidado reproduz esses WAVs e pode receber novos efeitos. Você pode guardar o resultado com **Save Working**, publicar e usar na DAW. **Restore source snapshots** recupera a receita registrada quando as dependências de origem estão disponíveis. Para monitorar ou capturar Fusion, o transporte e as entradas monitoradas da DAW precisam estar livres.
 
+## Ver a onda e escolher os efeitos do teclado
+
+Abra **Oscilloscope** no alto do Sampler Studio. Para comparar dois candidatos no Wizard, escolha **WAV preview only** e use **Listen** em cada um. O gráfico acompanha só a prévia, mesmo com outro instrumento tocando. Para observar o ataque e a soltura de uma nota no teclado, escolha **Shared output · post-master**. Essa entrada inclui as outras partes audíveis na saída. O painel mostra a soma em mono, com RMS e pico em dBFS. **Y zoom** amplia o desenho. **Spectrogram** mostra a evolução das frequências.
+
+Em **Play & Finish**, deixe **Keyboard FX** em **Dry** para ouvir o recorte com seu envelope e loop. Para experimentar o instrumento com os efeitos atuais, escolha **Use Synth FX** antes de tocar ou durante uma nota sustentada. O volume e o panorama da Parte A, o volume master e o limitador final também se aplicam em Dry. Ao voltar a Dry, uma cauda de reverb ou delay já iniciada pode terminar naturalmente.
+
+Você também encontra **Keyboard FX** em **Versions & History** no editor avançado. A escolha vale para a execução ao teclado nessa sessão. O WAV e a Working Copy guardam o áudio e a receita do instrumento. Para aplicar efeitos na DAW, use os controles da pista.
+
 ## Usar o player compacto e a biblioteca
 
 Em **Performance** ou na **DAW**, **Sampler player** permite procurar um instrumento, testar a amostra de referência e escolher o que o teclado vai tocar. A DAW também oferece a atribuição à pista selecionada. Em **Open Sampler in new window**, o editor compartilha a sessão da janela do Synth. **Dock Sampler Studio** devolve o painel. Cada janela lembra as seções que você deixou abertas.

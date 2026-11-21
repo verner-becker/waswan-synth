@@ -2,6 +2,10 @@
 
 Em **Sampler Studio → Auto Instrument Wizard**, escolha uma gravação, ouça os trechos sugeridos e toque um deles antes de salvar. Cada seleção gera um instrumento independente na mesma biblioteca do editor avançado.
 
+O painel **Oscilloscope**, acima das quatro etapas, permite acompanhar a prévia isolada de **Listen** ou a saída compartilhada do instrumento. Em **Play & Finish**, **Keyboard FX** começa em **Dry**. Escolha **Use Synth FX** para ouvir os envios da Parte A e o processamento de master ao tocar. A escolha também pode mudar durante a sustentação. **Release Keyboard** recupera o modo do sampler que estava armado antes do Wizard.
+
+![Osciloscópio do Sampler Studio mostrando duas notas sustentadas de um instrumento sintético e seus níveis RMS e de pico](assets/auto-instrument-wizard/keyboard-oscilloscope.png)
+
 ## Do WAV ao teclado
 
 1. **Import.** Escolha ou autorize a pasta Samples e use **Choose WAV…**. O original aceita RIFF PCM16 mono ou estéreo a 44,1 ou 48 kHz. Confira o nome e a duração na waveform. **What are you looking for?** orienta a busca. Para uma voz em uma vogal longa, use **Sustained tone / voice**.

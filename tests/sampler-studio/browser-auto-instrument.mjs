@@ -10,7 +10,7 @@ import {startSynth} from '../browser-foundation-controls.mjs';
 import {wavHeader} from '../../web/studio-format.js';
 
 const dir=await mkdtemp(join(tmpdir(),'waswan-auto-'));
-const evidence='.local/validation/auto-instrument-wizard';
+const evidence=process.env.WIZARD_EVIDENCE || '.local/validation/auto-instrument-wizard';
 await mkdir(evidence,{recursive:true});
 const synthetic=join(dir,'Áudio longo.wav');
 const total=420*44100;
@@ -95,8 +95,30 @@ try {
   assert(await wizard.getByRole('checkbox').count()>=1);
   assert(await wizard.getByRole('heading',{name:'Discover'}).evaluate(n=>n===n.ownerDocument.activeElement));
   await page.screenshot({path:join(evidence,tag+'-discover.png')});
-  await btn('Listen').first().click();
-  await btn('Stop preview').click();
+  const scope=studio.locator('details').filter({has:page.locator('summary', {hasText:/^Oscilloscope$/})});
+  const scopeSignal=async()=>page.waitForFunction(()=>{
+    const canvas=document.querySelector('.ww-sampler-studio .ww-scope');
+    if(!canvas)return false;
+    const {width,height}=canvas, data=canvas.getContext('2d').getImageData(0,0,width,height).data;
+    let top=height,bottom=-1;
+    for(let i=0;i<data.length;i+=4) if(data[i]===39 && data[i+1]===227 && data[i+2]===221){
+      const row=Math.floor(i/4/width);top=Math.min(top,row);bottom=Math.max(bottom,row);
+    }
+    return bottom-top>5;
+  });
+  if(path===synthetic){
+    await scope.locator('summary').click();
+    await scope.getByLabel('Scope input').selectOption('preview');
+    await scope.scrollIntoViewIfNeeded();
+    await btn('Listen').first().evaluate(b=>b.click());
+    await scopeSignal();
+    await scope.getByText('Play a WAV selection to see its waveform').waitFor();
+    await scope.getByLabel('Scope input').selectOption('output');
+    await scope.locator('summary').click();
+  }else{
+    await btn('Listen').first().click();
+    await btn('Stop preview').click();
+  }
   if(path===synthetic) {
     await btn('Select on waveform').click();
     const start=wizard.getByLabel('Start frame',{exact:true}),end=wizard.getByLabel('End frame',{exact:true});
@@ -112,6 +134,8 @@ try {
   await wizard.getByLabel('Name',{exact:true}).first().fill(name);
   await btn('Next').click();await step('Play & Finish');
   assert.deepEqual(await page.evaluate(()=>audit.frames),[]);
+  const fx=wizard.getByLabel('Keyboard FX',{exact:true});
+  assert.equal(await fx.inputValue(),'dry');
   await btn('Play on Keyboard').first().click();
   await btn('Release Keyboard').waitFor();
   await page.evaluate(()=>{
@@ -123,6 +147,17 @@ try {
     audit.note(audit.root-12,true);audit.note(audit.root+12,true);
   });
   await page.waitForFunction(()=>audit.peak()>0.001);
+  if(path===synthetic){
+    const bindings=await page.evaluate(()=>audit.commands.filter(t=>t==='daw-sampler-live').length);
+    await fx.selectOption('synth');await fx.selectOption('dry');
+    await page.waitForFunction(()=>audit.commands.filter(t=>t==='daw-sampler-keyboard-fx').length===2);
+    assert.equal(await page.evaluate(()=>audit.commands.filter(t=>t==='daw-sampler-live').length),bindings);
+    await scope.locator('summary').click();
+    await scope.scrollIntoViewIfNeeded();
+    await scopeSignal();
+    await scope.screenshot({path:join(evidence,'keyboard-oscilloscope.png')});
+    await scope.locator('summary').click();
+  }
   const loop=await page.evaluate(()=>audit.maps.at(-1).loopEnd);
   let heldPeak=null;
   if(loop){
@@ -184,6 +219,8 @@ try {
   await btn('Cancel').click();
   assert.equal(await studio.getByLabel('Working name',{exact:true}).inputValue(),name);
   if(path===synthetic){
+    const advancedFx=studio.locator('.ww-sampler-layout').getByLabel('Keyboard FX',{exact:true});
+    await advancedFx.selectOption('synth');
     await studio.getByRole('button',{name:'Play on Synth keyboard',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('.ww-sampler-route')?.textContent.includes('Working') ||
       [...document.querySelectorAll('.ww-sampler-route')].some(n=>n.textContent.includes('Wizard long · Working')));
@@ -194,10 +231,12 @@ try {
     await btn('Next').click();await step('Discover');
     await btn('Next').click();await step('Build');
     await btn('Next').click();await step('Play & Finish');
+    assert.equal(await fx.inputValue(),'dry');
     await btn('Play on Keyboard').first().click();
     await btn('Release Keyboard').click();
     await btn('Cancel').click();
     assert.equal(await studio.locator('.ww-sampler-route').first().innerText(),prior);
+    assert.equal(await advancedFx.inputValue(),'synth');
     await studio.getByRole('button',{name:'Release Synth keyboard',exact:true}).click();
     await studio.getByRole('button',{name:'Auto Instrument Wizard',exact:true}).click();
     await wizard.getByLabel('Wizard WAV').setInputFiles(path);

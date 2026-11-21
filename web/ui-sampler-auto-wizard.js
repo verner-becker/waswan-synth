@@ -20,6 +20,7 @@ const noteName=n=>noteNames[n%12]+(Math.floor(n/12)-1)+' (MIDI '+n+')';
 
 function choice(label,values,current,change) {
   const wrap=el('label','',label),select=el('select');
+  select.setAttribute('aria-label',label);
   for (const [value,text] of values) select.append(new Option(text,value));
   select.value=current;
   select.onchange=()=>change(select.value);
@@ -33,6 +34,7 @@ export class AutoInstrumentWizard {
     this.trigger=trigger;
     this.step=0;
     this.character='Auto';
+    this.keyboardFx=studio.wizardRoute ? studio.liveRoute.keyboardFx : 'dry';
     this.items=[];
     this.minis=[];
     this.node=el('section','ww-auto-wizard');
@@ -294,6 +296,13 @@ export class AutoInstrumentWizard {
   playScreen() {
     const s=this.studio;
     this.content.append(el('p','ww-muted','Use the shared Keyboard & pads below or the SMK-37 Pro. Large transpositions can change the timbre.'));
+    const fx=choice('Keyboard FX',[['dry','Dry'],['synth','Use Synth FX']],this.keyboardFx,mode=>this.run(async()=>{
+      try {
+        if(s.wizardRoute) await s.changeKeyboardFx(mode);
+        this.keyboardFx=mode;
+      } finally {fx.querySelector('select').value=this.keyboardFx;}
+    },{cancelable:false}));
+    this.content.append(fx);
     for (const item of this.selected()) {
       const row=el('section','ww-wizard-instrument');
       const buttons=el('div','ww-sampler-actions');
@@ -301,7 +310,7 @@ export class AutoInstrumentWizard {
         const label=item.name+' · Wizard';
         await s.playPrepared(async()=>item.saved
           ? prepareWorking(s.player,s.root,await openWorking(s.root,item.saved.id),{signal})
-          : previewProposal(s.player,item.p,item,signal),label,{restorePrevious:true});
+          : previewProposal(s.player,item.p,item,signal),label,{restorePrevious:true,keyboardFx:this.keyboardFx});
         this.status.textContent=s.route.textContent;this.paint();
       },{cancelable:false}));
       buttons.append(this.button('Edit Advanced',()=>this.advanced(item),{cancelable:false}));

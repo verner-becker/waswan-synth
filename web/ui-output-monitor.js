@@ -12,8 +12,8 @@ const spectrumColors=Array.from({length:256},(_,i)=>{
 });
 
 export class OutputMonitor {
-  constructor() {
-    this.node=Panel('Synth output','Post-master · mono');
+  constructor({title='Synth output',detail='Post-master · mono',zoomId='ww-scope-zoom'}={}) {
+    this.node=Panel(title,detail);
     this.node.classList.add('ww-output-monitor');
     this.lastDraw=-Infinity;
     this.autoGain=1;
@@ -39,7 +39,7 @@ export class OutputMonitor {
 
     this.zoom=el('div','ww-output-zoom');
     const zoomLabel=el('label','','Y zoom');
-    zoomLabel.htmlFor='ww-scope-zoom';
+    zoomLabel.htmlFor=zoomId;
     this.zoomControl=el('select');
     this.zoomControl.id=zoomLabel.htmlFor;
     this.zoomControl.title='Waveform display gain only';
@@ -86,6 +86,14 @@ export class OutputMonitor {
     this.autoGain=1;
     this.history?.getContext('2d').clearRect(0,0,HISTORY_WIDTH,HISTORY_HEIGHT);
     this.lastColumn=null;
+  }
+
+  detach() {
+    this.source?.disconnect(this.analyser);
+    this.source=this.analyser=null;
+    this.rms.update(null);this.peak.update(null);
+    this.history?.getContext('2d').clearRect(0,0,HISTORY_WIDTH,HISTORY_HEIGHT);
+    this.updateStatus();this.paint();
   }
 
   setMode(spectrum) {
