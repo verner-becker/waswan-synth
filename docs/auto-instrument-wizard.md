@@ -56,3 +56,9 @@ Evidências locais em `.local/validation/auto-instrument-wizard/`. Os arquivos `
 Passaram as 26 suítes Node/WASM de `tests/sampler-studio/*.test.mjs` e as sete regressões de UI Foundation, perfil MIDI, diagnóstico MIDI, pickup, 256 vozes, DSP Monitor e monitor DAW. O build de referência da UI e 12 regressões em Chrome passaram, incluindo Foundation v1/v2, Sampler UX-1 a UX-5 e as verificações de MIDI, pickup, DAW, 256 vozes e DSP. O diagnóstico MIDI foi repetido com o servidor da suíte na porta 8738. O ensaio prolongado do DSP Monitor registrou 181 janelas e pico de 256 vozes.
 
 Para o aceite físico, comece pela voz, arme **Play on Keyboard**, toque a raiz, uma oitava abaixo e acima e depois um acorde grave/agudo. Segure por mais de um segundo e solte. Para a guitarra, compare o **Listen** de dois candidatos com o próprio trecho da gravação. Registre o intervalo preferido, eventual repetição do ataque e qualquer degrau audível no loop.
+
+### Osciloscópio e Keyboard FX
+
+O ensaio em Chrome verificou a forma de onda na prévia isolada e na saída compartilhada, a medição na janela destacada e a troca de efeitos com duas notas MIDI sustentadas. O Wizard recuperou o modo **Use Synth FX** de uma Working Copy anteriormente armada após a execução de um candidato em **Dry**. As capturas e os relatórios dos três WAVs ficam em `.local/validation/sampler-keyboard-fx/`.
+
+No WASM, as notas sequenciadas na própria Parte A mantiveram sinal e cauda idênticos ao trocar o modo do teclado. A suíte de 256 vozes mediu P99 de 2,95 ms com a compilação e o Chrome concorrendo pela CPU. Ao repetir o mesmo ensaio isoladamente, mediu 1,36 ms para um orçamento de 2,90 ms por bloco. O DSP Monitor em Chrome exportou 181 janelas com pico de 256 vozes. Seu relógio de resolução de 1 ms registrou 940 de 62.154 blocos acima do orçamento naquela execução.
