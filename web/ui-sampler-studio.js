@@ -15,6 +15,7 @@ import {createSamplerInterchange} from './ui-sampler-interchange.js';
 import {SamplerBuilder} from './ui-sampler-builder.js';
 import {createSamplerMapping} from './ui-sampler-mapping.js';
 import {createSamplerGroupInspector} from './ui-sampler-groups.js';
+import {AutoInstrumentWizard} from './ui-sampler-auto-wizard.js';
 import {SamplerLibraryBrowser} from './ui-sampler-library.js';
 
 const preferenceKey='waswan.sampler.studio.sections.v1';
@@ -35,7 +36,10 @@ export class SamplerStudio {
     this.preferenceKey=preferenceKey;this.prefs=readPreferences(this.preferenceKey);this.sections=new Map();this.defaults=new Map();
     this.node=Panel('Sampler Studio');this.node.classList.add('ww-sampler-studio');
     this.detachButton=action('Open Sampler in new window',()=>this.openWindow());
-    this.node.firstElementChild.append(this.detachButton);
+    const wizardButton=action('Auto Instrument Wizard',()=>{
+      if(!this.busy) new AutoInstrumentWizard(this,wizardButton);
+    },'ww-primary');
+    this.node.firstElementChild.append(wizardButton,this.detachButton);
     this.heading=this.node.querySelector('h2');this.heading.tabIndex=-1;
     this.status=el('p','ww-sampler-status','Choose your Samples folder to open a Working Copy or import a WAV.');
     this.status.setAttribute('role','status');this.node.append(this.status);
@@ -390,18 +394,28 @@ export class SamplerStudio {
       this.previewWav().then(wav=>prepareSamplePreview(this.player,wav,draft.rootNote));
     await this.playPrepared(prepare,draft.name+(official?' · Official r'+draft.baseRef.revision:' · Working'));
   }
-  async playPrepared(prepare,label){
+  async playPrepared(prepare,label,{restorePrevious=false}={}){
     const conflict=this.liveConflict();if(conflict)throw Error(conflict);
     this.status.textContent='Preparing keyboard preview…';
     const ref=await prepare();
     const changed=this.liveConflict();if(changed)throw Error(changed);
     await setLiveSampler(this.player,ref);
+    if(restorePrevious){
+      if(!this.wizardRoute) this.wizardRoute={previous:this.liveRoute};
+    }else this.wizardRoute=null;
+    this.liveRoute={ref,label,prepare};
     this.liveName=label;this.release.hidden=false;
     this.status.textContent='Play '+label+' on Synth Part A. Release Synth keyboard to restore its previous sound.';
     this.updateRoute();
   }
-  resetLive(){this.liveName=null;this.updateRoute();this.sync();}
+  resetLive(){this.wizardRoute=null;this.liveRoute=null;this.liveName=null;this.updateRoute();this.sync();}
   async releaseLive(){
+    const previous=this.wizardRoute?.previous;
+    if(previous){
+      const {resident}=await this.player.requests().request('daw-sampler-status',{ref:previous.ref});
+      await this.playPrepared(()=>resident?previous.ref:previous.prepare(),previous.label);
+      return;
+    }
     await setLiveSampler(this.player,null);this.resetLive();
     this.status.textContent='Sampler keyboard released.';
   }

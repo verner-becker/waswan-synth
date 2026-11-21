@@ -47,7 +47,7 @@ try {
   assert.deepEqual(saved.instrument.regions[0].envelope,result.envelope);
   const unknown={...result,pitch:{root:null},loop:null};
   assert.throws(()=>proposalMap(saved.rendered,unknown,settings),/root note/);
-  assert(proposalMap(saved.rendered,{...unknown,character:'Texture'},settings).regions[0].fixedPitch);
+  assert.deepEqual(proposalMap(saved.rendered,{...unknown,character:'Texture'},settings).regions[0].key,[60,60]);
   const engine=new Engine(await readFile('.local/build/waswan-256.wasm'),
     await readFile('upstream/SMKSYNTH/web/simulator/factory-session.bin'));
   engine.advance(4000);

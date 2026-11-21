@@ -12,7 +12,14 @@ import {createWorking, saveWorking} from './sampler-working.js';
 
 // Selection thresholds describe editable starting points, not calibrated probabilities.
 const scanSeconds = 1, hopSeconds = 0.5, minActiveRms = 0.002;
-const maxCandidates = 5, maxOverlap = 0.45, minSeconds = 0.06, maxSeconds = 16;
+const maxCandidates = 5, maxOverlap = 0.45;
+export const excerptLimits = Object.freeze({minSeconds:0.06,maxSeconds:16});
+const {minSeconds,maxSeconds} = excerptLimits;
+const envelopeHopSeconds = 0.005, trimRelativeRms = 0.035;
+const decayRatio = 0.45, earlyPeakFraction = 0.45, tailFraction = 0.25;
+const ranking = {matchingCharacter:4,stablePitch:2,extraAttackPenalty:0.45,loopBonus:1};
+const attackFraction = 0.85, decayFraction = 0.65, maxPitchDriftCents = 45;
+const loopIntervals = [[0.2,0.7],[0.3,0.8],[0.4,0.85],[0.5,0.78]];
 const maxSeamError = 0.12, maxLevelRatio = 2, minLoopSeconds = 0.12;
 const playbackRate = 44100, chordPeakDb = -12;
 const envelopePolicy = {
@@ -30,8 +37,8 @@ async function readRange(file, layout, start, end) {
 }
 
 function activeRange(analysis, rate) {
-  const hop = Math.max(1, Math.round(rate * 0.005));
-  const floor = Math.max(minActiveRms, analysis.rms * 0.035);
+  const hop = Math.max(1, Math.round(rate * envelopeHopSeconds));
+  const floor = Math.max(minActiveRms, analysis.rms * trimRelativeRms);
   const first = analysis.envelope.find(bin => bin.rms >= floor);
   const last = analysis.envelope.findLast(bin => bin.rms >= floor);
   if (!first) return null;
@@ -44,9 +51,9 @@ function overlaps(a,b) {
 }
 
 function characterize(analysis) {
-  const tail = analysis.envelope.slice(-Math.max(1,Math.floor(analysis.envelope.length/4)));
+  const tail = analysis.envelope.slice(-Math.max(1,Math.floor(analysis.envelope.length*tailFraction)));
   const tailRms = tail.reduce((sum,b) => sum+b.rms,0) / tail.length;
-  const decays = tailRms < analysis.rms * 0.45 && analysis.peakFrame < analysis.frames * 0.45;
+  const decays = tailRms < analysis.rms * decayRatio && analysis.peakFrame < analysis.frames * earlyPeakFraction;
   return decays ? 'Plucked' : analysis.pitch.root !== null ? 'Sustained' : 'Texture';
 }
 
@@ -58,7 +65,7 @@ export async function discoverCandidates(file, character='Auto', {signal,onProgr
   for (let start=0; start<frames; start+=stride) {
     signal?.throwIfAborted();
     const end = Math.min(frames,start+window);
-    onProgress?.(end/frames);
+    if (start % window === 0 || end===frames) onProgress?.(end/frames);
     const audio = await readRange(file,layout,start,end);
     if (levels(audio.pcm).rms < minActiveRms || end-start < minSeconds*sampleRate) continue;
     const analysis = analyzeSample(audio);
@@ -68,9 +75,10 @@ export async function discoverCandidates(file, character='Auto', {signal,onProgr
     const attacks = analysis.transients.length;
     const reason = [pitched?'Stable pitch · MIDI '+analysis.pitch.root:'Pitch uncertain',
       type==='Plucked'?'decaying attack':type==='Sustained'?'held tone':'evolving sound'];
-    if (attacks>2) reason.push('several attacks; other sounds may overlap');
-    const score = (type===character?4:0) + (pitched?2:0) + (active.end-active.start)/window
-      - Math.min(4,Math.max(0,attacks-1))*0.45 - (analysis.pitch.spreadCents??35)/100;
+    if (attacks>2) reason.push('several attacks, other sounds may overlap');
+    if (analysis.clipped) reason.push('input reaches full scale');
+    const score = (type===character?ranking.matchingCharacter:0) + (pitched?ranking.stablePitch:0) + (active.end-active.start)/window
+      - Math.min(4,Math.max(0,attacks-1))*ranking.extraAttackPenalty - (analysis.pitch.spreadCents??35)/100;
     const candidate = {start:start+active.start,end:start+active.end,character:type,reason:reason.join(' · '),score};
     const conflicts = best.filter(other=>overlaps(other,candidate));
     if (conflicts.some(other=>other.score>=score)) continue;
@@ -84,7 +92,7 @@ export async function discoverCandidates(file, character='Auto', {signal,onProgr
       signal?.throwIfAborted();
       const audio = await readRange(file,layout,item.start,item.end);
       if (sustainLoop(audio,analyzeSample(audio))) {
-        item.score += 1;
+        item.score += ranking.loopBonus;
         item.reason += ' · sustain loop suggested';
       }
     }
@@ -99,7 +107,7 @@ function sustainLoop(audio, analysis) {
   const {frames,pitch,envelope,transients} = analysis;
   if (frames < sampleRate*minLoopSeconds*2) return null;
   let best = null;
-  for (const [lo,hi] of [[0.2,0.7],[0.3,0.8],[0.4,0.85],[0.5,0.78]]) {
+  for (const [lo,hi] of loopIntervals) {
     const start = Math.floor(frames*lo), end = Math.floor(frames*hi);
     if (end-start < minLoopSeconds*sampleRate || transients.some(t=>t>=start && t<=end)) continue;
     const body = envelope.filter(b=>b.start>=start && b.start<end);
@@ -107,7 +115,7 @@ function sustainLoop(audio, analysis) {
     if (!energies.length || energies[Math.floor(energies.length*0.1)] < minActiveRms ||
         energies[Math.floor(energies.length*0.9)] > maxLevelRatio*energies[Math.floor(energies.length*0.1)]) continue;
     const local = detectPitch({...audio,pcm:pcm.subarray(start*channels,end*channels)});
-    if (local.root===null || (pitch.root!==null && Math.abs(1200*Math.log2(local.hz/pitch.hz))>45)) continue;
+    if (local.root===null || (pitch.root!==null && Math.abs(1200*Math.log2(local.hz/pitch.hz))>maxPitchDriftCents)) continue;
     const radius = Math.min(2048,Math.ceil(sampleRate/local.hz));
     const seam = suggestLoops(audio,{start,end,radius})[0];
     if (seam && seam.error<=maxSeamError && (!best || seam.error<best.error)) best=seam;
@@ -139,8 +147,8 @@ export async function proposeInstrument(file, range, options={}) {
   const loop = options.sustain==='Off' || (character==='Plucked' && options.sustain!=='On') ? null : sustainLoop(audio,analysis);
   const envelope = {...envelopePolicy[character]};
   const peak = analysis.envelope.reduce((max,b)=>Math.max(max,b.rms),0);
-  const attack = analysis.envelope.find(b=>b.rms>=0.85*peak);
-  const decay = analysis.envelope.find(b=>b.start>attack.start && b.rms<=peak*0.65);
+  const attack = analysis.envelope.find(b=>b.rms>=attackFraction*peak);
+  const decay = analysis.envelope.find(b=>b.start>attack.start && b.start<analysis.frames*0.85 && b.rms<=peak*decayFraction);
   // The recording already contains its attack. Limit any additional envelope shaping.
   const attackEstimated = !!attack && attack.start>0;
   if (attackEstimated) envelope.attackMs=Math.min(15,Math.max(1,Math.round(1000*attack.start/playbackRate)));
@@ -157,7 +165,8 @@ export function proposalMap(sample, proposal, {id,name,rootNote}) {
   if (!Number.isInteger(root) || root<0 || root>127) throw Error('Enter a root note from 0 to 127 to play this tone chromatically.');
   const instrument = mapSample(sample,root,{name,mode:proposal.loop?'gate':'oneShot'});
   const region = instrument.regions[0];
-  Object.assign(region,{fixedPitch:rootNote==null && pitched===null,envelope:proposal.envelope,gainDb:proposal.gainDb,cents:root===pitched?-(proposal.pitch.cents??0):0});
+  if (rootNote==null && pitched===null) region.key=[root,root];
+  Object.assign(region,{envelope:proposal.envelope,gainDb:proposal.gainDb,cents:root===pitched?-(proposal.pitch.cents??0):0});
   if (proposal.loop) region.loop=proposal.loop;
   return validateInstrument({...instrument,id});
 }
