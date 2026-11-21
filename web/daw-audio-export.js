@@ -169,7 +169,7 @@ export class DawAudioExport {
           else if(m.t==='error'){workerDone=true;resolve();job.fail(Error(m.message));}
         };
       });
-      worker.postMessage({dir,count,frames:plan.frames,port:channel.port2},[channel.port2]);
+      worker.postMessage({dir,count,frames:plan.frames,channelLevels:job.channelLevels,port:channel.port2},[channel.port2]);
       const interrupted=new Promise((_,reject)=>{
         abortCapture=()=>reject(signal.reason);
         signal.addEventListener('abort',abortCapture,{once:true});

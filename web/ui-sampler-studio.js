@@ -16,6 +16,7 @@ import {createSamplerInterchange} from './ui-sampler-interchange.js';
 import {SamplerBuilder} from './ui-sampler-builder.js';
 import {createSamplerMapping} from './ui-sampler-mapping.js';
 import {createSamplerGroupInspector} from './ui-sampler-groups.js';
+import {SampleLab} from './ui-sampler-lab.js';
 import {AutoInstrumentWizard} from './ui-sampler-auto-wizard.js';
 import {SamplerLibraryBrowser} from './ui-sampler-library.js';
 
@@ -33,18 +34,20 @@ function field(parent,label,type,options={}){
 
 export class SamplerStudio {
   constructor({bridge,player,daw,liveConflict,assignOfficial}) {
-    Object.assign(this,{bridge,player,liveConflict,assignOfficial});
+    Object.assign(this,{bridge,player,daw,liveConflict,assignOfficial});
     this.preferenceKey=preferenceKey;this.prefs=readPreferences(this.preferenceKey);this.sections=new Map();this.defaults=new Map();
     this.node=Panel('Sampler Studio');this.node.classList.add('ww-sampler-studio');
     this.detachButton=action('Open Sampler in new window',()=>this.openWindow());
     const wizardButton=action('Auto Instrument Wizard',()=>{
-      if(!this.busy) new AutoInstrumentWizard(this,wizardButton);
+      if(!this.busy){this.lab.hide(false);new AutoInstrumentWizard(this,wizardButton);}
     },'ww-primary');
-    this.node.firstElementChild.append(wizardButton,this.detachButton);
+    this.labButton=action('Sample Lab',()=>{if(!this.busy)void this.lab.show();});
+    this.node.firstElementChild.append(wizardButton,this.labButton,this.detachButton);
     this.heading=this.node.querySelector('h2');this.heading.tabIndex=-1;
     this.status=el('p','ww-sampler-status','Choose your Samples folder to open a Working Copy or import a WAV.');
     this.status.setAttribute('role','status');this.node.append(this.status);
     this.body=el('fieldset','ww-sampler-layout');this.node.append(this.body);
+    this.lab=new SampleLab(this);this.node.append(this.lab.node);
     const library=this.section('Library & Metadata',true);
     this.browser=new SamplerLibraryBrowser(this);this.interchange=createSamplerInterchange(this);library.append(this.browser.node,this.interchange.node);this.body.append(library);
     this.main=el('div','ww-sampler-main');this.body.append(this.main);
@@ -175,14 +178,14 @@ export class SamplerStudio {
     this.syncSubsections(true);this.scope.observe();
   }
   focus(){this.heading.focus({preventScroll:true});}
-  async run(fn,activePanel) {
+  async run(fn,activePanel,skipWaveRefresh=false) {
     if(this.busy)return;
     this.busy=true;this.body.disabled=this.body.inert=!activePanel;
     if(activePanel)for(const panel of this.sections.values())panel.inert=!panel.contains(activePanel);
     this.node.setAttribute('aria-busy','true');
     try{
       const result=await fn();
-      if(this.displayMode==='working'&&this.resultStale)await this.showWave('working');
+      if(!skipWaveRefresh&&this.displayMode==='working'&&this.resultStale)await this.showWave('working');
       return result;
     }
     catch(error){if(error.name!=='AbortError')this.status.textContent=error.message||String(error);}
@@ -446,7 +449,7 @@ export class SamplerStudio {
   }
   sync(){
     this.keyboardFx.value=this.liveRoute?.keyboardFx??this.defaultKeyboardFx;
-    const d=this.draft,source=d?.source;this.stack.sync(d);this.history.sync(d);this.syncMap();this.fusion.sync();this.interchange.sync();this.updatePlayers?.();
+    const d=this.draft,source=d?.source;this.labButton.disabled=!d||this.wizardOpen;this.lab.sync();this.stack.sync(d);this.history.sync(d);this.syncMap();this.fusion.sync();this.interchange.sync();this.updatePlayers?.();
     this.waveMode.disabled=!d;this.waveMode.value=this.displayMode||'source';
     this.continueRender.disabled=!d?.rendered;
     this.importButton.disabled=!this.library;

@@ -183,11 +183,11 @@ try {
         return original.call(this,name,options);
       };
     });
-    await btn('Finish').click();
+    await btn('Finish & Play').click();
     await wizard.getByText('Saved Working / playable',{exact:true}).waitFor();
     await wizard.getByText(/Simulated disk full|quota|storage space/i).first().waitFor();
   }
-  await btn('Finish').click();
+  await btn('Finish & Play').click();
   await wizard.getByText('Saved Working / playable',{exact:true}).nth(path===synthetic?1:0).waitFor();
   await page.screenshot({path:join(evidence,tag+'-finish.png')});
   const docs=await page.evaluate(async()=>{

@@ -53,7 +53,7 @@ export class AutoInstrumentWizard {
     this.status=el('p','ww-sampler-status');this.status.setAttribute('role','status');
     this.cancel=action('Cancel',()=>this.close());
     this.node.append(this.trail,this.heading,this.help,this.controls,this.status,this.cancel);
-    studio.body.before(this.node);studio.body.hidden=true;trigger.hidden=true;
+    studio.body.before(this.node);studio.body.hidden=true;trigger.hidden=true;studio.wizardOpen=true;studio.sync();
     this.paint(true);
   }
   async run(fn,{cancelable=true}={}) {
@@ -77,7 +77,7 @@ export class AutoInstrumentWizard {
     this.clearMinis();
     this.wave.destroy();
     if (this.listenOwner) this.studio.audition.stop();
-    this.studio.body.hidden=false;this.trigger.hidden=false;this.node.remove();
+    this.studio.lab.hide(false);this.studio.wizardOpen=false;this.trigger.hidden=false;this.node.remove();
     this.trigger.focus();this.studio.sync();
   }
   clearMinis() {
@@ -147,11 +147,11 @@ export class AutoInstrumentWizard {
     this.paint();
     await s.browser.refreshWorking();
   }
-  async advanced(item) {
+  async advanced(item,lab=false) {
     const s=this.studio;
     if (!s.confirmDiscard()) return;
     if (!item.saved) {
-      if (!this.node.ownerDocument.defaultView.confirm('Save this Working Copy and open it in the advanced editor?')) return;
+      if (!lab&&!this.node.ownerDocument.defaultView.confirm('Save this Working Copy and open it in the advanced editor?')) return;
       await this.save([item]);
       if (!item.saved) return;
     }
@@ -162,12 +162,13 @@ export class AutoInstrumentWizard {
       this.node.hidden=true;s.body.hidden=false;
       const resume=action('Resume Auto Instrument Wizard',()=>{
         if(s.busy)return;
-        resume.remove();s.body.hidden=true;this.node.hidden=false;this.paint(true);
+        resume.remove();s.lab.hide(false);s.body.hidden=true;this.node.hidden=false;this.paint(true);
       });
       this.trigger.after(resume);
     }else this.close();
     s.status.textContent='Working Copy open · '+item.saved.name;
-    s.sections.get('Mapping Editor').querySelector('summary').focus();
+    if(lab)await s.lab.show();
+    else s.sections.get('Mapping Editor').querySelector('summary').focus();
   }
   paint(focus=false) {
     this.clearMinis();
@@ -313,7 +314,8 @@ export class AutoInstrumentWizard {
           : previewProposal(s.player,item.p,item,signal),label,{restorePrevious:true,keyboardFx:this.keyboardFx});
         this.status.textContent=s.route.textContent;this.paint();
       },{cancelable:false}));
-      buttons.append(this.button('Edit Advanced',()=>this.advanced(item),{cancelable:false}));
+      buttons.append(this.button('Refine in Sample Lab',()=>this.advanced(item,true),{cancelable:false}),
+        this.button('Edit Advanced',()=>this.advanced(item),{cancelable:false}));
       row.append(el('h4','',item.name),this.summary(item),buttons);
       if(item.saved) row.append(el('strong','ww-sampler-route','Saved Working / playable'));
       if(item.error) row.append(el('p','',item.error));
@@ -325,7 +327,7 @@ export class AutoInstrumentWizard {
     }));
     if (!this.selected().some(i=>i.saved)) this.nav.append(action('Rebuild',()=>{this.step=2;this.paint(true);}));
     if(s.wizardRoute) this.nav.append(this.button('Release Keyboard',async()=>{await s.releaseLive();this.status.textContent=s.route.textContent;this.paint();},{cancelable:false}));
-    if(this.selected().some(i=>!i.saved)) this.nav.append(this.button('Finish',()=>this.save(this.selected()),{cancelable:false}));
+    if(this.selected().some(i=>!i.saved)) this.nav.append(this.button('Finish & Play',()=>this.save(this.selected()),{cancelable:false}));
     else this.content.append(el('p','ww-muted','Open Edit Advanced to promote an Official revision and assign it to a DAW track.'));
   }
 }

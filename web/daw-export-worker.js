@@ -5,7 +5,8 @@ const chunkFrames=1024;
 let handles=[],port,frames=0,sequence=0,limit,closed=false;
 const pcm=new DataView(new ArrayBuffer(chunkFrames*4));
 const peaks=[];
-const clipped=[];
+const clipped=[],channelLevels=[];
+let measureChannels=false;
 function write(handle,bytes,at){
   if(handle.write(bytes,{at})!==bytes.byteLength)throw Error('Incomplete export write');
 }
@@ -23,7 +24,9 @@ function capture(m){
   if(m.t==='end'){
     if(m.error||m.frames!==frames||frames!==limit)throw Error(m.error||'Incomplete audio export');
     try{for(const handle of handles)handle.flush();}finally{close();}
-    postMessage({t:'finished',frames,peaks,clipped});
+    if(measureChannels)for(const output of channelLevels)for(const channel of output)
+      channel.rms=Math.sqrt(channel.rms/frames);
+    postMessage({t:'finished',frames,peaks,clipped,...(measureChannels?{channelLevels}:{})});
     return;
   }
   if(m.t!=='chunk'||m.seq!==sequence++||m.frames<1||m.frames>chunkFrames||frames+m.frames>limit)
@@ -35,6 +38,10 @@ function capture(m){
       const value=input[(i>>1)*count*2+j*2+(i&1)],peak=Math.abs(value);
       peaks[j]=Math.max(peaks[j],peak);
       if(peak>1)clipped[j]++;
+      if(measureChannels){
+        const channel=channelLevels[j][i&1];
+        channel.peak=Math.max(channel.peak,peak);channel.rms+=value**2;
+      }
       const v=Math.min(1,Math.max(-1,value));
       pcm.setInt16(i*2,Math.min(32767,Math.round(v*32768)),true);
     }
@@ -46,7 +53,7 @@ function capture(m){
 onmessage=async({data:m})=>{
   if(m.t==='cancel'){close();postMessage({t:'closed'});return;}
   try{
-    limit=m.frames;
+    limit=m.frames;measureChannels=m.channelLevels===true;
     for(let i=0;i<m.count;i++){
       const file=await m.dir.getFileHandle(i+'.wav',{create:true});
       if(closed)return;
@@ -55,6 +62,7 @@ onmessage=async({data:m})=>{
       handles.push(handle);
       peaks.push(0);
       clipped.push(0);
+      if(measureChannels)channelLevels.push([{peak:0,rms:0},{peak:0,rms:0}]);
       write(handle,new Uint8Array(wavHeader(limit)),0);
     }
     port=m.port;

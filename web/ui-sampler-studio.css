@@ -77,3 +77,19 @@
 .ww-wizard-summary p {margin:4px 0;font-size:13px}
 .ww-wizard-controls>.ww-sampler-actions {margin-top:14px}
 .ww-wizard-controls>.ww-sampler-actions button:last-child {border-color:var(--ww-accent)}
+
+.ww-sample-lab {max-width:1000px;margin:8px auto 20px;padding:clamp(12px,2vw,24px);background:var(--ww-panel);border:1px solid var(--ww-border);border-radius:8px}
+.ww-sample-lab[hidden],.ww-sample-lab [hidden] {display:none}
+.ww-sample-lab h3 {margin:0 0 6px}
+.ww-lab-controls {margin:0;padding:0;border:0;min-inline-size:0}
+.ww-lab-panel {margin:10px 0;border:1px solid var(--ww-border);border-radius:6px;padding:10px 12px}
+.ww-lab-panel summary {cursor:pointer;font-weight:600}
+.ww-lab-panel[open] summary {margin-bottom:10px}
+.ww-lab-graph {display:block;width:100%;height:auto;max-height:205px;background:#101921;border-radius:4px;touch-action:none}
+.ww-lab-envelope-fields {display:grid;grid-template-columns:minmax(120px,1fr) minmax(90px,3fr);gap:6px 14px;margin:12px 0}
+.ww-lab-envelope-fields label {display:flex;justify-content:space-between;gap:8px;align-items:center}
+.ww-sample-lab input:not([type=checkbox]):not([type=range]),.ww-sample-lab select {max-width:100%;color:var(--ww-text);background:var(--ww-bg);border:1px solid var(--ww-border);border-radius:4px;padding:5px;margin-inline:5px}
+.ww-sample-lab input[type=number] {width:8ch}
+.ww-lab-report dl {display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px}
+.ww-lab-report dd {margin:0}
+.ww-lab-save {margin-top:14px}

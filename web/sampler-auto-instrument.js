@@ -20,7 +20,7 @@ const ranking = {matchingCharacter:4,stablePitch:2,extraAttackPenalty:0.45,loopB
 const attackFraction = 0.85, decayFraction = 0.65, maxPitchDriftCents = 45;
 const loopIntervals = [[0.2,0.7],[0.3,0.8],[0.4,0.85],[0.5,0.78]];
 const maxSeamError = 0.12, maxLevelRatio = 2, minLoopSeconds = 0.12;
-const playbackRate = 44100, chordPeakDb = -12;
+const playbackRate = 44100, chordPeakDb = -15;
 const envelopePolicy = {
   Sustained:{attackMs:5, decayMs:80, sustain:0.9, releaseMs:140},
   Plucked:{attackMs:1, decayMs:80, sustain:1, releaseMs:25},
