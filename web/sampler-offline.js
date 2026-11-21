@@ -69,14 +69,18 @@ export async function processWav(file, job) {
 }
 
 // Worker lifetime is exactly one operation. Cancel also stops CPU-bound analysis.
-export function runOffline(file, job, {signal}={}) {
+export function runOffline(file, job, {signal,onProgress}={}) {
   signal?.throwIfAborted();
   return new Promise((resolve,reject)=>{
     const worker=new Worker(new URL('./sampler-offline-worker.js',import.meta.url),{type:'module'});
     const finish=(fn,value)=>{worker.terminate();signal?.removeEventListener('abort',abort);fn(value);};
     const abort=()=>finish(reject,signal.reason);
     signal?.addEventListener('abort',abort,{once:true});
-    worker.onmessage=({data})=>data.ok?finish(resolve,data.value):finish(reject,Error(data.error));
+    worker.onmessage=({data})=>{
+      if (data.progress !== undefined) onProgress?.(data.progress);
+      else if (data.ok) finish(resolve,data.value);
+      else finish(reject,Error(data.error));
+    };
     worker.onerror=e=>finish(reject,Error(e.message));
     try{worker.postMessage({file,job});}catch(error){finish(reject,error);}
   });
