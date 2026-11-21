@@ -4,6 +4,7 @@ import {createSamplerWaveform,createMiniWaveform} from './ui-sampler-waveform.js
 import {inspectWav} from './sampler-wav.js';
 import {rangeWav} from './sampler-waveform.js';
 import {importOriginal,readSampleFile} from './sampler-library.js';
+import {openWorking,prepareWorking} from './sampler-working.js';
 import {runOffline} from './sampler-offline.js';
 import {excerptLimits,previewProposal,saveProposal} from './sampler-auto-instrument.js';
 
@@ -152,7 +153,8 @@ export class AutoInstrumentWizard {
       await this.save([item]);
       if (!item.saved) return;
     }
-    await s.adopt(item.saved,this.file);
+    item.saved=await openWorking(s.root,item.saved.id);
+    await s.adopt(item.saved,await readSampleFile(s.root,item.saved.source));
     s.sections.get('Mapping Editor').open=true;
     if(this.selected().some(other=>!other.saved)){
       this.node.hidden=true;s.body.hidden=false;
@@ -247,7 +249,7 @@ export class AutoInstrumentWizard {
     const p=item.p;
     if (!p) return el('p','ww-muted',item.error);
     const e=p.envelope,root=item.rootNote??p.pitch.root;
-    const pitch=item.rootNote!=null?'Root · entered '+noteName(item.rootNote):p.pitch.root!==null?
+    const pitch=item.unpitched && p.character!=='Sustained'?'Default · unpitched trigger on MIDI 60':item.rootNote!=null?'Root · entered '+noteName(item.rootNote):p.pitch.root!==null?
       'Estimated root · '+noteName(root)+' ('+p.pitch.cents.toFixed(1)+' cents, spread '+p.pitch.spreadCents.toFixed(1)+' cents)':
       p.character==='Sustained'?'Needs review · enter a root note':'Default · unpitched trigger on MIDI 60';
     const loop=p.loop?'Estimated forward loop · '+p.loop.start+'–'+p.loop.end+' frames · crossfade '+p.loop.crossfade:
@@ -257,6 +259,7 @@ export class AutoInstrumentWizard {
       'Attack '+e.attackMs+' ms ('+(p.attackEstimated?'estimated':'default')+') · Decay '+e.decayMs+' ms ('+
       (p.decayEstimated?'estimated':'default')+') · Sustain '+e.sustain+' / Release '+e.releaseMs+' ms (defaults)'),
       el('p','','Detected input peak '+(20*Math.log10(p.inputPeak)).toFixed(1)+' dBFS · Proposed gain '+p.gainDb+' dB'));
+    if(p.offsetWarning) text.append(el('p','','Needs review · DC offset detected. Listen for clicks at the edges.'));
     return text;
   }
   buildScreen() {
@@ -271,16 +274,19 @@ export class AutoInstrumentWizard {
       });
       row.append(nameLabel,choice('Character',characters.map(c=>[c,c]),item.character,v=>update('character',v)),
         choice('Sustain',['Auto','On','Off'].map(c=>[c,c]),item.sustain,v=>update('sustain',v)));
-      const label=el('label','','Root note (MIDI)'),root=el('input');
-      root.type='number';root.min=0;root.max=127;root.step=1;
-      root.value=item.rootNote??item.p?.pitch.root??'';
+      const rootChoices=[['auto',item.p?.pitch.root!=null?'Estimated · '+noteName(item.p.pitch.root):
+        item.character==='Sustained'?'Choose a root note…':'Default · unpitched trigger (C4)']];
+      if(item.character!=='Sustained') rootChoices.push(['trigger','Unpitched trigger (C4)']);
+      for(let n=0;n<128;n++) rootChoices.push([String(n),noteName(n)]);
       let summary=this.summary(item);
-      root.oninput=()=>{
-        item.rootNote=root.value===''?null:root.valueAsNumber;
-        const next=this.summary(item);summary.replaceWith(next);summary=next;
-        this.next.disabled=!this.selected().every(i=>this.usable(i));
-      };
-      label.append(root);row.append(label,summary);this.content.append(row);
+      const root=choice('Root note (MIDI)',rootChoices,
+        item.unpitched && item.character!=='Sustained'?'trigger':String(item.rootNote??'auto'),value=>{
+          item.unpitched=value==='trigger';
+          item.rootNote=value==='auto'||item.unpitched?null:Number(value);
+          const next=this.summary(item);summary.replaceWith(next);summary=next;
+          this.next.disabled=!this.selected().every(i=>this.usable(i));
+        });
+      row.append(root,summary);this.content.append(row);
     }
     this.next=action('Next',()=>{this.step=3;this.paint(true);});
     this.next.disabled=!this.selected().every(i=>this.usable(i));this.nav.append(this.next);
@@ -293,7 +299,9 @@ export class AutoInstrumentWizard {
       const buttons=el('div','ww-sampler-actions');
       buttons.append(this.button('Play on Keyboard',async signal=>{
         const label=item.name+' · Wizard';
-        await s.playPrepared(()=>previewProposal(s.player,item.p,item,signal),label,{restorePrevious:true});
+        await s.playPrepared(async()=>item.saved
+          ? prepareWorking(s.player,s.root,await openWorking(s.root,item.saved.id),{signal})
+          : previewProposal(s.player,item.p,item,signal),label,{restorePrevious:true});
         this.status.textContent=s.route.textContent;this.paint();
       },{cancelable:false}));
       buttons.append(this.button('Edit Advanced',()=>this.advanced(item),{cancelable:false}));

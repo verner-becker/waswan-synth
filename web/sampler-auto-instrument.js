@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {analyzeSample, detectPitch, suggestLoops} from './sampler-analysis.js';
-import {levels} from './sampler-edit.js';
 import {inspectWav, decodePCM} from './sampler-wav.js';
 import {checkFrameRange} from './sampler-waveform.js';
 import {renderRecipe} from './sampler-transform.js';
@@ -27,6 +26,26 @@ const envelopePolicy = {
   Plucked:{attackMs:1, decayMs:80, sustain:1, releaseMs:25},
   Texture:{attackMs:12, decayMs:100, sustain:0.9, releaseMs:200},
 };
+
+async function sourceLayout(file) {
+  const layout=await inspectWav(file,{anyRate:true});
+  if (![44100,48000].includes(layout.sampleRate)) throw Error('Choose a PCM16 WAV at 44.1 or 48 kHz.');
+  return layout;
+}
+
+// Steady DC is inaudible until a boundary turns it into a click. Evaluate
+// alternating energy per channel so opposite stereo offsets cannot cancel.
+function signalLevel({pcm,channels}) {
+  const sums=new Float64Array(channels);
+  let squares=0;
+  for (let i=0;i<pcm.length;i++) {
+    sums[i%channels]+=pcm[i];
+    squares+=pcm[i]*pcm[i];
+  }
+  const means=sums.map(sum=>sum*channels/pcm.length);
+  const dcPower=means.reduce((sum,v)=>sum+v*v,0)/channels;
+  return {rms:Math.sqrt(Math.max(0,squares/pcm.length-dcPower)),offset:Math.max(...means.map(Math.abs))};
+}
 
 async function readRange(file, layout, start, end) {
   const {channels, offset, sampleRate} = layout;
@@ -58,7 +77,7 @@ function characterize(analysis) {
 }
 
 export async function discoverCandidates(file, character='Auto', {signal,onProgress}={}) {
-  const layout = await inspectWav(file,{anyRate:true});
+  const layout = await sourceLayout(file);
   const {frames,sampleRate} = layout;
   const stride = Math.round(sampleRate*hopSeconds), window = Math.round(sampleRate*scanSeconds);
   const best = [];
@@ -67,7 +86,7 @@ export async function discoverCandidates(file, character='Auto', {signal,onProgr
     const end = Math.min(frames,start+window);
     if (start % window === 0 || end===frames) onProgress?.(end/frames);
     const audio = await readRange(file,layout,start,end);
-    if (levels(audio.pcm).rms < minActiveRms || end-start < minSeconds*sampleRate) continue;
+    if (signalLevel(audio).rms < minActiveRms || end-start < minSeconds*sampleRate) continue;
     const analysis = analyzeSample(audio);
     const active = activeRange(analysis,sampleRate);
     if (!active || active.end-active.start < minSeconds*sampleRate) continue;
@@ -125,11 +144,13 @@ function sustainLoop(audio, analysis) {
 }
 
 export async function proposeInstrument(file, range, options={}) {
-  const layout = await inspectWav(file,{anyRate:true});
+  const layout = await sourceLayout(file);
   checkFrameRange(range,layout.frames);
   const duration = (range.end-range.start)/layout.sampleRate;
   if (duration<minSeconds || duration>maxSeconds) throw Error('Select between 60 ms and 16 seconds for one playable excerpt.');
   const input = await readRange(file,layout,range.start,range.end);
+  const signal=signalLevel(input);
+  if (signal.rms<minActiveRms) throw Error('This selection is too quiet or contains only DC offset. Choose an audible attack or held tone.');
   const measured = analyzeSample(input), bounds = activeRange(measured,layout.sampleRate);
   if (!bounds) throw Error('This selection is too quiet. Choose an audible attack or held tone.');
   const selection = [range.start+bounds.start,range.start+bounds.end];
@@ -156,17 +177,18 @@ export async function proposeInstrument(file, range, options={}) {
   const gainDb = Math.min(0,Math.floor(chordPeakDb - 20*Math.log10(analysis.peak)));
   const wav = encodeSample(audio);
   return {wav,selection,recipe,character,loop,envelope,gainDb,inputPeak:measured.peak,inputRms:measured.rms,
-    attackEstimated,decayEstimated:!!decay,pitch:analysis.pitch,frames:analysis.frames,channels:audio.channels};
+    offsetWarning:signal.offset>Math.max(0.02,signal.rms/4),attackEstimated,decayEstimated:!!decay,pitch:analysis.pitch,frames:analysis.frames,channels:audio.channels};
 }
 
-export function proposalMap(sample, proposal, {id,name,rootNote}) {
+export function proposalMap(sample, proposal, {id,name,rootNote,unpitched=false}) {
   const pitched = proposal.pitch.root;
-  const root = rootNote ?? pitched ?? (proposal.character==='Sustained'?null:60);
+  const trigger=proposal.character!=='Sustained' && (unpitched || (rootNote==null && pitched===null));
+  const root = trigger ? 60 : rootNote ?? pitched;
   if (!Number.isInteger(root) || root<0 || root>127) throw Error('Enter a root note from 0 to 127 to play this tone chromatically.');
   const instrument = mapSample(sample,root,{name,mode:proposal.loop?'gate':'oneShot'});
   const region = instrument.regions[0];
-  if (rootNote==null && pitched===null) region.key=[root,root];
-  Object.assign(region,{envelope:proposal.envelope,gainDb:proposal.gainDb,cents:root===pitched?-(proposal.pitch.cents??0):0});
+  if (trigger) region.key=[root,root];
+  Object.assign(region,{envelope:proposal.envelope,gainDb:proposal.gainDb,cents:!trigger && root===pitched?-(proposal.pitch.cents??0):0});
   if (proposal.loop) region.loop=proposal.loop;
   return validateInstrument({...instrument,id});
 }

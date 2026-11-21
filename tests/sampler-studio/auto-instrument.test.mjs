@@ -15,6 +15,9 @@ const file = encodeSample({channels:1,sampleRate:48000,pcm:Float32Array.from({le
   i<24000 || i>=120000 ? 0 : 0.5*Math.sin(2*Math.PI*(i<72000?220:330)*i/48000))});
 const silent = encodeSample({channels:1,sampleRate:44100,pcm:new Float32Array(44100)});
 assert.deepEqual(await discoverCandidates(silent),[]);
+const dc=encodeSample({channels:2,sampleRate:44100,pcm:Float32Array.from({length:88200},(_,i)=>i%2?-0.4:0.4)});
+assert.deepEqual(await discoverCandidates(dc),[]);
+await assert.rejects(proposeInstrument(dc,{start:0,end:44100}),/DC offset/);
 await assert.rejects(proposeInstrument(silent,{start:0,end:44100}),/quiet/);
 await assert.rejects(proposeInstrument(file,{start:0,end:20}),/60 ms/);
 await assert.rejects(discoverCandidates(file,'Auto',{signal:AbortSignal.abort()}),{name:'AbortError'});
@@ -58,6 +61,8 @@ try {
   assert.equal(saved.rendered.sampleRate,44100);
   assert.equal(saved.baseRef,null);
   assert.deepEqual(saved.instrument.regions[0].envelope,result.envelope);
+  const trigger=proposalMap(saved.rendered,{...result,character:'Plucked',loop:null},{...settings,unpitched:true}).regions[0];
+  assert.deepEqual(trigger.key,[60,60]);assert.equal(trigger.cents,0);
   const unknown={...result,pitch:{root:null},loop:null};
   assert.throws(()=>proposalMap(saved.rendered,unknown,settings),/root note/);
   assert.deepEqual(proposalMap(saved.rendered,{...unknown,character:'Texture'},settings).regions[0].key,[60,60]);
