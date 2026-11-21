@@ -41,7 +41,30 @@ async function loopsInRange(file,layout,range) {
     .map(point=>({...point,start:start+point.start,end:start+point.end+tailStart-headEnd}));
 }
 
-export async function processWav(file, job) {
+async function renderOfflineRecipe(source,recipe,options) {
+  if(!Array.isArray(recipe)||recipe.length>128)throw Error('Invalid edit recipe');
+  const stretch=pitchAdapters['signalsmith-stretch'];
+  if(!recipe.some(op=>op.type==='pitchShift'&&op.algorithm===stretch.id))return renderRecipe(source,recipe);
+  let audio=source,stage=[];
+  const report=[];
+  const flush=()=>{
+    if(!stage.length)return;
+    const result=renderRecipe(audio,stage);
+    audio=result.audio;report.push(...result.report);stage=[];
+  };
+  for(const op of recipe){
+    if(op.type!=='pitchShift'||op.algorithm!==stretch.id){stage.push(op);continue;}
+    if(op.algorithmVersion!==stretch.version)throw Error('This pitch recipe requires a different algorithm version.');
+    stretch.validate(op);
+    flush();
+    const result=await stretch.render(audio,op,options);
+    audio=result.audio;report.push({type:op.type,...result.report});
+  }
+  flush();
+  return {audio,report};
+}
+
+export async function processWav(file, job, options) {
   const blob = asBlob(file);
   const layout = await inspectWav(blob,{anyRate:true});
   if (job.type === 'waveform') return waveformPeaks(blob, layout, job);
@@ -71,8 +94,8 @@ export async function processWav(file, job) {
   if (job.type === 'lab-pitch') {
     const adapter=pitchAdapters[job.algorithm];
     if(!adapter)throw Error('Unknown Sample Lab pitch algorithm.');
-    const {audio,report}=adapter.render(source,job.parameters);
-    return {wav:encodeSample(audio),report};
+    const {audio,report,parameters}=await adapter.render(source,job.parameters,options);
+    return {wav:encodeSample(audio),report,parameters};
   }
   if (job.type === 'lab-source') return {levels:labLevels(source),pitch:analyzeSample(source).pitch};
   if (job.type === 'lab-performance') return labPerformanceMetrics(source,job.options);
@@ -84,7 +107,7 @@ export async function processWav(file, job) {
   if (job.type === 'analyze') return analyzeSample(source,job.options);
   if (job.type === 'loops') return suggestLoops(source,job.options);
   if (job.type !== 'edit') throw Error('Unknown offline operation');
-  const {audio,report} = renderRecipe(source,recipe);
+  const {audio,report} = await renderOfflineRecipe(source,recipe,options);
   return {wav:encodeSample(audio),report};
 }
 

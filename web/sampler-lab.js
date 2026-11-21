@@ -49,10 +49,14 @@ export async function labSource(root,draft,regionId,{run=runOffline}={}) {
   return {file,sample,model,region:model.regions[0],transient:true};
 }
 
+async function digestBytes(bytes) {
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),
+    b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 async function previewIdentity(file,id) {
   const {sampleRate,channels,frames}=await inspectWav(file);
-  const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),
-    b=>b.toString(16).padStart(2,'0')).join('');
+  const sha256=await digestBytes(await file.arrayBuffer());
   return {id,path:'Samples/Preview/'+id+'.wav',frames,channels,sampleRate,sha256,size:file.size};
 }
 
@@ -63,7 +67,7 @@ export async function prepareLabPreview(player,root,source,model,variant) {
   return stageWorkingSampler(player,await prepareInstrument(root,model,{previewFiles}));
 }
 
-export async function renderLabPitch(source,region,{semitones,fine},{run=runOffline,algorithm='wsola'}={}) {
+export async function renderLabPitch(source,region,{semitones,fine,formants=true},{run=runOffline,algorithm='wsola'}={}) {
   const adapter=pitchAdapters[algorithm];
   if(!adapter||adapter.id==='native-hermite')throw Error('Choose an available offline pitch processor.');
   if(region.fixedPitch)throw Error('Choose a chromatic region for pitch comparison.');
@@ -71,13 +75,21 @@ export async function renderLabPitch(source,region,{semitones,fine},{run=runOffl
      region.root+semitones<0||region.root+semitones>127)
     throw Error('Choose a valid anchor note and fine tuning between −100 and +100 cents.');
   const [start,end]=region.frames;
-  const parameters={semitones:semitones+fine/100};
-  const operation=pitchRecipe(adapter,parameters);
-  const {wav,report}=await run(source.file,{type:'lab-pitch',range:{start,end},algorithm,parameters});
-  const sample=await previewIdentity(wav,'lab-'+crypto.randomUUID());
+  const parameters={semitones:semitones+fine/100,...(adapter.parameters.formants?{formants}:{})};
+  const result=await run(source.file,{type:'lab-pitch',range:{start,end},algorithm,parameters});
+  const operation=pitchRecipe(adapter,result.parameters??parameters);
+  const {wav,report}=result;
   const recipe=[{type:'trim',start,end},operation];
+  const digest=await digestBytes(new TextEncoder().encode(JSON.stringify([source.sample.path,source.sample.sha256,recipe])));
+  const sample=await previewIdentity(wav,'lab-'+digest.slice(0,32));
   return {sample,file:wav,report,semitones,fine,recipe,algorithm,algorithmVersion:adapter.version,
     regionId:region.id,sourceFrames:[start,end]};
+}
+
+export function markNativeLabRegion(model,regionId) {
+  const region=model.regions.find(r=>r.id===regionId);
+  if(region.sampleLab)return model;
+  return labMap(model,regionId,{sampleLab:{version:1,algorithm:'native-hermite',algorithmVersion:1}});
 }
 
 export function pitchLabMap(model,variant,{sample=variant.sample,gain=0,offset=0}={}) {
@@ -85,23 +97,57 @@ export function pitchLabMap(model,variant,{sample=variant.sample,gain=0,offset=0
   const [start,end]=variant.sourceFrames;
   const loop=region.loop&&{...region.loop,start:region.loop.start-start,end:region.loop.end-start};
   const pitched={...region,sample:sample.id,frames:[0,end-start],root:region.root+variant.semitones,
-    cents:region.cents-variant.fine,gainDb:Math.max(-144,Math.min(48,region.gainDb+gain+offset)),loop};
+    cents:region.cents-variant.fine,gainDb:Math.max(-144,Math.min(48,region.gainDb+gain+offset)),loop,
+    sampleLab:{version:1,algorithm:variant.algorithm,algorithmVersion:variant.algorithmVersion,outputGainDb:gain}};
   const regions=model.regions.map(r=>r.id===region.id?pitched:r);
   const samples=[...model.samples.filter(s=>regions.some(r=>r.sample===s.id)),sample];
   return validateInstrument({...model,samples,regions});
 }
 
-export async function persistLabPitch(root,draft,source,model,variant,gain) {
-  const saved=await materializeLab(root,draft,source,model);
-  const original=saved.model.samples.find(s=>s.id===saved.model.regions.find(r=>r.id===variant.regionId).sample);
-  const destination='Samples/Processed/'+draft.id+'/lab-'+variant.sample.id+'.wav';
-  const sample=await importOriginal(root,variant.file,destination,{
+async function saveLabPitchSample(root,draft,model,variant) {
+  const region=model.regions.find(r=>r.id===variant.regionId);
+  const original=model.samples.find(s=>s.id===region.sample);
+  const destination='Samples/Processed/'+draft.id+'/'+variant.sample.id+'.wav';
+  return importOriginal(root,variant.file,destination,{
     id:variant.sample.id,source:{path:original.path,sha256:original.sha256},
     recipe:{version:1,operations:variant.recipe},license:original.license,
     provenance:{sampleLab:{version:1,algorithm:variant.algorithm,algorithmVersion:variant.algorithmVersion,
-      semitones:variant.semitones,fine:variant.fine,anchor:variant.semitones+saved.model.regions.find(r=>r.id===variant.regionId).root}},
+      semitones:variant.semitones,fine:variant.fine,formants:variant.recipe.at(-1).formants,anchor:variant.semitones+region.root}},
   });
+}
+
+export async function persistLabPitch(root,draft,source,model,variant,gain) {
+  const saved=await materializeLab(root,draft,source,model);
+  const sample=await saveLabPitchSample(root,saved.draft,saved.model,variant);
   return {draft:saved.draft,model:pitchLabMap(saved.model,variant,{sample,gain}),sample};
+}
+
+export function labAnchorOffsets(model,variant) {
+  const [region]=model.regions;
+  if(model.regions.length!==1||!variant?.semitones||region.fixedPitch||region.variation||
+    region.keyFadeIn||region.keyFadeOut||region.root<region.key[0]||region.root>region.key[1])return [];
+  return [variant.semitones,-variant.semitones].filter(offset=>
+    region.root+offset>=region.key[0]&&region.root+offset<=region.key[1]);
+}
+
+export async function persistLabAnchors(root,draft,source,model,variant,gain,{run=runOffline}={}) {
+  const offsets=labAnchorOffsets(model,variant);
+  if(!offsets.length)throw Error('Choose a single chromatic region and a nonzero anchor shift inside its key range.');
+  const saved=await materializeLab(root,draft,source,model,{run});
+  const base=markNativeLabRegion(saved.model,saved.model.regions[0].id).regions[0];
+  const samples=[...saved.model.samples],regions=[base];
+  for(const offset of offsets){
+    const pitch=offset===variant.semitones?variant:await renderLabPitch(source,model.regions[0],
+      {semitones:offset,fine:-variant.fine,formants:variant.recipe.at(-1).formants},{run,algorithm:variant.algorithm});
+    const sample=await saveLabPitchSample(root,saved.draft,saved.model,pitch);
+    const shifted=pitchLabMap(saved.model,pitch,{sample,gain}).regions[0];
+    samples.push(sample);
+    regions.push({...shifted,id:'lab-anchor-'+shifted.root});
+  }
+  regions.sort((a,b)=>a.root-b.root);
+  const boundaries=regions.slice(1).map((region,i)=>Math.floor((regions[i].root+region.root)/2));
+  const mapped=regions.map((region,i)=>({...region,key:[i?boundaries[i-1]+1:base.key[0],boundaries[i]??base.key[1]]}));
+  return {draft:saved.draft,model:validateInstrument({...saved.model,samples,regions:mapped})};
 }
 
 export async function materializeLab(root,draft,source,model,options={}) {
@@ -121,7 +167,7 @@ export function forkLabWorking(draft,model,name) {
 }
 
 export function labTests(region) {
-  const {root,key,cents}=region;
+  const {root,key}=region;
   const within=note=>note>=key[0]&&note<=key[1];
   const center=Math.max(key[0],Math.min(key[1],root));
   const testNote=(note,start=0,duration=1.5,velocity=100)=>({note,start,duration,velocity});
@@ -137,8 +183,27 @@ export function labTests(region) {
   tests.push({id:'short',label:'Short notes',notes:[...sequence,...sequence].map((n,i)=>testNote(n,.15*i,.09))},
     {id:'velocity',label:'Velocity steps',notes:[32,64,96,127].map((v,i)=>testNote(center,.42*i,.22,v))},
     {id:'release',label:'Note Off & release',notes:[testNote(center,0,1,100)],monophonic:true,held:true});
-  return tests.map(test=>({...test,heldFrom:.6,expectedHz:test.monophonic?
-    440*2**((test.notes[0].note-69+cents/100)/12):null}));
+  return tests.map(test=>({...test,heldFrom:.6}));
+}
+
+export function labTestTailMs(model,test) {
+  const lastOff=Math.max(...test.notes.map(note=>note.start+note.duration));
+  let tail=0;
+  for(const region of model.regions){
+    if(region.mode==='gate'&&region.trigger==='attack'){
+      tail=Math.max(tail,labEnvelope(model,region).releaseMs/1000);
+      continue;
+    }
+    const sample=model.samples.find(s=>s.id===region.sample);
+    const frames=region.frames[1]-region.frames[0],group=model.groups.find(g=>g.id===region.group);
+    for(const note of test.notes){
+      if(note.note<region.key[0]||note.note>region.key[1])continue;
+      const cents=(region.fixedPitch?0:100*(note.note-region.root))+region.cents+group.cents+model.cents;
+      const from=note.start+(region.trigger==='release'?note.duration:0);
+      tail=Math.max(tail,from+frames/(sample.sampleRate*2**(cents/1200))-lastOff);
+    }
+  }
+  return Math.min(60000,tail*1000);
 }
 
 export function labTestProject(ref,test,releaseMs) {

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import {detectPitch} from './sampler-analysis.js';
+import {shiftSignalsmith} from './sampler-signalsmith.js';
 import {pitchShift} from './sampler-transform.js';
 import {labLevels,labMaxSeconds} from './sampler-lab-analysis.js';
 
@@ -22,9 +24,33 @@ const wsola=Object.freeze({id:'wsola',version:1,name:'WSOLA + Pitch Shift',
   },
 });
 
-export const pitchAdapters=Object.freeze({[native.id]:native,[wsola.id]:wsola});
+const signalsmith=Object.freeze({id:'signalsmith-stretch',version:1,name:'Signalsmith Stretch · experimental',
+  parameters:Object.freeze({semitones:[-3,3],formants:true}),
+  validate({semitones,fundamentalHz,formants}) {
+    if(!Number.isFinite(semitones)||Math.abs(semitones)>3)throw Error('The Signalsmith trial supports a total shift within ±3 semitones.');
+    if(!Number.isFinite(fundamentalHz)||fundamentalHz<45||fundamentalHz>1800||typeof formants!=='boolean')
+      throw Error('Signalsmith needs a stable fundamental between 45 and 1800 Hz.');
+  },
+  async render(source,parameters,options) {
+    if(source.channels!==1||source.pcm.length<source.sampleRate*.25||source.pcm.length>source.sampleRate*labMaxSeconds)
+      throw Error('Choose a sustained mono selection from 250 ms to 16 seconds for Signalsmith.');
+    const measured=detectPitch(source);
+    if(!measured.hz||measured.confidence<.85)
+      throw Error('No stable source pitch for the Signalsmith trial. Try WSOLA or a sustained vowel.');
+    const settings={...parameters,fundamentalHz:parameters.fundamentalHz??Math.round(measured.hz*1000)/1000};
+    this.validate(settings);
+    const {audio,renderMs,memoryBytes}=settings.semitones===0?{audio:source}:await shiftSignalsmith(source,settings,options);
+    const pitch=detectPitch(audio);
+    const expected=measured.hz*2**(settings.semitones/12);
+    const driftCents=pitch.hz?1200*Math.log2(pitch.hz/expected):null;
+    return {audio,report:{...report(audio),pitch,driftCents,renderMs,memoryBytes},
+      parameters:settings};
+  },
+});
+
+export const pitchAdapters=Object.freeze({[native.id]:native,[wsola.id]:wsola,[signalsmith.id]:signalsmith});
 
 export function pitchRecipe(adapter,parameters) {
   adapter.validate(parameters);
-  return {type:'pitchShift',semitones:parameters.semitones,algorithm:adapter.id,algorithmVersion:adapter.version};
+  return {type:'pitchShift',...parameters,algorithm:adapter.id,algorithmVersion:adapter.version};
 }

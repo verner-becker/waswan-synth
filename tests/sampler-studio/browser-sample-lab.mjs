@@ -13,6 +13,9 @@ const evidence=process.env.LAB_EVIDENCE||'.local/validation/sample-lab';
 const tag=process.env.LAB_REPORT||'sine';
 const recording=process.env.LAB_WAV;
 const compare=process.env.LAB_COMPARE==='1';
+const processor=process.env.LAB_PROCESSOR||'wsola';
+const experimental=processor==='signalsmith-stretch';
+const shift=experimental?3:7;
 const errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 await mkdir(evidence,{recursive:true});
@@ -79,7 +82,8 @@ try{
   if(tag!=='guitar'){
     await lb('Optimize Loop').click();
     const candidate=lab.getByRole('button',{name:/^Candidate 1/});
-    if(tag==='sine')await candidate.waitFor();
+    await lab.getByText(/Select a forward loop|No suitable loop found/).waitFor();
+    if(tag==='sine'||tag.startsWith('voice'))await candidate.waitFor();
     if(await candidate.count())await candidate.click();
   }
   await lb('Play on Keyboard').click();
@@ -121,14 +125,16 @@ try{
   report.source=copy.source.sha256;report.loop=copy.instrument.regions[0].loop;report.envelope=copy.instrument.regions[0].envelope;
   if(compare){
     await lab.locator('summary').filter({hasText:/^Pitch & Timbre$/}).click();
-    await lab.getByLabel('Anchor shift (semitones)',{exact:true}).fill('7');
-    await lab.getByLabel('Processor fine tuning (cents)',{exact:true}).fill('20');
+    await lab.getByLabel('Offline pitch processor',{exact:true}).selectOption(processor);
+    await lab.getByLabel('Anchor shift (semitones)',{exact:true}).fill(String(shift));
+    await lab.getByLabel('Processor fine tuning (cents)',{exact:true}).fill(experimental?'0':'20');
     await lb('Render variant B').click();
     await lab.getByText(/^B ready/).waitFor();
     await lab.getByLabel('Performance test',{exact:true}).selectOption('note-12');
     await lb('Compare A/B with selected sequence').click();
     await lab.getByText('Dry A/B captures ready.',{exact:true}).waitFor({timeout:15000});
     report.comparison={};
+    let comparisonFrames;
     for(const slot of ['A','B']){
       await lab.getByLabel('Pitch variant',{exact:true}).selectOption(slot);
       const downloading=page.waitForEvent('download');
@@ -136,7 +142,8 @@ try{
       const path=join(evidence,tag+'-pitch-'+slot+'.wav');
       await (await downloading).saveAs(path);
       const pitched=await decodeWav(await read.readFile(path));
-      assert.equal(pitched.frames,captured.frames);
+      comparisonFrames??=pitched.frames;
+      assert.equal(pitched.frames,comparisonFrames);
       report.comparison[slot]=await lab.locator('.ww-lab-report').innerText();
     }
     if(!recording){
@@ -154,10 +161,67 @@ try{
     assert.equal(persisted.length,2);
     const deriv=persisted.find(d=>d.id!==copy.id);
     assert.deepEqual(persisted.find(d=>d.id===copy.id),copy);
-    assert(deriv.instrument.samples[0].recipe.operations.some(op=>op.algorithm==='wsola'&&op.algorithmVersion===1));
-    assert.equal(deriv.instrument.regions[0].root,copy.instrument.regions[0].root+7);
+    assert(deriv.instrument.samples[0].recipe.operations.some(op=>op.algorithm===processor&&op.algorithmVersion===1));
+    assert.equal(deriv.instrument.regions[0].root,copy.instrument.regions[0].root+shift);
     assert.equal(deriv.source.sha256,copy.source.sha256);
     await page.screenshot({path:join(evidence,tag+'-pitch.png'),fullPage:true});
+    if(process.env.LAB_ANCHORS==='1'){
+      await lb('Save keyboard regions as Working Copy').click();
+      await lab.getByText(/^Working Copy saved with anchors/).waitFor();
+      const anchors=await page.evaluate(async()=>{
+        const root=await showDirectoryPicker(),working=await import('./sampler-working.js');
+        const entry=(await working.listWorking(root)).find(d=>d.name.endsWith(' · Keyboard regions'));
+        const draft=await working.openWorking(root,entry.id);
+        return draft.instrument.regions.map(({root,key})=>({root,key}));
+      });
+      const original=copy.instrument.regions[0].root;
+      assert.deepEqual(anchors.map(region=>region.root),[original-shift,original,original+shift]);
+      assert.equal(anchors[0].key[1]+1,anchors[1].key[0]);
+      assert.equal(anchors[1].key[1]+1,anchors[2].key[0]);
+      report.anchors=anchors;
+    }
+  }
+  if(process.env.LAB_STRESS==='1'){
+    await lab.getByLabel('Pitch variant',{exact:true}).selectOption('A');
+    await lab.getByLabel('Region gain (dB)',{exact:true}).fill('15');
+    await lab.getByLabel('Region gain (dB)',{exact:true}).press('Tab');
+    await lab.getByLabel('Performance test',{exact:true}).selectOption('chord');
+    await lb('Run dry test').click();
+    await lab.getByText('Dry capture ready.',{exact:true}).waitFor({timeout:12000});
+    report.overload=await lab.locator('.ww-lab-report').innerText();
+    assert.match(report.overload,/[1-9][0-9]* samples above full scale · lower the gain/);
+  }
+  if(process.env.LAB_RAW==='1'){
+    await lb('Release Keyboard').click();
+    await lb('Close Sample Lab').click();
+    const wav48=encodeSample({sampleRate:48000,channels:2,
+      pcm:Float32Array.from({length:48000*2},(_,i)=>.25*Math.sin(2*Math.PI*220*(i>>1)/48000))});
+    await studio.getByLabel('Import WAV',{exact:true}).setInputFiles({
+      name:'Lab direct 48k.wav',mimeType:'audio/wav',buffer:Buffer.from(await wav48.arrayBuffer()),
+    });
+    await studio.getByText(/Source · Samples\/Originals\/Lab direct 48k.wav/).waitFor();
+    await studio.getByRole('button',{name:'Sample Lab',exact:true}).click();
+    await lab.getByText(/Source level/).waitFor();
+    const curve=lab.getByRole('img',{name:'Amplitude ADSR curve',exact:true});
+    await curve.scrollIntoViewIfNeeded();
+    const box=await curve.boundingBox();
+    await page.mouse.move(box.x+box.width*28/720,box.y+box.height*34/180);
+    await page.mouse.down();
+    await page.mouse.move(box.x+box.width*90/720,box.y+box.height*34/180);
+    await page.mouse.up();
+    assert(Number(await lab.getByLabel('Attack (ms)',{exact:true}).inputValue())>5);
+    const wave=lab.getByRole('img',{name:/^Waveform with attack/});
+    await wave.scrollIntoViewIfNeeded();
+    const bounds=await wave.boundingBox();
+    const previous=await lab.getByLabel('Loop start (frames)',{exact:true}).inputValue();
+    await page.mouse.move(bounds.x+bounds.width*.25,bounds.y+bounds.height*.5);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x+bounds.width*.30,bounds.y+bounds.height*.5);
+    await page.mouse.up();
+    assert.notEqual(await lab.getByLabel('Loop start (frames)',{exact:true}).inputValue(),previous);
+    await lb('Promote to Official').click();
+    await lab.getByText(/^Official r1 published/).waitFor();
+    report.directWav=true;
   }
   assert.deepEqual(errors,[]);
   await writeFile(join(evidence,tag+'.json'),JSON.stringify(report,null,2)+'\n');

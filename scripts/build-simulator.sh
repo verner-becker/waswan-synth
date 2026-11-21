@@ -43,6 +43,7 @@ for voice_count in $stages; do
   "$WASM_OPT" "$SIM_OUT/waswan-$voice_count-raw.wasm" --enable-bulk-memory --asyncify \
     -O2 --strip-debug --strip-producers -o "$SIM_OUT/waswan-$voice_count.wasm"
 done
+sh "$root/scripts/build-sampler-pitch.sh"
 sh "$root/scripts/stage-simulator.sh"
 sha256sum "$SIM_OUT/SMKSYNTH-$SIM_VERSION.wasm" "$upstream/web/simulator/obervave-voice.wasm"
 echo 'Build local pronto. Execute python3 scripts/serve-simulator.py'

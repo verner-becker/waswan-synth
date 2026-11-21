@@ -159,8 +159,10 @@ export function labPerformanceMetrics(audio,{off,heldFrom,monophonic}) {
     if(i>=offFrame && Math.abs(current)>.001)tailFrame=i+1;
   }
   for(let i=first;i+window<=offFrame;i+=window)level.push(rms(channels,i,i+window,read));
-  const sustainDb=level.length>1 && Math.max(...level)>.001?dbRatio(Math.max(...level),Math.min(...level)):null;
-  return {levels:labLevels(audio),maxStep,sustainDb,
+  const maxLevel=Math.max(0,...level),minLevel=Math.min(...level);
+  const interrupted=level.length>1 && maxLevel>.001 && minLevel<Math.max(.001,maxLevel*.0316);
+  const sustainDb=level.length>1 && maxLevel>.001 && !interrupted?dbRatio(maxLevel,minLevel):null;
+  return {levels:labLevels(audio),maxStep,sustainDb,interrupted,
     pitch:monophonic&&held.pcm.length?detectPitch(held):null,
     tailMs:1000*(tailFrame-offFrame)/sampleRate,truncated:tailFrame>=frames-window};
 }

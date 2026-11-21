@@ -15,6 +15,9 @@ cp "$upstream/web/simulator/midi.js" .local/www/simulator/midi-original.js
 cp "$upstream/web/simulator/engine.js" .local/www/simulator/engine-original.js
 cp web/mellotron-*.js web/fm-*.js web/tone-bank.js web/ui-*.js web/ui-foundation.css web/ui-sampler*.css .local/www/simulator/
 cp web/sampler*.js .local/www/simulator/
+if [ -f .local/build/sampler-pitch.wasm ]; then
+  cp .local/build/sampler-pitch.wasm .local/www/simulator/
+fi
 cp web/studio-*.js .local/www/simulator/
 cp web/daw-*.js web/daw-tab.html .local/www/simulator/
 mkdir -p .local/www/simulator/vendor
@@ -154,8 +157,9 @@ s=s.replace('<script src="../i18n.js', '<script>if(!new URLSearchParams(location
 p.write_text(s)
 PYHTML
 cp "$upstream/web/site/i18n.js" .local/www/i18n.js
-mkdir -p .local/www/simulator/vendor/sloopdx
+mkdir -p .local/www/simulator/vendor/sloopdx .local/www/simulator/vendor/signalsmith
 cp wasm/vendor/sloopdx/NOTICE.md wasm/vendor/sloopdx/Apache-2.0.txt .local/www/simulator/vendor/sloopdx/
+cp wasm/vendor/signalsmith/NOTICE.md wasm/vendor/signalsmith/*-MIT.txt .local/www/simulator/vendor/signalsmith/
 cp "$upstream/LICENSE" .local/www/LICENSE.txt
 cp "$upstream/LICENSING.md" "$upstream/CREDITS.md" .local/www/
 echo "Simulador de $voices vozes e perfil MIDI prontos em .local/www/simulator/"

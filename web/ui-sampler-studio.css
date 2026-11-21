@@ -93,3 +93,5 @@
 .ww-lab-report dl {display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px}
 .ww-lab-report dd {margin:0}
 .ww-lab-save {margin-top:14px}
+.ww-sample-lab input[aria-label$="(frames)"] {width:11ch}
+.ww-sample-lab input[type=range],.ww-sample-lab input[type=checkbox] {accent-color:#27c8c4}

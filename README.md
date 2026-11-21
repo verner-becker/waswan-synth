@@ -34,6 +34,8 @@ Use **DAW** para montar o Arrangement, editar clipes, gravar MIDI e áudio, mixa
 
 ## WASWAN Sampler Studio
 
+O [Sample Lab](docs/sample-lab.md) abre uma amostra ou a Working Copy do Auto Instrument Wizard para ajustar ADSR, sustentar a nota com loop e comparar os processadores com a mesma sequência MIDI.
+
 Em **Sampler Studio**, abra uma gravação, extraia um trecho, experimente transformações e toque o resultado no teclado antes de publicar. Use **Mapping Editor** para distribuir amostras por nota e dinâmica. **Sound Fusion** consolida fontes do Synth e da DAW em um WAV ou instrumento multisample. [Guia do Sampler Studio](docs/sampler-studio-ux-uso.md) · [Entregas e validação](docs/studio-waves.md)
 
 A API importa gravações WAV para uma pasta física e permite montar instrumentos cromáticos, pianos multisample, kits de 16 pads e bancos de fitas para o Mellotron. Os exemplos usam o motor WASM, o monitor e o exportador da DAW. [Guia de uso da API](docs/sampler-studio-uso.md) · [Roadmap e resultados por onda](docs/sampler-studio-roadmap.md)

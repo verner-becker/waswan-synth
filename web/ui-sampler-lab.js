@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {action,el} from './ui-primitives.js';
-import {labEnvelope,labEnvelopes,labMap,labSource,labTests,captureLabTest,materializeLab,prepareLabPreview,renderLabPitch,pitchLabMap,persistLabPitch,forkLabWorking} from './sampler-lab.js';
+import {labEnvelope,labEnvelopes,labMap,labSource,labTests,labTestTailMs,captureLabTest,materializeLab,prepareLabPreview,renderLabPitch,pitchLabMap,persistLabPitch,forkLabWorking,labAnchorOffsets,persistLabAnchors,markNativeLabRegion} from './sampler-lab.js';
+import {pitchAdapters} from './sampler-lab-pitch.js';
 import {labMaxSeconds} from './sampler-lab-analysis.js';
 import {runOffline} from './sampler-offline.js';
 import {saveWorking,updateWorking} from './sampler-working.js';
@@ -114,18 +115,22 @@ export class SampleLab {
   }
   sync() {
     if(this.bound===this.studio.draft || this.studio.busy)return;
-    this.bound=null;this.source=null;this.previewRef=null;
-    if(!this.node.hidden&&!this.studio.body.hidden)this.hide(false);
+    this.bound=null;this.source=null;this.previewRefs?.clear();
+    if(!this.node.hidden)this.hide(false);
   }
   async load(regionId,keepModel) {
     const s=this.studio;
     if(!s.draft)throw Error('Open a WAV or Working Copy in the library first.');
-    this.source=null;this.previewRef=null;this.result=null;this.comparison=null;this.peaks=null;this.bound=s.draft;
+    this.source=null;this.previewRefs=new Map();this.result=null;this.comparison=null;this.peaks=null;this.bound=s.draft;
+    this.title.textContent=s.draft.name;
+    this.sourceReadout.textContent='Reading sample…';
+    this.envelopeGraph.canvas.getContext('2d').clearRect(0,0,720,180);
+    this.waveGraph.paint();
     this.variant=null;this.pitchSlot.replaceChildren(new Option('A · Native Resampling','A'));this.pitchStatus.textContent='';
     const source=await labSource(s.root,s.draft,regionId);
     const {file,sample}=source;
     const model=keepModel??source.model,region=model.regions.find(r=>r.id===source.region.id);
-    this.regionInput.replaceChildren(...model.regions.map(r=>new Option(r.id+' · MIDI '+r.root,r.id)));
+    this.regionInput.replaceChildren(...model.regions.map(r=>new Option(r.id+' · MIDI '+r.root+(r.trigger==='release'?' · Release':''),r.id)));
     this.regionInput.value=region.id;
     this.title.textContent=s.draft.name+' · '+sample.path.split('/').at(-1)+' · '+(sample.sampleRate/1000)+' kHz';
     this.model=model;
@@ -155,6 +160,10 @@ export class SampleLab {
   }
   get region(){return this.model.regions.find(r=>r.id===this.regionId);}
   get envelope(){return labEnvelope(this.model,this.region);}
+  get ownsKeyboard(){
+    const route=this.studio.liveRoute;
+    return route?.lab===this&&route.labDraftId===this.studio.draft?.id;
+  }
   safeGain(region) {
     const group=this.model.groups.find(g=>g.id===region.group);
     const peak=Math.max(...this.metrics.levels.map(c=>c.peak));
@@ -166,56 +175,80 @@ export class SampleLab {
   setRegion(changes) {
     try{
       this.model=labMap(this.model,this.regionId,changes);
-      this.previewRef=null;
+      this.previewRefs.clear();
       this.refresh();
       this.refreshAudible();
     }catch(error){this.status.textContent=error.message;this.refresh();}
   }
   refreshAudible() {
-    if(this.studio.liveRoute?.lab!==this || this.studio.busy)return;
     clearTimeout(this.refreshTimer);
+    if(!this.ownsKeyboard || this.studio.busy)return;
     this.refreshTimer=setTimeout(()=>void this.run(async()=>{
-      if(this.studio.liveRoute?.lab===this)await this.arm();
+      if(this.ownsKeyboard)await this.arm();
     }),120);
   }
   createPitch() {
     this.pitchSlot=select('Pitch variant',[['A','A · Native Resampling']],()=>{
-      this.previewRef=null;this.updateResult();this.refreshAudible();this.refresh();
+      this.candidates.replaceChildren();this.loopReport.textContent='';
+      this.updateResult();this.refresh();
+      if(this.ownsKeyboard)void this.run(()=>this.arm());
     });
     const fields=el('div','ww-sampler-fields');
     this.semitones=numeric('Anchor shift (semitones)',-12,12,1,()=>{});
     this.fine=numeric('Processor fine tuning (cents)',-100,100,1,()=>{});
-    this.outputGain=numeric('Variant B gain (dB)',-48,24,.1,()=>{this.previewRef=null;this.refreshAudible();});
+    this.outputGain=numeric('Variant B gain (dB)',-48,24,.1,()=>{this.previewRefs?.delete('B');this.refreshAudible();});
+    this.algorithm=select('Offline pitch processor',Object.values(pitchAdapters).filter(a=>a.parameters.semitones)
+      .map(a=>[a.id,a.name]),()=>this.refreshPitchControls(true));
+    this.formants=el('input');this.formants.type='checkbox';this.formants.checked=true;
+    this.formantsLabel=label('Formant compensation',this.formants);
     this.semitones.value=7;this.fine.value=0;this.outputGain.value=0;
     this.match=el('input');this.match.type='checkbox';this.match.checked=true;
-    this.match.onchange=()=>{this.previewRef=null;this.refreshAudible();};
+    this.match.onchange=()=>{this.previewRefs?.delete('B');this.refreshAudible();};
     this.pitchStatus=el('p','ww-sampler-status');this.pitchStatus.setAttribute('aria-live','polite');
     const actions=el('div','ww-sampler-actions');
     this.renderPitchButton=this.button('Render variant B',()=>this.renderPitch());
     this.compareButton=this.button('Compare A/B with selected sequence',()=>this.test(true));
     this.forkButton=this.button('Save variant as new Working Copy',()=>this.saveVariant());
-    fields.append(label('Listen to',this.pitchSlot),label('Anchor shift (semitones)',this.semitones),
-      label('Processor fine tuning (cents)',this.fine),label('Variant B gain (dB)',this.outputGain),label('Match preview RMS',this.match));
-    actions.append(this.renderPitchButton,this.compareButton,this.forkButton);
-    const names=el('p','ww-muted','A uses the native Hermite reader. B uses WSOLA + Pitch Shift offline and keeps the same audio length.');
-    this.pitchPanel.append(names,fields,actions,this.pitchStatus);
+    fields.append(label('Listen to',this.pitchSlot),label('Processor',this.algorithm),label('Anchor shift (semitones)',this.semitones),
+      label('Processor fine tuning (cents)',this.fine),label('Variant B gain (dB)',this.outputGain),label('Match preview RMS',this.match),this.formantsLabel);
+    this.anchorsButton=this.button('Save keyboard regions as Working Copy',()=>this.saveAnchors());
+    this.anchorsInfo=el('p','ww-muted');
+    actions.append(this.renderPitchButton,this.compareButton,this.forkButton,this.anchorsButton);
+    const names=el('p','ww-muted','A uses the native Hermite reader. B uses an offline processor at an anchor note with the same audio length.');
+    this.pitchPanel.append(names,fields,actions,this.anchorsInfo,this.pitchStatus);
+    this.refreshPitchControls();
+  }
+  refreshPitchControls(clampShift=false) {
+    const adapter=pitchAdapters[this.algorithm.value];
+    const [min,max]=adapter.parameters.semitones;
+    this.semitones.min=min;this.semitones.max=max;
+    this.formantsLabel.hidden=!adapter.parameters.formants;
+    if(clampShift)this.semitones.value=clamp(this.semitones.valueAsNumber,min,max);
   }
   async renderPitch() {
+    const algorithm=this.algorithm.value;
     const variant=await renderLabPitch(this.source,this.region,{
-      semitones:this.semitones.valueAsNumber,fine:this.fine.valueAsNumber,
-    });
+      semitones:this.semitones.valueAsNumber,fine:this.fine.valueAsNumber,formants:this.formants.checked,
+    },{algorithm});
     const monoRms=levels=>Math.sqrt(levels.reduce((sum,ch)=>sum+ch.rms**2,0)/levels.length);
     this.variant=variant;
     const offset=20*Math.log10(monoRms(this.metrics.levels)/monoRms(variant.report.levels));
     variant.matchGain=Number.isFinite(offset)?clamp(offset,-12,12):0;
-    this.pitchSlot.replaceChildren(new Option('A · Native Resampling','A'),new Option('B · WSOLA + Pitch Shift','B'));
+    this.pitchSlot.replaceChildren(new Option('A · Native Resampling','A'),new Option('B · '+pitchAdapters[algorithm].name,'B'));
     this.pitchSlot.value='B';
-    this.previewRef=null;
+    this.previewRefs.delete('B');
     this.comparison=null;this.result=null;this.updateResult();
     this.pitchStatus.textContent='B ready · anchor MIDI '+(this.region.root+variant.semitones)+' · '+
       variant.report.overRange+' samples above full scale before WAV encoding · RMS match '+variant.matchGain.toFixed(1)+' dB.';
+    if(variant.report.driftCents!==undefined){
+      const drift=variant.report.driftCents;
+      this.pitchStatus.textContent+=drift==null?' Output pitch uncertain. Compare by ear before saving.':
+        ' Output pitch deviation '+drift.toFixed(1)+' cents.';
+      if(variant.report.memoryBytes)this.pitchStatus.textContent+=' '+Math.round(variant.report.renderMs)+' ms · '+
+        (variant.report.memoryBytes/1048576).toFixed(1)+' MiB WASM memory.';
+    }
     this.refresh();
-    if(this.studio.liveRoute?.lab===this)await this.arm();
+    if(this.ownsKeyboard)await this.arm();
   }
   pitchGain() {
     const gain=this.outputGain.valueAsNumber;
@@ -231,12 +264,20 @@ export class SampleLab {
     const {root,draft,browser}=this.studio;
     const slot=this.pitchSlot.value;
     const {draft:base,model}=slot==='B'?await persistLabPitch(root,draft,this.source,this.model,this.variant,this.pitchGain()):
-      await materializeLab(root,draft,this.source,this.model);
+      await materializeLab(root,draft,this.source,markNativeLabRegion(this.model,this.regionId));
     const suffix=slot==='B'?' · '+this.variant.algorithm+' '+(this.variant.semitones>=0?'+':'')+this.variant.semitones:' · Native A';
     const name=draft.name.slice(0,128-suffix.length)+suffix;
     await saveWorking(root,forkLabWorking(base,model,name));
     await browser.refreshWorking();
     this.status.textContent='Variant saved as a new Working Copy · '+name;
+  }
+  async saveAnchors() {
+    const {root,draft,browser}=this.studio;
+    const {draft:base,model}=await persistLabAnchors(root,draft,this.source,this.model,this.variant,this.pitchGain());
+    const suffix=' · Keyboard regions';
+    await saveWorking(root,forkLabWorking(base,model,draft.name.slice(0,128-suffix.length)+suffix));
+    await browser.refreshWorking();
+    this.status.textContent='Working Copy saved with anchors at MIDI '+model.regions.map(region=>region.root).join(', ')+'.';
   }
   createEnvelope() {
     this.envelopeGraph=graph('Amplitude ADSR curve',720,180,(...args)=>this.drawEnvelope(...args),
@@ -300,6 +341,7 @@ export class SampleLab {
     for(const [text,x] of [['Attack',28],['Decay',225],['Hold',420],['Release',490]])ctx.fillText(text,x,168);
   }
   dragEnvelope(x,y) {
+    if(!this.source||this.studio.busy)return null;
     const start=this.envelope;
     const index=this.envelopePoints(start).findIndex(([a,b],i)=>i>0&&Math.hypot(x-a,y-b)<20);
     if(index<0)return null;
@@ -315,7 +357,7 @@ export class SampleLab {
     return {start:start+Math.floor(span*.25),end:end-Math.floor(span*.20),mode:'forward',crossfade:0};
   }
   createLoop() {
-    this.waveGraph=graph('Loop waveform with attack, sustain and crossfade',900,180,
+    this.waveGraph=graph('Waveform with attack, sustain loop and crossfade',900,180,
       (...args)=>this.drawWave(...args),(x)=>this.dragLoop(x));
     this.loopEnable=el('input');this.loopEnable.type='checkbox';
     this.loopEnable.onchange=()=>this.setRegion(this.loopEnable.checked?{mode:'gate',loop:this.loop}:{loop:null});
@@ -334,14 +376,16 @@ export class SampleLab {
     actions.append(this.button('Optimize Loop',()=>this.optimize()),
       this.button('Measure Loop',()=>this.measureLoop()),
       this.button('Preview loop on keyboard',async()=>{if(!this.region.loop)this.setLoop(this.loop,true);await this.arm();}));
-    this.loopPanel.append(this.waveGraph.canvas,this.loopTime,inputs,actions,this.candidates,this.loopReport);
+    this.loopTools=el('fieldset','ww-lab-controls');
+    this.loopTools.append(inputs,actions,this.candidates,this.loopReport);
+    this.loopPanel.append(this.waveGraph.canvas,this.loopTime,this.loopTools);
   }
   setLoop(loop,enable=!!this.region.loop) {
     const previous=this.loop;
     this.loop=loop;
     try{
       const tested=labMap(this.model,this.regionId,{mode:'gate',loop});
-      if(enable){this.model=tested;this.previewRef=null;this.refreshAudible();}
+      if(enable){this.model=tested;this.previewRefs.clear();this.refreshAudible();}
       this.loopReport.textContent='';
     }catch(error){this.loop=previous;this.status.textContent=error.message;}
     this.refresh();
@@ -350,14 +394,18 @@ export class SampleLab {
     ctx.clearRect(0,0,width,height);
     if(!this.peaks)return;
     const [start,end]=this.region.frames,loop=this.loopDrawing??this.loop;
+    const release=this.region.trigger==='release';
     const x=value=>(value-start)*width/(end-start);
     const fill=(lo,hi,color)=>{ctx.fillStyle=color;ctx.fillRect(x(lo),0,x(hi)-x(lo),height);};
-    if(this.region.reverse){fill(loop.end,end,'#173348');fill(start,loop.start,'#242d3f');}
-    else{fill(start,loop.start,'#173348');fill(loop.end,end,'#242d3f');}
-    fill(loop.start,loop.end,this.region.loop?'#16413d':'#243643');
-    const crossfade=loop.crossfade??0;
-    if(crossfade){
-      fill(loop.start,loop.start+crossfade,'#534139');fill(loop.end-crossfade,loop.end,'#534139');
+    if(release)fill(start,end,'#242d3f');
+    else{
+      if(this.region.reverse){fill(loop.end,end,'#173348');fill(start,loop.start,'#242d3f');}
+      else{fill(start,loop.start,'#173348');fill(loop.end,end,'#242d3f');}
+      fill(loop.start,loop.end,this.region.loop?'#16413d':'#243643');
+      const crossfade=loop.crossfade??0;
+      if(crossfade){
+        fill(loop.start,loop.start+crossfade,'#534139');fill(loop.end-crossfade,loop.end,'#534139');
+      }
     }
     const ch=this.source.sample.channels,bins=this.peaks.length/(2*ch),stride=(height-24)/ch;
     ctx.strokeStyle='#a0c3ce';ctx.beginPath();
@@ -366,6 +414,10 @@ export class SampleLab {
       ctx.moveTo(i*width/bins,center-this.peaks[at]*scale);ctx.lineTo(i*width/bins,center-this.peaks[at+1]*scale);
     }
     ctx.stroke();
+    if(release){
+      ctx.font='13px system-ui';ctx.fillStyle='#d2e2e8';ctx.fillText('Release sample',8,17);
+      return;
+    }
     ctx.fillStyle='#47e1d0';
     for(const frame of [loop.start,loop.end])ctx.fillRect(Math.min(width-2,x(frame)),0,2,height);
     ctx.font='13px system-ui';ctx.fillStyle='#d2e2e8';
@@ -375,6 +427,7 @@ export class SampleLab {
     ctx.fillText(reverse?'Attack':'Post-loop',width-65,17);
   }
   dragLoop(x) {
+    if(!this.source||this.studio.busy||this.region.trigger==='release')return null;
     const width=this.waveGraph.canvas.width,[start,end]=this.region.frames;
     const boundary=x<(this.loop.start+this.loop.end-2*start)*width/(2*(end-start))?'start':'end';
     const min=boundary==='start'?start:this.loop.start+1;
@@ -394,9 +447,11 @@ export class SampleLab {
     const offsets=[-12,0,12].filter(n=>root+n>=key[0]&&root+n<=key[1]);
     if(!offsets.length)offsets.push(clamp(root,...key)-root);
     const transpose=activeB?this.variant.semitones+this.variant.fine/100:0;
+    const group=this.model.groups.find(g=>g.id===this.region.group);
+    const tuning=(cents+group.cents+this.model.cents)/100;
     const origin=activeB?this.variant.sourceFrames[0]:0;
     return {file:activeB?this.variant.file:this.source.file,origin,options:{reverse,
-      offsets:[...new Set(offsets.map(n=>(fixedPitch?0:n)+cents/100-transpose))]}};
+      offsets:[...new Set(offsets.map(n=>(fixedPitch?0:n)+tuning-transpose))]}};
   }
   async optimize() {
     const [first,last]=this.region.frames;
@@ -451,14 +506,14 @@ export class SampleLab {
   }
   async prepare(slot=this.pitchSlot.value) {
     const s=this.studio;
-    if(this.previewRef&&this.preparedSlot===slot){
-      const {resident}=await s.player.requests().request('daw-sampler-status',{ref:this.previewRef});
-      if(resident)return this.previewRef;
+    const cached=this.previewRefs.get(slot);
+    if(cached){
+      const {resident}=await s.player.requests().request('daw-sampler-status',{ref:cached});
+      if(resident)return cached;
     }
-    this.previewRef=await prepareLabPreview(s.player,s.root,this.source,this.pitchModel(slot,true),
-      slot==='B'?this.variant:null);
-    this.preparedSlot=slot;
-    return this.previewRef;
+    const ref=await prepareLabPreview(s.player,s.root,this.source,this.pitchModel(slot,true),slot==='B'?this.variant:null);
+    this.previewRefs.set(slot,ref);
+    return ref;
   }
   async arm() {
     const s=this.studio;
@@ -467,7 +522,7 @@ export class SampleLab {
     const label=s.draft.name+' · Sample Lab '+slot;
     await s.playPrepared(()=>this.prepare(slot),label,{restorePrevious:true,keyboardFx:'dry'});
     s.liveRoute.prepare=()=>prepareLabPreview(s.player,root,source,model,variant);
-    s.liveRoute.lab=this;
+    s.liveRoute.lab=this;s.liveRoute.labDraftId=s.draft.id;
     this.status.textContent='Dry keyboard preview active.';
     this.route.textContent=s.route.textContent;
   }
@@ -480,7 +535,7 @@ export class SampleLab {
     const renders={};
     try{
       s.daw.audioExport.exporter.checkIdle();
-      const release=Math.max(...this.model.regions.map(region=>labEnvelope(this.model,region).releaseMs));
+      const release=Math.max(...slots.map(slot=>labTestTailMs(this.pitchModel(slot,true),test)));
       for(const slot of slots){
         capture.signal.throwIfAborted();
         const ref=await this.prepare(slot);
@@ -494,7 +549,7 @@ export class SampleLab {
     }finally{this.capture=null;this.cancelTest.hidden=true;}
   }
   paintTest(test,{metrics,clipped,channelLevels}) {
-    const {pitch,sustainDb,maxStep,tailMs,truncated}=metrics;
+    const {pitch,sustainDb,maxStep,tailMs,truncated,interrupted}=metrics;
     const measuredPitch=pitch?.hz?
       pitch.hz.toFixed(1)+' Hz · '+percent(pitch.confidence)+' confidence · '+pitch.spreadCents.toFixed(1)+' cents spread':'Unavailable';
     const readings=[
@@ -502,11 +557,14 @@ export class SampleLab {
       ['Clipping detected',clipped?clipped+' samples above full scale · lower the gain':'0 samples above full scale'],
       ['Pitch confidence',measuredPitch],
       ['Largest held sample step',maxStep.toFixed(4)+' FS'],
-      ['Sustain stability',!test.held||sustainDb==null?'Insufficient held signal':sustainDb.toFixed(2)+' dB across 50 ms windows'],
+      ['Sustain stability',!test.held?'Requires a held test':interrupted?'Held range contains quiet or silent windows':
+        sustainDb==null?'Insufficient held signal':sustainDb.toFixed(2)+' dB across 50 ms windows'],
       ['Note Off tail',tailMs.toFixed(0)+' ms above −60 dBFS'+(truncated?' · capture boundary reached':'')],
     ];
     const heading=el('strong','',test.label);
     this.testReport.append(heading);
+    if(test.id==='velocity'&&this.region.velocityCurve==='fixed')
+      this.testReport.append(el('p','ww-muted','This region uses fixed velocity gain. Change its curve in Instrument Builder for a dynamic response.'));
     const list=el('dl');
     for(const [term,value] of readings)list.append(el('dt','',term),el('dd','',value));
     this.testReport.append(list,el('small','ww-muted','Dry DAW mixer tap before WAV encoding. Pitch estimates apply to single-note tests. Peak and sample steps alone cannot identify aliasing.'));
@@ -533,7 +591,7 @@ export class SampleLab {
     const useVariant=this.pitchSlot.value==='B';
     const {draft,model,sample}=useVariant?
       await persistLabPitch(s.root,s.draft,this.source,this.model,this.variant,this.pitchGain()):
-      await materializeLab(s.root,s.draft,this.source,this.model);
+      await materializeLab(s.root,s.draft,this.source,markNativeLabRegion(this.model,this.regionId));
     const next=updateWorking(draft,{instrument:model});
     if(next.history!==s.draft.history){s.dirty=true;s.resultStale=true;}
     s.regionId=this.regionId;
@@ -549,10 +607,10 @@ export class SampleLab {
       const [start,end]=this.region.frames;
       this.peaks=await runOffline(file,{type:'waveform',start,end,bins:900});
       this.metrics=await runOffline(file,{type:'lab-source',range:{start,end}});
-      this.previewRef=null;this.comparison=null;this.updateResult();this.refresh();
-    }else if(this.source.transient){
+      this.previewRefs.clear();this.comparison=null;this.updateResult();this.refresh();
+    }else{
       this.model=model;
-      this.source={...this.source,transient:false,sample:draft.rendered};
+      if(this.source.transient)this.source={...this.source,transient:false,sample:draft.rendered};
     }
     this.status.textContent='Variant applied to the Working Copy. Use Undo in Versions & History to recover the previous map.';
   }
@@ -563,9 +621,19 @@ export class SampleLab {
     }
     this.previous.disabled=!this.previousEnvelope;
     this.compareButton.disabled=!this.variant;
+    const offsets=labAnchorOffsets(this.model,this.variant);
+    this.anchorsButton.hidden=!offsets.length;
+    this.anchorsInfo.textContent=offsets.length?'Keyboard regions · source MIDI '+region.root+' and rendered anchors at '+
+      offsets.map(offset=>region.root+offset).sort((a,b)=>a-b).join(', ')+' · nearest anchor per key.':'';
+    const signalsmith=this.algorithm.querySelector('option[value="signalsmith-stretch"]');
+    signalsmith.disabled=this.source.sample.channels!==1;
+    if(signalsmith.disabled&&this.algorithm.value===signalsmith.value){
+      this.algorithm.value='wsola';this.refreshPitchControls();
+    }
     this.renderPitchButton.disabled=!!region.fixedPitch||region.key[0]===region.key[1];
     this.playback.value=region.mode;
-    this.loopEnable.disabled=region.trigger!=='attack';
+    this.loopTools.hidden=region.trigger==='release';
+    this.loopTime.hidden=this.loopTools.hidden;
     this.loopEnable.checked=!!region.loop;
     this.loopMode.value=this.loop.mode;
     for(const [key,input] of this.loopFields){
