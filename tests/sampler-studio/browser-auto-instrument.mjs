@@ -40,7 +40,10 @@ page.on('pageerror',e=>errors.push(e.message));
 try {
   await page.addInitScript(()=>{
     window.audit={contexts:0,hosts:0,commands:[],frames:[],maps:[]};
-    window.showDirectoryPicker=async()=>(await navigator.storage.getDirectory()).getDirectoryHandle('Wizard tests',{create:true});
+    window.showDirectoryPicker=async()=>{
+      if(audit.denyFolder) throw new DOMException('Folder permission denied','NotAllowedError');
+      return (await navigator.storage.getDirectory()).getDirectoryHandle('Wizard tests',{create:true});
+    };
     audit.source={id:'wizard-test-midi',name:'Wizard MIDI',state:'connected',async open(){},async close(){}};
     navigator.requestMIDIAccess=async()=>({inputs:new Map([[audit.source.id,audit.source]])});
     const Context=AudioContext;
@@ -74,6 +77,12 @@ try {
   const step=name=>wizard.getByRole('heading',{name,exact:true}).waitFor();
   await studio.getByRole('button',{name:'Auto Instrument Wizard',exact:true}).click();
   await step('Import');
+  if(path===synthetic){
+    await page.evaluate(()=>audit.denyFolder=true);
+    await btn('Choose Samples folder…').click();
+    await wizard.getByText('Folder permission denied',{exact:true}).waitFor();
+    await page.evaluate(()=>audit.denyFolder=false);
+  }
   await btn('Choose Samples folder…').click();
   const input=wizard.getByLabel('Wizard WAV');
   await input.setInputFiles(path);
@@ -88,7 +97,14 @@ try {
   await page.screenshot({path:join(evidence,tag+'-discover.png')});
   await btn('Listen').first().click();
   await btn('Stop preview').click();
-  if(path===synthetic) await wizard.getByRole('checkbox').nth(1).check();
+  if(path===synthetic) {
+    await btn('Select on waveform').click();
+    const start=wizard.getByLabel('Start frame',{exact:true}),end=wizard.getByLabel('End frame',{exact:true});
+    await start.fill(String(180.25*44100));await start.press('Tab');
+    await end.fill(String(181*44100));await end.press('Tab');
+    await btn('Use waveform selection').click();
+    assert.equal(await wizard.getByRole('checkbox',{checked:true}).count(),2);
+  }
   await btn('Next').click();await step('Build');
   await btn('Back').click();await step('Discover');
   await btn('Next').click();await step('Build');
@@ -117,8 +133,27 @@ try {
   await page.evaluate(()=>{audit.note(audit.root-12,false);audit.note(audit.root+12,false);});
   await page.waitForFunction(()=>audit.peak()<0.0001);
   await btn('Release Keyboard').click();
+  if(path===synthetic) {
+    await page.evaluate(async()=>{
+      const {search}=await import('./sampler-library.js');
+      const entries=await search(await showDirectoryPicker(),{kind:'sample'});
+      if(entries.items.some(e=>e.path.startsWith('Samples/Processed/'))) throw Error('Preview wrote a physical derivative');
+      const handles=FileSystemDirectoryHandle.prototype, original=handles.getFileHandle;
+      let writes=0;
+      handles.getFileHandle=async function(name,options){
+        if(this.name==='Drafts' && options?.create && ++writes===2){
+          handles.getFileHandle=original;
+          throw new DOMException('Simulated disk full','QuotaExceededError');
+        }
+        return original.call(this,name,options);
+      };
+    });
+    await btn('Finish').click();
+    await wizard.getByText('Saved Working / playable',{exact:true}).waitFor();
+    await wizard.getByText(/Simulated disk full|quota|storage space/i).first().waitFor();
+  }
   await btn('Finish').click();
-  await wizard.getByText('Saved Working / playable',{exact:true}).first().waitFor();
+  await wizard.getByText('Saved Working / playable',{exact:true}).nth(path===synthetic?1:0).waitFor();
   await page.screenshot({path:join(evidence,tag+'-finish.png')});
   const docs=await page.evaluate(async()=>{
     const root=await showDirectoryPicker();
@@ -148,6 +183,28 @@ try {
   await studio.getByRole('button',{name:'Auto Instrument Wizard',exact:true}).click();
   await btn('Cancel').click();
   assert.equal(await studio.getByLabel('Working name',{exact:true}).inputValue(),name);
+  if(path===synthetic){
+    await studio.getByRole('button',{name:'Play on Synth keyboard',exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector('.ww-sampler-route')?.textContent.includes('Working') ||
+      [...document.querySelectorAll('.ww-sampler-route')].some(n=>n.textContent.includes('Wizard long · Working')));
+    const prior=await studio.locator('.ww-sampler-route').first().innerText();
+    await studio.getByRole('button',{name:'Auto Instrument Wizard',exact:true}).click();
+    await wizard.getByLabel('Wizard WAV').setInputFiles(path);
+    await wizard.getByText('Original verified',{exact:false}).waitFor();
+    await btn('Next').click();await step('Discover');
+    await btn('Next').click();await step('Build');
+    await btn('Next').click();await step('Play & Finish');
+    await btn('Play on Keyboard').first().click();
+    await btn('Release Keyboard').click();
+    await btn('Cancel').click();
+    assert.equal(await studio.locator('.ww-sampler-route').first().innerText(),prior);
+    await studio.getByRole('button',{name:'Release Synth keyboard',exact:true}).click();
+    await studio.getByRole('button',{name:'Auto Instrument Wizard',exact:true}).click();
+    await wizard.getByLabel('Wizard WAV').setInputFiles(path);
+    await wizard.getByText('Original verified',{exact:false}).waitFor();
+    await btn('Next').click();await btn('Cancel').click();
+    assert.equal(await studio.getByLabel('Working name',{exact:true}).inputValue(),name);
+  }
   await page.reload();await nav();
   await studio.getByRole('button',{name,exact:true}).first().click();
   await studio.getByText('Working Copy reopened · '+name,{exact:true}).waitFor();

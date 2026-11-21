@@ -154,7 +154,14 @@ export class AutoInstrumentWizard {
     }
     await s.adopt(item.saved,this.file);
     s.sections.get('Mapping Editor').open=true;
-    this.close();
+    if(this.selected().some(other=>!other.saved)){
+      this.node.hidden=true;s.body.hidden=false;
+      const resume=action('Resume Auto Instrument Wizard',()=>{
+        if(s.busy)return;
+        resume.remove();s.body.hidden=true;this.node.hidden=false;this.paint(true);
+      });
+      this.trigger.after(resume);
+    }else this.close();
     s.status.textContent='Working Copy open · '+item.saved.name;
     s.sections.get('Mapping Editor').querySelector('summary').focus();
   }
@@ -173,7 +180,7 @@ export class AutoInstrumentWizard {
     if (this.step>0 && !this.selected().some(i=>i.saved)) {
       this.nav.prepend(action('Back',()=>{this.step--;this.status.textContent='';this.paint(true);}));
     }
-    if (s.liveName && this.step<3) this.nav.append(this.button('Release Keyboard',async()=>{await s.releaseLive();this.paint();},{cancelable:false}));
+    if (s.wizardRoute && this.step<3) this.nav.append(this.button('Release Keyboard',async()=>{await s.releaseLive();this.paint();},{cancelable:false}));
     if (focus) this.heading.focus();
   }
   importScreen() {
@@ -214,10 +221,16 @@ export class AutoInstrumentWizard {
       const timing=seconds(item.start,this.layout.sampleRate)+' – '+seconds(item.end,this.layout.sampleRate)+
         ' ('+seconds(item.end-item.start,this.layout.sampleRate)+')';
       row.append(label,mini.node,el('span','',timing),el('small','ww-muted',item.reason),
-        this.button('Listen',async()=>{this.wave.setSelection(item);this.listenOwner=true;
-          await this.studio.audition.play(wav,()=>{this.listenOwner=false;});}));
+        this.button('Listen',async()=>{this.wave.setSelection(item);
+          const playing=this.studio.audition.play(wav,()=>{this.listenOwner=false;});
+          this.listenOwner=true;await playing;}));
       this.content.append(row);
     }
+    this.content.append(action('Select on waveform',()=>{
+      const canvas=this.wave.node.querySelector('canvas');
+      canvas.focus();canvas.scrollIntoView({block:'center'});
+      this.status.textContent='Drag to select, or enter start and end frames. Then use the waveform selection.';
+    }));
     this.nav.append(this.button('Use waveform selection',()=>{
       const range=this.wave.getSelection();
       const duration=(range.end-range.start)/this.layout.sampleRate;
@@ -294,7 +307,7 @@ export class AutoInstrumentWizard {
       if(key){window.focus();key.scrollIntoView({block:'center'});key.focus({preventScroll:true});}
     }));
     if (!this.selected().some(i=>i.saved)) this.nav.append(action('Rebuild',()=>{this.step=2;this.paint(true);}));
-    if(s.liveName) this.nav.append(this.button('Release Keyboard',async()=>{await s.releaseLive();this.status.textContent=s.route.textContent;this.paint();},{cancelable:false}));
+    if(s.wizardRoute) this.nav.append(this.button('Release Keyboard',async()=>{await s.releaseLive();this.status.textContent=s.route.textContent;this.paint();},{cancelable:false}));
     if(this.selected().some(i=>!i.saved)) this.nav.append(this.button('Finish',()=>this.save(this.selected()),{cancelable:false}));
     else this.content.append(el('p','ww-muted','Open Edit Advanced to promote an Official revision and assign it to a DAW track.'));
   }

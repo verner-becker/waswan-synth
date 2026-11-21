@@ -8,7 +8,7 @@ import {encodeSample} from './sampler-offline.js';
 import {compile, validateInstrument} from './sampler-instrument.js';
 import {mapSample, stageWorkingSampler} from './sampler.js';
 import {importOriginal} from './sampler-library.js';
-import {createWorking, saveWorking} from './sampler-working.js';
+import {createWorking, openWorking, saveWorking} from './sampler-working.js';
 
 // Selection thresholds describe editable starting points, not calibrated probabilities.
 const scanSeconds = 1, hopSeconds = 0.5, minActiveRms = 0.002;
@@ -193,5 +193,15 @@ export async function saveProposal(root, libraryId, source, proposal, settings) 
   const instrument = proposalMap(sample,proposal,settings);
   const draft = createWorking({libraryId,source,selection,recipe,rendered:sample,instrument,
     rootNote:instrument.regions[0].root,name:settings.name});
-  return saveWorking(root,draft);
+  draft.id=settings.id+'-working';
+  try {
+    return await saveWorking(root,draft);
+  } catch(error) {
+    if (error.code!=='working-conflict') throw error;
+    const existing=await openWorking(root,draft.id);
+    // A retry may arrive after the previous write committed. Only reuse that
+    // exact first generation. Later edits keep their revision conflict.
+    if (existing.generation===1 && JSON.stringify(existing)===JSON.stringify({...draft,generation:1})) return existing;
+    throw error;
+  }
 }

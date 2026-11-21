@@ -19,6 +19,9 @@ export function physicalError(cause, path) {
   if (permissionDenied(cause)) {
     return error('permission-required', 'Grant access to the sampler library folder again.', details);
   }
+  if (cause?.name === 'QuotaExceededError' || cause?.code === 'ENOSPC') {
+    return error('storage-full', 'Free storage space in the Samples folder and retry.', details);
+  }
   if (notFound(cause)) return error('missing-path', 'This path is missing from the sampler library.', details);
   if (cause?.name === 'TypeMismatchError') return error('path-conflict', 'A file or folder already uses this name.', details);
   return error('filesystem-error', 'Unable to access the sampler library file.', details);

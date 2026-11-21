@@ -19,7 +19,18 @@ await assert.rejects(proposeInstrument(silent,{start:0,end:44100}),/quiet/);
 await assert.rejects(proposeInstrument(file,{start:0,end:20}),/60 ms/);
 await assert.rejects(discoverCandidates(file,'Auto',{signal:AbortSignal.abort()}),{name:'AbortError'});
 let progress=0;
-const candidates=await discoverCandidates(file,'Sustained',{onProgress:f=>{assert(f>=progress);progress=f;}});
+class WindowedRecording extends Blob {
+  arrayBuffer(){throw Error('Discovery read the entire recording');}
+  slice(start,end){
+    assert(end-start<=48000*2,'Scan must read bounded windows');
+    return super.slice(start,end);
+  }
+}
+const recording=new WindowedRecording([file]);
+const controller=new AbortController();
+await assert.rejects(discoverCandidates(recording,'Auto',{signal:controller.signal,
+  onProgress:()=>controller.abort()}),{name:'AbortError'});
+const candidates=await discoverCandidates(recording,'Sustained',{onProgress:f=>{assert(f>=progress);progress=f;}});
 assert.equal(progress,1);
 assert(candidates.length>0 && candidates.length<=5);
 for(const n of [57,64]) assert(candidates.some(c=>c.reason.includes('MIDI '+n)));
@@ -41,6 +52,8 @@ try {
   const saved=await saveProposal(root,library.id,source,result,settings);
   const opened=await openWorking(root,saved.id);
   assert.deepEqual(opened,saved);
+  assert.deepEqual(await saveProposal(root,library.id,source,result,settings),saved);
+  await assert.rejects(saveProposal(root,library.id,source,result,{...settings,name:'Another name'}),{code:'working-conflict'});
   assert.equal(saved.rendered.source.sha256,source.sha256);
   assert.equal(saved.rendered.sampleRate,44100);
   assert.equal(saved.baseRef,null);
@@ -92,5 +105,5 @@ try {
   await mkdir(path,{recursive:true});
   const wav=encodeSample({channels:2,sampleRate:44100,pcm:Float32Array.from(out)});
   await writeFile(join(path,'chord.wav'),new Uint8Array(await wav.arrayBuffer()));
-  console.log('PASS candidate discovery, abstenção, partial render, playable map, Working reopen and WASM chord',{peak,heldPeak,releasedPeak});
+  console.log('PASS candidate discovery, pitch abstention, partial render, playable map, Working reopen and WASM chord',{peak,heldPeak,releasedPeak});
 }finally{await rm(dir,{recursive:true,force:true});}
