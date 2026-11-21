@@ -126,7 +126,10 @@ export function renderRecipe(source,recipe) {
   for(const op of recipe){
     switch(op.type){
       case 'stretch': flush();audio=stretch(audio,op.factor);break;
-      case 'pitchShift': flush();audio=pitchShift(audio,op.semitones);break;
+      case 'pitchShift':
+        if(op.algorithm!==undefined&&(op.algorithm!=='wsola'||op.algorithmVersion!==1))
+          throw Error('This pitch recipe requires a different algorithm version.');
+        flush();audio=pitchShift(audio,op.semitones);break;
       case 'granular': flush();audio=granular(audio,op);break;
       default: edits.push(op);
     }

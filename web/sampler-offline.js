@@ -6,6 +6,7 @@ import {checkAudio, splitFrames} from './sampler-edit.js';
 import {renderRecipe} from './sampler-transform.js';
 import {analyzeSample, suggestLoops} from './sampler-analysis.js';
 import {pcm16, wavHeader} from './studio-format.js';
+import {pitchAdapters} from './sampler-lab-pitch.js';
 import {labLevels,labPerformanceMetrics,measureLabLoop,optimizeLabLoop} from './sampler-lab-analysis.js';
 import {checkFrameRange, waveformPeaks} from './sampler-waveform.js';
 
@@ -56,7 +57,7 @@ export async function processWav(file, job) {
         end <= start || end > layout.frames) throw Error('Invalid trim range');
     recipe = recipe.slice(1);
   }
-  if (job.type === 'lab-source' || job.type === 'lab-loops') {
+  if (['lab-source','lab-loops','lab-pitch'].includes(job.type)) {
     ({start,end}=job.range);
     checkFrameRange(job.range,layout.frames);
     if(end-start>16*layout.sampleRate)throw Error('Choose up to 16 seconds for Sample Lab analysis.');
@@ -67,6 +68,12 @@ export async function processWav(file, job) {
   const bytes = await blob.slice(layout.offset+start*bytesPerFrame,layout.offset+end*bytesPerFrame).arrayBuffer();
   const pcm = decodePCM(bytes,{offset:0,frames,channels});
   const source = {channels,sampleRate,pcm:Float32Array.from(pcm,value=>value/32768)};
+  if (job.type === 'lab-pitch') {
+    const adapter=pitchAdapters[job.algorithm];
+    if(!adapter)throw Error('Unknown Sample Lab pitch algorithm.');
+    const {audio,report}=adapter.render(source,job.parameters);
+    return {wav:encodeSample(audio),report};
+  }
   if (job.type === 'lab-source') return {levels:labLevels(source),pitch:analyzeSample(source).pitch};
   if (job.type === 'lab-performance') return labPerformanceMetrics(source,job.options);
   if (job.type === 'lab-loops') {

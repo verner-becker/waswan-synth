@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {emptyProject,makeTrack,PPQ} from './daw-project.js';
 import {planAudioExport} from './daw-audio-export.js';
-import {compile,samplerLimits,validateInstrument} from './sampler-instrument.js';
-import {readSampleFile} from './sampler-library.js';
+import {validateInstrument} from './sampler-instrument.js';
+import {importOriginal,prepareInstrument,readSampleFile} from './sampler-library.js';
 import {labMaxSeconds} from './sampler-lab-analysis.js';
 import {runOffline} from './sampler-offline.js';
-import {createWorking,prepareWorking,previewWorkingWav,renderWorking,workingInstrument} from './sampler-working.js';
-import {decodeWav,inspectWav} from './sampler-wav.js';
+import {createWorking,previewWorkingWav,renderWorking,workingInstrument} from './sampler-working.js';
+import {inspectWav} from './sampler-wav.js';
 import {mapSample,stageWorkingSampler} from './sampler.js';
+import {pitchAdapters,pitchRecipe} from './sampler-lab-pitch.js';
 
 export const labEnvelopes=Object.freeze({
   'Vocal Sustain':{attackMs:5,decayMs:80,sustain:.9,releaseMs:140},
@@ -43,21 +44,64 @@ export async function labSource(root,draft,regionId,{run=runOffline}={}) {
       file:await readSampleFile(root,model.samples[0])};
   }
   const file=await previewWorkingWav(root,draft,{run});
-  const {sampleRate,channels,frames}=await inspectWav(file);
-  const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),
-    b=>b.toString(16).padStart(2,'0')).join('');
-  const sample={id:'lab-preview',path:'Samples/Preview.wav',frames,channels,sampleRate,sha256};
+  const sample=await previewIdentity(file,'lab-preview');
   const model={...mapSample(sample,draft.rootNote,{name:draft.name}),id:draft.instrumentId};
   return {file,sample,model,region:model.regions[0],transient:true};
 }
 
-export async function prepareLabPreview(player,root,draft,source,model) {
-  if(!source.transient) return prepareWorking(player,root,{...draft,instrument:model});
-  const plan=compile(model);
-  if(source.sample.frames*source.sample.channels*2>samplerLimits.memoryBytes)
-    throw Error('Choose an excerpt that fits the shared PCM budget.');
-  const {pcm}=await decodeWav(source.file);
-  return stageWorkingSampler(player,{plan,samples:new Map([[source.sample.id,pcm]])});
+async function previewIdentity(file,id) {
+  const {sampleRate,channels,frames}=await inspectWav(file);
+  const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),
+    b=>b.toString(16).padStart(2,'0')).join('');
+  return {id,path:'Samples/Preview/'+id+'.wav',frames,channels,sampleRate,sha256,size:file.size};
+}
+
+export async function prepareLabPreview(player,root,source,model,variant) {
+  const previewFiles=new Map();
+  if(source.transient)previewFiles.set(source.sample.id,source.file);
+  if(variant)previewFiles.set(variant.sample.id,variant.file);
+  return stageWorkingSampler(player,await prepareInstrument(root,model,{previewFiles}));
+}
+
+export async function renderLabPitch(source,region,{semitones,fine},{run=runOffline,algorithm='wsola'}={}) {
+  const adapter=pitchAdapters[algorithm];
+  if(!adapter||adapter.id==='native-hermite')throw Error('Choose an available offline pitch processor.');
+  if(region.fixedPitch)throw Error('Choose a chromatic region for pitch comparison.');
+  if(!Number.isInteger(semitones)||!Number.isFinite(fine)||Math.abs(fine)>100||
+     region.root+semitones<0||region.root+semitones>127)
+    throw Error('Choose a valid anchor note and fine tuning between −100 and +100 cents.');
+  const [start,end]=region.frames;
+  const parameters={semitones:semitones+fine/100};
+  const operation=pitchRecipe(adapter,parameters);
+  const {wav,report}=await run(source.file,{type:'lab-pitch',range:{start,end},algorithm,parameters});
+  const sample=await previewIdentity(wav,'lab-'+crypto.randomUUID());
+  const recipe=[{type:'trim',start,end},operation];
+  return {sample,file:wav,report,semitones,fine,recipe,algorithm,algorithmVersion:adapter.version,
+    regionId:region.id,sourceFrames:[start,end]};
+}
+
+export function pitchLabMap(model,variant,{sample=variant.sample,gain=0,offset=0}={}) {
+  const region=model.regions.find(r=>r.id===variant.regionId);
+  const [start,end]=variant.sourceFrames;
+  const loop=region.loop&&{...region.loop,start:region.loop.start-start,end:region.loop.end-start};
+  const pitched={...region,sample:sample.id,frames:[0,end-start],root:region.root+variant.semitones,
+    cents:region.cents-variant.fine,gainDb:Math.max(-144,Math.min(48,region.gainDb+gain+offset)),loop};
+  const regions=model.regions.map(r=>r.id===region.id?pitched:r);
+  const samples=[...model.samples.filter(s=>regions.some(r=>r.sample===s.id)),sample];
+  return validateInstrument({...model,samples,regions});
+}
+
+export async function persistLabPitch(root,draft,source,model,variant,gain) {
+  const saved=await materializeLab(root,draft,source,model);
+  const original=saved.model.samples.find(s=>s.id===saved.model.regions.find(r=>r.id===variant.regionId).sample);
+  const destination='Samples/Processed/'+draft.id+'/lab-'+variant.sample.id+'.wav';
+  const sample=await importOriginal(root,variant.file,destination,{
+    id:variant.sample.id,source:{path:original.path,sha256:original.sha256},
+    recipe:{version:1,operations:variant.recipe},license:original.license,
+    provenance:{sampleLab:{version:1,algorithm:variant.algorithm,algorithmVersion:variant.algorithmVersion,
+      semitones:variant.semitones,fine:variant.fine,anchor:variant.semitones+saved.model.regions.find(r=>r.id===variant.regionId).root}},
+  });
+  return {draft:saved.draft,model:pitchLabMap(saved.model,variant,{sample,gain}),sample};
 }
 
 export async function materializeLab(root,draft,source,model,options={}) {
@@ -83,16 +127,16 @@ export function labTests(region) {
   const testNote=(note,start=0,duration=1.5,velocity=100)=>({note,start,duration,velocity});
   const tests=[0,12,-12,24,-24].filter(offset=>within(root+offset)).map(offset=>({
     id:'note-'+offset,label:offset?'Root '+(offset>0?'+':'')+offset+' semitones':'Root · hold',
-    notes:[testNote(root+offset)],monophonic:true,
+    notes:[testNote(root+offset)],monophonic:true,held:true,
   }));
   const spread=[0,-12,7,12,-5,4,5,-7,3,-3,1,-1];
   const chord=spread.map(delta=>center+delta).filter(within);
   for(let pitch=key[0];pitch<=key[1]&&chord.length<4;pitch++)if(!chord.includes(pitch))chord.push(pitch);
-  if(chord.length>=4)tests.push({id:'chord',label:'Four-note chord',notes:chord.slice(0,4).map(n=>testNote(n))});
+  if(chord.length>=4)tests.push({id:'chord',label:'Four-note chord',notes:chord.slice(0,4).map(n=>testNote(n)),held:true});
   const sequence=[0,7,-5,12].map(delta=>center+delta).filter(within);
   tests.push({id:'short',label:'Short notes',notes:[...sequence,...sequence].map((n,i)=>testNote(n,.15*i,.09))},
     {id:'velocity',label:'Velocity steps',notes:[32,64,96,127].map((v,i)=>testNote(center,.42*i,.22,v))},
-    {id:'release',label:'Note Off & release',notes:[testNote(center,0,1,100)],monophonic:true});
+    {id:'release',label:'Note Off & release',notes:[testNote(center,0,1,100)],monophonic:true,held:true});
   return tests.map(test=>({...test,heldFrom:.6,expectedHz:test.monophonic?
     440*2**((test.notes[0].note-69+cents/100)/12):null}));
 }

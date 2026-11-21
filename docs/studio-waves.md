@@ -264,3 +264,7 @@ No WASM, o pico da cauda após o release foi zero em Dry e 0,08087 com reverb no
 Branch `feat/sampler-sample-lab-1` sobre `70ce5b7`, que contém o Auto Instrument Wizard `a2841e2` e a pré-escuta Dry. O laboratório edita ADSR e loops da Working Copy, classifica propostas de loop em Worker e mede testes musicais na saída dry do host existente. O Wizard abre o laboratório sem trocar a rota MIDI. O editor e a publicação usam os contratos da biblioteca e do Instrument Builder.
 
 A fixture determinística e o percurso em Chrome com MIDI simulado passaram. O acorde sintético capturou −5,3 dBFS por canal, zero amostras acima do limite e cauda de 190 ms acima de −60 dBFS. Evidências em `.local/validation/sample-lab/`. O [guia](sample-lab.md) descreve as medições e limites. O aceite físico segue com o proprietário. Próximo incremento: Native A e WSOLA B no mesmo caminho de captura e persistência.
+
+### Sample Lab · Entrega 2
+
+Branch `feat/sampler-sample-lab-2` sobre `96a1372`. Native Hermite e WSOLA compartilham o teclado e a sequência MIDI de testes. A seleção pode seguir como nova Working Copy ou voltar ao rascunho com Undo. No Chrome, a fixture de 220 Hz medida uma oitava acima deu 440,3 Hz no Native e 440,1 Hz no WSOLA, ambas com −15,6 dBFS. A emenda herdada aumentou a descontinuidade em B. A receita versionada reproduz o WAV derivado byte a byte no teste Node. Próximo incremento: validar a faixa útil do processador especializado e limitar a geração de zonas aos anchors úteis.

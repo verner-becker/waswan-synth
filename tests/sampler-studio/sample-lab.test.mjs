@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {diskDirectory} from './filesystem.mjs';
 import {compileProject,assignSlots} from '../../web/daw-playback.js';
 import {labLevels,labPerformanceMetrics,measureLabLoop,optimizeLabLoop} from '../../web/sampler-lab-analysis.js';
-import {labEnvelope,labMap,labTestProject,labTests} from '../../web/sampler-lab.js';
+import {labEnvelope,labMap,labSource,labTestProject,labTests,renderLabPitch,pitchLabMap,persistLabPitch,forkLabWorking} from '../../web/sampler-lab.js';
+import {createWorking,openWorking,saveWorking} from '../../web/sampler-working.js';
+import {importOriginal,initializeLibrary,readSampleFile} from '../../web/sampler-library.js';
 import {createInstrument} from '../../web/sampler-instrument.js';
 import {encodeSample,processWav} from '../../web/sampler-offline.js';
 
@@ -48,4 +54,34 @@ const {project}=labTestProject(ref,scripts.find(x=>x.id==='chord'),180);
 const sequence=compileProject(project,assignSlots(project)).events;
 assert.equal(sequence.filter(event=>event.velocity===100).length,4);
 assert.equal(new Set(sequence.filter(event=>event.velocity===100).map(event=>event.frame)).size,1);
+const directory=await mkdtemp(join(tmpdir(),'waswan-lab-'));
+try{
+  const root=await diskDirectory(directory);
+  const library=await initializeLibrary(root);
+  const wav=encodeSample(audio);
+  const sample=await importOriginal(root,wav,'Samples/Originals/tone.wav');
+  const base=await saveWorking(root,createWorking({libraryId:library.id,source:sample,rootNote:57,name:'Original A'}));
+  const prepared=await labSource(root,base,'region',{run:processWav});
+  const variant=await renderLabPitch(prepared,prepared.region,{semitones:7,fine:20},{run:processWav});
+  const derived=await processWav(variant.file,{type:'analyze'});
+  assert(Math.abs(derived.pitch.hz-220*2**(7.2/12))<1);
+  const tuned=pitchLabMap(prepared.model,variant);
+  assert.equal(tuned.regions[0].root,64);
+  assert.equal(tuned.regions[0].cents,-20);
+  const shifted=await persistLabPitch(root,base,prepared,prepared.model,variant,-2);
+  const copy=await saveWorking(root,forkLabWorking(shifted.draft,shifted.model,'Shifted B'));
+  const reopened=await openWorking(root,copy.id);
+  assert.equal(reopened.source.sha256,sample.sha256);
+  assert.equal(reopened.instrument.samples[0].sha256,variant.sample.sha256);
+  assert.equal(reopened.instrument.regions[0].gainDb,-2);
+  assert.equal(reopened.instrument.samples[0].recipe.operations[1].algorithm,'wsola');
+  assert.equal(reopened.instrument.samples[0].recipe.operations[1].algorithmVersion,1);
+  assert.deepEqual(await (await readSampleFile(root,sample)).arrayBuffer(),await wav.arrayBuffer());
+  assert.equal((await openWorking(root,base.id)).instrument,null);
+  const exact=await processWav(wav,{type:'edit',recipe:variant.recipe});
+  assert.deepEqual(await exact.wav.arrayBuffer(),await variant.file.arrayBuffer());
+  await assert.rejects(()=>renderLabPitch(prepared,prepared.region,
+    {semitones:12,fine:20},{run:processWav}),/total shift/);
+}finally{await rm(directory,{recursive:true});}
+console.log('PASS deterministic pitch derivatives, adjusted root, variant reopen and preserved source');
 console.log('PASS loop seam, slope, ranking, pulse rejection, clipping, tail, ADSR and bounded MIDI scripts');

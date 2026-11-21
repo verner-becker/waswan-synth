@@ -394,12 +394,12 @@ export async function inspect(root, ref, options) {
   return resolve(root, ref, options);
 }
 
-async function readVerified(root, sample, {maxFileBytes = Infinity, signal} = {}) {
+async function readVerified(root, sample, {maxFileBytes = Infinity, signal, previewFile} = {}) {
   try {
     checkAbort(signal);
     let file;
     try {
-      file = await (await fileAt(root, sample.path)).getFile();
+      file = previewFile ?? await (await fileAt(root, sample.path)).getFile();
     } catch (cause) {
       if (notFound(cause)) throw error('missing-sample', 'A referenced WAV is missing.', {path: sample.path, sampleId: sample.id});
       throw cause;
@@ -430,7 +430,8 @@ async function readVerified(root, sample, {maxFileBytes = Infinity, signal} = {}
 }
 
 export async function readSampleFile(root, sample, options) {
-  return (await readVerified(root, sample, options)).file;
+  const {signal,maxFileBytes}=options??{};
+  return (await readVerified(root, sample, {signal,maxFileBytes})).file;
 }
 
 function revisionConflict(path, expectedRevision, actualRevision) {
@@ -508,7 +509,7 @@ export async function verify(root, ref, options) {
   return {...report, ok: report.items.every(item => item.status === 'ok')};
 }
 
-export async function prepareInstrument(root, instrument, {signal, onProgress, limits, capabilities, maxFileBytes = maxPlaybackFileBytes} = {}) {
+export async function prepareInstrument(root, instrument, {signal, onProgress, limits, capabilities, maxFileBytes = maxPlaybackFileBytes, previewFiles} = {}) {
   checkAbort(signal);
   const plan = compile(instrument, capabilities, limits);
   const samples = new Map();
@@ -520,7 +521,8 @@ export async function prepareInstrument(root, instrument, {signal, onProgress, l
     checkAbort(signal);
     const identity = sample.path + '\u0000' + sample.sha256 + '\u0000' + sample.size;
     if (!checked.has(identity)) {
-      const {bytes, metadata} = await readVerified(root, sample, {maxFileBytes, signal});
+      const previewFile=previewFiles?.get(sample.id);
+      const {bytes, metadata} = await readVerified(root, sample, {maxFileBytes, signal, previewFile});
       if (!pcmByDigest.has(sample.sha256)) pcmByDigest.set(sample.sha256, decodePCM(bytes, metadata));
       checked.add(identity);
     }

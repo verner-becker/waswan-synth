@@ -22,3 +22,15 @@ node tests/sampler-studio/browser-sample-lab.mjs
 ```
 
 The supplied vocal recording produced a four-note dry peak of −6.5 dBFS on both channels, 3.52 dB of held RMS variation and a 189 ms tail above −60 dBFS. The Suno export produced −7.2 dBFS left and −11.3 dBFS right. Both captures had zero over-range values. The guitar preset replayed a one-shot and still had signal at the end of the test capture. This source contains the recorded mix, including accompaniment. The Lab works with the selected interval of that mix.
+
+## Pitch & Timbre
+
+**Render variant B** processes the selected chromatic region using the existing WSOLA and resampling implementation in the offline Worker. It preserves its frame count. The anchor is the original root plus the integer shift. The small tuning adjustment is compensated in the zone so the same incoming MIDI note targets the same pitch in A and B. WSOLA takes an 80 ms to 16 s selection and a total shift within ±12 semitones. Its overlap and rate conversion can alter transients, formants and loop alignment.
+
+**Match preview RMS** applies up to ±12 dB of listen-only correction based on source PCM, independent of saved instrument gain. **Compare A/B with selected sequence** sends the same notes and velocities through the same dry playback path. Choose A or B to inspect, hear or download its WAV. **Save variant as new Working Copy** keeps the current Working Copy independent. The derivative retains the source path and hash, ordered recipe, algorithm version and anchor. **Apply to Working Copy** leaves the previous map in Undo. Builder opens the map directly.
+
+The synthetic A/B at root +12 measured 440.3 Hz in A and 440.1 Hz in B with a +7.20-semitone offline render. Both peaks were −15.6 dBFS and both captured WAVs contained 83,790 frames. Copying the native loop into B increased the largest held sample step from 0.0116 to 0.1247 FS. Check the seam with **Measure Loop** while B is selected and run the held note again after moving its points. The Node test independently replays the saved Processing Stack and matches the derivative bytes exactly.
+
+```sh
+LAB_COMPARE=1 node tests/sampler-studio/browser-sample-lab.mjs
+```

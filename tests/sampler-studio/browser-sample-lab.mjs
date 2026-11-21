@@ -12,6 +12,7 @@ const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const evidence=process.env.LAB_EVIDENCE||'.local/validation/sample-lab';
 const tag=process.env.LAB_REPORT||'sine';
 const recording=process.env.LAB_WAV;
+const compare=process.env.LAB_COMPARE==='1';
 const errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 await mkdir(evidence,{recursive:true});
@@ -118,6 +119,46 @@ try{
   assert.equal(copy.instrument.regions[0].envelope.releaseMs,190);
   assert.equal(copy.rendered.source.sha256,copy.source.sha256);
   report.source=copy.source.sha256;report.loop=copy.instrument.regions[0].loop;report.envelope=copy.instrument.regions[0].envelope;
+  if(compare){
+    await lab.locator('summary').filter({hasText:/^Pitch & Timbre$/}).click();
+    await lab.getByLabel('Anchor shift (semitones)',{exact:true}).fill('7');
+    await lab.getByLabel('Processor fine tuning (cents)',{exact:true}).fill('20');
+    await lb('Render variant B').click();
+    await lab.getByText(/^B ready/).waitFor();
+    await lab.getByLabel('Performance test',{exact:true}).selectOption('note-12');
+    await lb('Compare A/B with selected sequence').click();
+    await lab.getByText('Dry A/B captures ready.',{exact:true}).waitFor({timeout:15000});
+    report.comparison={};
+    for(const slot of ['A','B']){
+      await lab.getByLabel('Pitch variant',{exact:true}).selectOption(slot);
+      const downloading=page.waitForEvent('download');
+      await lb('Download WAV').click();
+      const path=join(evidence,tag+'-pitch-'+slot+'.wav');
+      await (await downloading).saveAs(path);
+      const pitched=await decodeWav(await read.readFile(path));
+      assert.equal(pitched.frames,captured.frames);
+      report.comparison[slot]=await lab.locator('.ww-lab-report').innerText();
+    }
+    if(!recording){
+      const measured=['A','B'].map(slot=>Number(report.comparison[slot].match(/([\d.]+) Hz ·/u)?.[1]));
+      assert(measured.every(hz=>Math.abs(hz-440)<2));
+      assert(Math.abs(measured[0]-measured[1])<1);
+    }
+    await lb('Save variant as new Working Copy').click();
+    await lab.getByText(/^Variant saved as a new Working Copy/).waitFor();
+    const persisted=await page.evaluate(async()=>{
+      const root=await showDirectoryPicker(),working=await import('./sampler-working.js');
+      const items=await working.listWorking(root);
+      return Promise.all(items.map(d=>working.openWorking(root,d.id)));
+    });
+    assert.equal(persisted.length,2);
+    const deriv=persisted.find(d=>d.id!==copy.id);
+    assert.deepEqual(persisted.find(d=>d.id===copy.id),copy);
+    assert(deriv.instrument.samples[0].recipe.operations.some(op=>op.algorithm==='wsola'&&op.algorithmVersion===1));
+    assert.equal(deriv.instrument.regions[0].root,copy.instrument.regions[0].root+7);
+    assert.equal(deriv.source.sha256,copy.source.sha256);
+    await page.screenshot({path:join(evidence,tag+'-pitch.png'),fullPage:true});
+  }
   assert.deepEqual(errors,[]);
   await writeFile(join(evidence,tag+'.json'),JSON.stringify(report,null,2)+'\n');
   console.log('PASS Wizard handoff, Lab ADSR and held MIDI navigation, dry WAV capture and Working reopen',tag);
