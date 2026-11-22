@@ -49,6 +49,7 @@ export function createFusionInput({onError = () => {}} = {}) {
     return true;
   }
   return {
+    get monitoring() { return active!==null; },
     bind(lease) {
       if (active && active !== lease) throw Error('Stop the active Fusion monitor before changing its input.');
       active = lease;

@@ -27,6 +27,8 @@ try{
   audit.contextRevision=profile.revision;audit.sent=[];audit.profile=localStorage.getItem('waswan-midi-profile-v1');
  });
  await page.getByRole('button',{name:'Music Lab',exact:true}).click();
+ assert(await page.getByRole('button',{name:'Iniciar prática MIDI',exact:true}).isDisabled());
+ assert.match(await page.locator('.ww-lab-midi-availability').innerText(),/DAW está usando o instrumento/);
  await page.getByRole('button',{name:'Ouvir exemplo',exact:true}).click();
  assert.match(await page.locator('.ww-lab-status').innerText(),/instrumento está em uso/);
  assert(await page.evaluate(()=>{const p=audit.monitor.w.midiProfiles.profile;return p.context==='transport'&&p.revision===audit.contextRevision;}),'Music Lab preserves MIDI context and pickup revision');

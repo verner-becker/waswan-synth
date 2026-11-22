@@ -41,6 +41,20 @@
 .ww-lab-key-highlight {display:grid;place-items:center;min-width:19px;min-height:18px;padding:1px 3px;border:1px solid #205c57;border-radius:5px;font-size:10px;font-weight:750;}
 .ww-lab-status {min-height:19px;margin:8px 0 0;color:var(--ww-accent);font-size:12px;}
 .ww-lab-status:empty {display:none;}
+.ww-lab-midi-controls {display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:10px;}
+.ww-lab-midi-controls button {font-size:12px;}
+.ww-lab-midi-feedback {font-size:13px;color:var(--ww-text);font-weight:650;margin:9px 0 0;}
+.ww-lab-midi-details,.ww-lab-midi-availability {font-size:12px;color:var(--ww-muted);margin:6px 0 0;}
+.ww-lab-midi-feedback:empty,.ww-lab-midi-details:empty,.ww-lab-midi-availability:empty {display:none;}
+.ww-lab-piano-key {position:relative;}
+.ww-lab-key-played::after,.ww-lab-key-outside::after {
+  content:"✓";position:absolute;bottom:6px;right:5px;border-radius:3px;padding:1px 3px;
+  background:#164e49;color:#fff;font-size:11px;font-weight:750;
+}
+.ww-lab-key-outside::after {content:"!";background:#822f29;}
+.ww-lab-history {margin-top:12px;padding-top:10px;border-top:1px solid var(--ww-border);font-size:12px;}
+.ww-lab-history summary {font-weight:650;cursor:pointer;}
+.ww-lab-history li {margin:6px 0;color:var(--ww-muted);}
 @media (max-width:770px) {
   .ww-lab-layout {grid-template-columns:minmax(0,1fr);}
   .ww-lab-filters {display:flex;flex-wrap:wrap;}

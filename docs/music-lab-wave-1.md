@@ -23,4 +23,4 @@ O usuário testou e aprovou a W1. O aceite cobre a experiência de estudo e demo
 
 O percurso atual cobre estudo individual, partitura de uma pauta e prévia pelo timbre carregado no Synth. O ensaio físico no SMK-37 Pro fica pendente. O teste no Chrome usou MIDI simulado e áudio WASM real.
 
-A W2 começa pela observação passiva do fluxo de entrada e pelos testes de origem/canal, duração, pedal e reconexão. As práticas avaliadas e o progresso salvo pertencem à W2. A integração à `main` requer aprovação explícita.
+A [W2](music-lab-wave-2.md) acrescenta a avaliação MIDI, a observação de duração e pedal, a retomada após reconexão e o progresso local. A integração à `main` requer aprovação explícita.

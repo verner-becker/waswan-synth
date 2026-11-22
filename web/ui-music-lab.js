@@ -2,6 +2,7 @@
 import {el,action} from './ui-primitives.js';
 import {LAB_KEYS,lessonClef,lessonGroups,pitchLabel,transposeLesson} from './music-lab-model.js';
 import {loadNotation,renderLessonScore} from './ui-music-lab-score.js';
+import {MusicLabMidiPractice} from './ui-music-lab-practice.js';
 import right from './music-lab/scale-c-major-rh-1oct.json' with {type:'json'};
 import left from './music-lab/scale-c-major-lh-1oct.json' with {type:'json'};
 import chord from './music-lab/chord-c-major-rh.json' with {type:'json'};
@@ -48,7 +49,7 @@ function checkField(label,checked,onChange) {
 }
 
 export class MusicLab {
-  constructor({bridge,startAudio,openSettings}) {
+  constructor({bridge,startAudio,openSettings,inputConflict}) {
     Object.assign(this,{bridge,startAudio,openSettings,track:'all',tonic:'C',bpm:60,showFingers:true,entry:LESSONS[0]});
     const css=el('link');
     css.rel='stylesheet';
@@ -95,6 +96,7 @@ export class MusicLab {
       this.stop();
       this.bpm=Number(value);
     });
+    this.tempo=tempo.select;
     this.zoom=selectField('Zoom da pauta',[[100,'100%'],[150,'150%'],[200,'200%']],100,value=>{
       this.score.style.setProperty('--lab-zoom',Number(value)/100);
     });
@@ -123,11 +125,22 @@ export class MusicLab {
     this.instructions=el('p','ww-lab-instructions');
     this.status=el('p','ww-lab-status');
     this.status.setAttribute('role','status');
-    page.append(this.meta,this.lessonTitle,this.goal,controls,this.score,transport,this.position,this.keyboard,this.status,this.instructions);
+    this.midiPractice=new MusicLabMidiPractice({
+      bridge,conflict:inputConflict,
+      onState:(mode,index)=>{
+        this.mode=mode;
+        this.point(index);
+        this.say('');
+        this.refresh();
+      },
+      onObserved:played=>{this.played=played;this.paintPiano();}
+    });
+    page.append(this.meta,this.lessonTitle,this.goal,controls,this.score,transport,this.midiPractice.controls,this.midiPractice.availability,
+      this.position,this.keyboard,this.status,this.midiPractice.feedback,this.midiPractice.details,this.instructions,this.midiPractice.history);
     layout.append(library,page);
     this.node.append(header,layout);
     document.addEventListener('visibilitychange',()=>{
-      if(document.hidden)this.stop('Prévia parada.');
+      if(document.hidden)this.deactivate('Prática pausada enquanto a aba está em segundo plano.');
     });
     this.filter('all');
     this.load();
@@ -160,6 +173,8 @@ export class MusicLab {
     this.stop();
     this.lesson=transposeLesson(this.entry.data,this.tonic);
     this.groups=lessonGroups(this.lesson.notes);
+    this.played=null;
+    this.midiPractice.setLesson(this.lesson,this.groups,()=>this.bpm);
     this.mode='observe';
     this.index=0;
     const {key,handMode,title,instructions,learningGoal}=this.lesson;
@@ -221,14 +236,22 @@ export class MusicLab {
     this.showPosition();
   }
 
-  showPosition() {
+  paintPiano() {
     const group=this.groups[this.index];
-    this.markScore?.(group?.tick);
     for(const [midi,{key,highlighted}] of this.keys){
       const note=group?.notes.find(item=>item.pitch.midi===midi);
       key.classList.toggle('ww-lab-key-current',!!note);
       highlighted.textContent=note?(this.showFingers&&note.finger?note.finger:pitchLabel(note.pitch)):'';
+      const played=this.played?.pitch===midi?this.played:null;
+      key.classList.toggle('ww-lab-key-played',played?.correct===true);
+      key.classList.toggle('ww-lab-key-outside',played?.correct===false);
     }
+  }
+
+  showPosition() {
+    const group=this.groups[this.index];
+    this.markScore?.(group?.tick);
+    this.paintPiano();
     if(group){
       const notes=group.notes.map(({pitch,finger})=>pitchLabel(pitch)+(finger&&this.showFingers?' · dedo '+finger:''));
       this.position.textContent=`${this.index+1} de ${this.groups.length}  /  ${notes.join('  +  ')}`;
@@ -239,7 +262,7 @@ export class MusicLab {
         else if(target.left<bounds.left+16)this.score.scrollLeft+=target.left-bounds.left-25;
       }
     }else this.position.textContent=HANDS[this.lesson.handMode];
-    this.practice.disabled=!!this.token;
+    this.practice.disabled=!!this.token||this.midiPractice.hasAttempt;
     this.previous.hidden=this.next.hidden=this.mode!=='practice';
     this.previous.disabled=this.index<=0;
     this.next.textContent=this.index===this.groups.length-1?'Concluir':'Avançar';
@@ -251,6 +274,7 @@ export class MusicLab {
   }
 
   play() {
+    if(this.midiPractice.hasAttempt)return;
     if(this.bridge.isDawBusy?.()||this.bridge.isStudioBusy?.()){
       this.say(MESSAGES.busy);
       return;
@@ -273,6 +297,11 @@ export class MusicLab {
     this.point(-1);
     this.say(message);
     this.refresh();
+  }
+
+  deactivate(reason='Prática pausada ao sair do Music Lab.') {
+    this.stop('Prévia parada.');
+    this.midiPractice.pause(reason);
   }
 
   receive(message) {
@@ -304,15 +333,17 @@ export class MusicLab {
     const audio=running?(muted?'Saída silenciada':'Áudio ativo'):
       silent?'Áudio indisponível':context?.state==='suspended'?'Áudio pausado':'Áudio parado';
     const connected=!!this.bridge.midi.input;
-    const midi=connected?'MIDI conectado · avaliação prevista':'Sem MIDI · leitura e exemplo disponíveis';
+    const midi=connected?'MIDI conectado':'Sem MIDI · leitura e exemplo disponíveis';
     if(this.audioStatus.textContent!==audio)this.audioStatus.textContent=audio;
     if(this.midiStatus.textContent!==midi)this.midiStatus.textContent=midi;
     const hideStart=running||silent;
     if(this.audioAction.hidden!==hideStart)this.audioAction.hidden=hideStart;
     const audioAction=context?.state==='suspended'?'Retomar áudio':'Iniciar áudio';
     if(this.audioAction.textContent!==audioAction)this.audioAction.textContent=audioAction;
-    const disabled=!running||!!this.token;
+    const disabled=!running||!!this.token||this.midiPractice.hasAttempt;
     if(this.listen.disabled!==disabled)this.listen.disabled=disabled;
+    if(this.tempo.disabled!==this.midiPractice.hasAttempt)this.tempo.disabled=this.midiPractice.hasAttempt;
     if(this.halt.hidden===!!this.token)this.halt.hidden=!this.token;
+    this.midiPractice.refresh(!!this.token);
   }
 }

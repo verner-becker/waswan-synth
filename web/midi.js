@@ -99,6 +99,7 @@ export class MidiInputController extends OriginalMidiInputController {
     if(!held)this.fusionKeys.delete(note);
   }
   release() {
+    this.onInputRelease?.();
     this.diagnostic?.reset();
     this.profile?.reset();
     this.contextProfiles?.reset();

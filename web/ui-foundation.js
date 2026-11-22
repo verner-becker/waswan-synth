@@ -97,6 +97,7 @@ class Foundation {
       this.daw.refreshRecordingSummary();
       this.musicLab?.refresh();
     };
+    this.bridge.midi.onInputRelease=()=>this.musicLab?.midiPractice.hostRelease();
     this.bridge.midi.profile.onChange=()=>{previous();this.updateBadges();this.updateLearnState();this.updateAssignments();};
     addEventListener('focus',()=>this.focusMidiContext());
     this.shell.addEventListener('focusin',event=>{if(!event.target.closest('.ww-daw'))this.focusMidiContext();});
@@ -327,11 +328,20 @@ class Foundation {
     if(id==='sampler'&&this.samplerWindow?.win&&!this.samplerWindow.win.closed){this.samplerWindow.win.focus();return;}
     if(id==='seq')queueMicrotask(()=>this.sequence?.draw());
     if(id==='music-lab'&&!this.musicLab){
-      this.musicLab=new MusicLab({bridge:this.bridge,startAudio:()=>this.startAudio(),openSettings:()=>this.showSettings(true)});
+      this.musicLab=new MusicLab({
+        bridge:this.bridge,startAudio:()=>this.startAudio(),openSettings:()=>this.showSettings(true),
+        inputConflict:()=>{
+          if(this.frame?.midiMode)return 'O Synth está no modo controlador MIDI.';
+          if(this.bridge.midi.fusionInput?.monitoring)return 'O Fusion está usando a entrada MIDI.';
+          if(this.bridge.isDawBusy()||this.daw.monitor.preparing)return 'A DAW está usando o instrumento. A avaliação MIDI está em espera.';
+          if(this.bridge.isStudioBusy()||this.frame?.instrument?.playing)return 'O transporte do Synth ou do Studio está ativo.';
+          return '';
+        }
+      });
       this.addView(id,this.musicLab.node);
     }
     if(!this.views.has(id))return;
-    if(id!=='music-lab'&&this.workspace==='music-lab')this.musicLab.stop('Prévia parada.');
+    if(id!=='music-lab'&&this.workspace==='music-lab')this.musicLab.deactivate();
     if(id==='daw'&&this.dawTab?.connected)this.dawTab.win.focus();
     this.workspace=id;
     this.showSettings(false);
@@ -385,9 +395,9 @@ class Foundation {
     if(m.t==='error'){if(this.frame)this.toneEditor.update(this.frame,false);this.toneSelector.node.disabled=true;this.midiSetupPending=false;this.midiSetup.close();this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
     if(m.t==='error'||m.t==='ready')this.musicLab?.receive(m);
     if(m.t!=='frame')return;
-    if(this.workspace==='music-lab')this.musicLab.refresh();
     const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
+    if(this.workspace==='music-lab')this.musicLab.refresh();
     this.instrumentSetup.update(m,this.running);
     this.toneEditor.update(m,this.running);this.toneSelector.update(m,this.running,this.banks.sourceLabel(m),this.banks.hasUnsavedEdits(m));
     const playingTape=part===0&&this.tapes.live&&m.engines[part]===0;
