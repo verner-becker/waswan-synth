@@ -11,6 +11,7 @@ import {StudioClock} from './studio-clock.js';
 import {DawClock,audioTransport} from './daw-playback.js';
 import {ScheduleBuilder} from './daw-transport.js';
 import {AUTOMATION_TARGETS,readAutomation,applyAutomation} from './studio-automation.js';
+import {MusicLabPreview,interruptsPreview} from './music-lab-preview.js';
 class MonitoredOberVave extends OberVave {
  constructor(options){
   super(options);this.enabled=false;this.session=null;this.stats=accumulator();this.elapsed=0;this.voiceElapsed=0;
@@ -23,6 +24,22 @@ class MonitoredOberVave extends OberVave {
   const original=this.port.onmessage;
   this.port.onmessage=e=>{
    const m=e.data;
+   if(m.t==='music-lab-start'){
+    this.musicLab??=new MusicLabPreview({
+     engine:()=>this.engine?.ex,
+     conflict:()=>this.sequence?.active||this.studioEvents||this.daw?.active||this.dawLiveSession||
+       this.dawPreview||this.dawExport||this.engine?.ex.waswan_ui_playing(),
+     layered:()=>this.samplers?.live||this.tapes?.liveOn,
+     notify:state=>this.port.postMessage(state)
+    });
+    this.musicLab.start(m,currentFrame,sampleRate);
+    return;
+   }
+   if(m.t==='music-lab-stop'){
+    if(typeof m.token==='string')this.musicLab?.stop('stopped',m.token);
+    return;
+   }
+   if(this.musicLab?.clock.active&&interruptsPreview(m))this.musicLab.stop('interrupted');
    if(m.t==='pad'&&this.samplerPad(m,original))return;
    if(m.t==='sampler-keyboard-control'){
     if(this.samplers?.live&&validPerformanceControl(m.control))applySamplerControl(this.engine.ex,0,2,m.control);
@@ -256,6 +273,7 @@ class MonitoredOberVave extends OberVave {
  }
  process(inputs,outputs){
   const frames=outputs[0]?.[0]?.length||0,start=this.enabled&&this.clock?this.clock():null;
+  this.musicLab?.tick(currentFrame);
   if(this.sequence?.active)this.sequence.tick(currentFrame);
   if(this.daw?.active){if(!this.engine)this.daw.stop('engine-error');else if(this.engine.ex.sim_midi_mode?.())this.daw.stop('midi-mode');else if(this.engine.ex.waswan_ui_playing())this.daw.stop('legacy-transport');else this.daw.tick(currentFrame);}
   if(this.dawExport){this.lastStore=currentTime;this.lastFrame=currentTime;}

@@ -27,7 +27,7 @@ try {
   await p.getByRole('button',{name:'Start audio',exact:true}).click();await p.waitForFunction(()=>audit.frame?.ms>5000&&audit.frame?.instrument?.controls.length===12);
   await p.getByRole('button',{name:'Use keyboard & pads',exact:true}).click();
   await p.waitForFunction(()=>document.activeElement?.matches('#keys .key'));
-  assert.deepEqual(await p.locator('.ww-navigation [data-workspace]').evaluateAll(nodes=>nodes.map(n=>n.textContent)),['Performance','TONES','Quick capture','DAW','Sampler Studio']);
+  assert.deepEqual(await p.locator('.ww-navigation [data-workspace]').evaluateAll(nodes=>nodes.map(n=>n.textContent)),['Performance','TONES','Quick capture','DAW','Sampler Studio','Music Lab']);
   assert.equal(await p.locator('.ww-performance .ww-midi-badge:visible').count(),0);
   assert.equal(await p.evaluate(()=>audit.frame.polyphony.limit),256);assert.equal(await p.evaluate(()=>audit.context.state),'running');
   await p.locator('.ww-topbar').getByRole('button',{name:'Settings',exact:true}).click();await p.locator('#midiConnect').click();await p.waitForFunction(()=>!!audit.source.onmidimessage);
@@ -39,7 +39,7 @@ try {
   await p.evaluate(()=>{audit.sent=[];audit.keyNode=document.querySelector('#keys');audit.padNode=document.querySelector('#pads');audit.programs=JSON.stringify(audit.frame.programs);audit.scope=audit.frame.instrument.scope;});
   const startMs=await p.evaluate(()=>audit.frame.ms);
   await openStudioComposer(p);
-  for(const id of ['studio','tones','daw','diag','perf'])await go(id);
+  for(const id of ['studio','tones','daw','music-lab','diag','perf'])await go(id);
   const perfNav=p.locator('[data-workspace="perf"]');await perfNav.focus();await perfNav.press('ArrowRight');
   assert.equal(await p.locator('[data-view="tones"]').isVisible(),true);
   await p.getByRole('button',{name:'Filter',exact:true}).click();

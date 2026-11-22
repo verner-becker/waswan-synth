@@ -1,0 +1,228 @@
+{
+  "id": "scale-c-major-rh-1oct",
+  "version": 1,
+  "title": "Escala de Dó maior — mão direita",
+  "track": "melody",
+  "mode": "strict",
+  "handMode": "RH",
+  "key": {
+    "tonic": "C",
+    "mode": "major",
+    "fifths": 0
+  },
+  "meter": {
+    "numerator": 4,
+    "denominator": 4
+  },
+  "tempoBpm": 60,
+  "ppq": 480,
+  "learningGoal": "Percorrer uma oitava de Dó maior, subindo e descendo com pauta e dedilhado sugerido.",
+  "instructions": "Toque lentamente. Observe a passagem do polegar entre Mi e Fá; mantenha a última nota por dois tempos.",
+  "tags": [
+    "scale",
+    "major",
+    "notation",
+    "fingering"
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "pitch": {
+        "step": "C",
+        "alter": 0,
+        "octave": 4,
+        "midi": 60
+      },
+      "startTick": 0,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 1
+    },
+    {
+      "id": "n2",
+      "pitch": {
+        "step": "D",
+        "alter": 0,
+        "octave": 4,
+        "midi": 62
+      },
+      "startTick": 480,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 2
+    },
+    {
+      "id": "n3",
+      "pitch": {
+        "step": "E",
+        "alter": 0,
+        "octave": 4,
+        "midi": 64
+      },
+      "startTick": 960,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 3
+    },
+    {
+      "id": "n4",
+      "pitch": {
+        "step": "F",
+        "alter": 0,
+        "octave": 4,
+        "midi": 65
+      },
+      "startTick": 1440,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 1
+    },
+    {
+      "id": "n5",
+      "pitch": {
+        "step": "G",
+        "alter": 0,
+        "octave": 4,
+        "midi": 67
+      },
+      "startTick": 1920,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 2
+    },
+    {
+      "id": "n6",
+      "pitch": {
+        "step": "A",
+        "alter": 0,
+        "octave": 4,
+        "midi": 69
+      },
+      "startTick": 2400,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 3
+    },
+    {
+      "id": "n7",
+      "pitch": {
+        "step": "B",
+        "alter": 0,
+        "octave": 4,
+        "midi": 71
+      },
+      "startTick": 2880,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 4
+    },
+    {
+      "id": "n8",
+      "pitch": {
+        "step": "C",
+        "alter": 0,
+        "octave": 5,
+        "midi": 72
+      },
+      "startTick": 3360,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 5
+    },
+    {
+      "id": "n9",
+      "pitch": {
+        "step": "B",
+        "alter": 0,
+        "octave": 4,
+        "midi": 71
+      },
+      "startTick": 3840,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 4
+    },
+    {
+      "id": "n10",
+      "pitch": {
+        "step": "A",
+        "alter": 0,
+        "octave": 4,
+        "midi": 69
+      },
+      "startTick": 4320,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 3
+    },
+    {
+      "id": "n11",
+      "pitch": {
+        "step": "G",
+        "alter": 0,
+        "octave": 4,
+        "midi": 67
+      },
+      "startTick": 4800,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 2
+    },
+    {
+      "id": "n12",
+      "pitch": {
+        "step": "F",
+        "alter": 0,
+        "octave": 4,
+        "midi": 65
+      },
+      "startTick": 5280,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 1
+    },
+    {
+      "id": "n13",
+      "pitch": {
+        "step": "E",
+        "alter": 0,
+        "octave": 4,
+        "midi": 64
+      },
+      "startTick": 5760,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 3
+    },
+    {
+      "id": "n14",
+      "pitch": {
+        "step": "D",
+        "alter": 0,
+        "octave": 4,
+        "midi": 62
+      },
+      "startTick": 6240,
+      "durationTick": 480,
+      "hand": "RH",
+      "finger": 2
+    },
+    {
+      "id": "n15",
+      "pitch": {
+        "step": "C",
+        "alter": 0,
+        "octave": 4,
+        "midi": 60
+      },
+      "startTick": 6720,
+      "durationTick": 960,
+      "hand": "RH",
+      "finger": 1
+    }
+  ],
+  "evaluation": {
+    "pitchRequired": true,
+    "rhythmRequired": false
+  }
+}

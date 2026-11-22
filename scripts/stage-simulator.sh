@@ -20,8 +20,11 @@ if [ -f .local/build/sampler-pitch.wasm ]; then
 fi
 cp web/studio-*.js .local/www/simulator/
 cp web/daw-*.js web/daw-tab.html .local/www/simulator/
+cp web/music-lab-*.js web/ui-music-lab.css .local/www/simulator/
+cp -R web/music-lab .local/www/simulator/
 mkdir -p .local/www/simulator/vendor
 cp -R web/vendor/lamejs .local/www/simulator/vendor/
+cp -R web/vendor/vexflow .local/www/simulator/vendor/
 cp web/midi.js web/midi-diagnostic.js web/midi-profile.js web/midi-profile-panel.js web/midi-profile.css web/engine.js web/polyphony-panel.js web/polyphony.css web/dsp-stats.js web/dsp-worklet.js web/dsp-monitor.js web/dsp-monitor.css .local/www/simulator/
 # One explicit hook in the derived app; never edit the submodule.
 python3 - <<'PY'
@@ -156,7 +159,10 @@ s=s.replace('<body>','<body><div hidden id="waswan-bootstrap">',1).replace('</ma
 s=s.replace('<script src="../i18n.js', '<script>if(!new URLSearchParams(location.search).has("lang")){try{if(!localStorage.getItem("smksynth-language"))localStorage.setItem("smksynth-language","en");}catch{}}</script><script src="../i18n.js')
 p.write_text(s)
 PYHTML
-cp "$upstream/web/site/i18n.js" .local/www/i18n.js
+# Keep scoped authored lesson text intact under the legacy fragment translator.
+sed '/^function visit(root){/a\
+ if((root.nodeType===Node.ELEMENT_NODE?root:root.parentElement)?.closest("[translate=no]"))return;
+' "$upstream/web/site/i18n.js" > .local/www/i18n.js
 mkdir -p .local/www/simulator/vendor/sloopdx .local/www/simulator/vendor/signalsmith
 cp wasm/vendor/sloopdx/NOTICE.md wasm/vendor/sloopdx/Apache-2.0.txt .local/www/simulator/vendor/sloopdx/
 cp wasm/vendor/signalsmith/NOTICE.md wasm/vendor/signalsmith/*-MIT.txt .local/www/simulator/vendor/signalsmith/

@@ -16,13 +16,15 @@ import {DawTab} from './ui-daw-tab.js';
 import {LibraryFolders} from './ui-library-folders.js';
 import {InstrumentSetup} from './ui-instrument-setup.js';
 import {OutputMonitor} from './ui-output-monitor.js';
+import {MusicLab} from './ui-music-lab.js';
 import {MODES,selectVoiceMode} from './polyphony-panel.js';
 import {chordLabel} from './ui-chords.js';
 import {trackIcon} from './daw-icons.js';
 import {el,action,AppShell,TopBar,Panel,StatusIndicator,RotaryKnob,VerticalFader,WorkspaceNavigation,BottomPerformanceDock} from './ui-primitives.js';
 
 const SYNTH_VIEWS=[['perf','Performance','Performance'],['tones','TONES','Tone Editor'],['studio','Quick capture','Quick capture']];
-const WORKSPACES=[...SYNTH_VIEWS,['seq','Studio original','Original Studio composition'],['daw','DAW','DAW'],['sampler','Sampler Studio','Sampler Studio'],['diag','Diagnostics','Diagnostics'],['instrument','Instrument setup','Instrument setup']];
+const MUSIC_LAB=['music-lab','Music Lab','Music Lab'];
+const WORKSPACES=[...SYNTH_VIEWS,['seq','Studio original','Original Studio composition'],['daw','DAW','DAW'],['sampler','Sampler Studio','Sampler Studio'],MUSIC_LAB,['diag','Diagnostics','Diagnostics'],['instrument','Instrument setup','Instrument setup']];
 let app;
 export function updateFoundation(message) { app?.receive(message); }
 export function mountFoundation(bridge) {
@@ -91,7 +93,10 @@ class Foundation {
     const fmCredit=el('a','','FM / sloopDX');fmCredit.href='./vendor/sloopdx/NOTICE.md';credits.append(el('span','',' · '),fmCredit);
     const lame=el('a','','LAME / lamejs'),source=el('a','','source & license');lame.href='https://lame.sourceforge.net/';source.href='./vendor/lamejs/index.html';credits.append(el('span','',' · MP3: '),lame,el('span','',' · '),source);this.shell.append(credits);
     const previous=this.bridge.midi.profile.onChange;
-    this.bridge.midi.onInputStateChange=()=>this.daw.refreshRecordingSummary();
+    this.bridge.midi.onInputStateChange=()=>{
+      this.daw.refreshRecordingSummary();
+      this.musicLab?.refresh();
+    };
     this.bridge.midi.profile.onChange=()=>{previous();this.updateBadges();this.updateLearnState();this.updateAssignments();};
     addEventListener('focus',()=>this.focusMidiContext());
     this.shell.addEventListener('focusin',event=>{if(!event.target.closest('.ww-daw'))this.focusMidiContext();});
@@ -112,7 +117,8 @@ class Foundation {
     this.openDawTab=action('Open DAW in new tab',()=>this.dawTab.open(),'ww-daw-new-tab');
     daw.append(this.openDawTab);
     const sampler=WorkspaceNavigation([['sampler','Sampler Studio','Sampler Studio']],id=>this.selectWorkspace(id),'Sampler');
-    bar.append(synth,daw,sampler);this.shell.append(bar);
+    const musicLab=WorkspaceNavigation([MUSIC_LAB],id=>this.selectWorkspace(id),'Music Lab');
+    bar.append(synth,daw,sampler,musicLab);this.shell.append(bar);
     this.workspaceButtons=[...bar.querySelectorAll('[data-workspace]')];
   }
   buildHeader() {
@@ -309,6 +315,7 @@ class Foundation {
   hardware(b) {if(!this.running)return;this.bridge.send({t:'btn',b,down:true});setTimeout(()=>this.bridge.send({t:'btn',b,down:false}),90);}
   focusMidiContext(){
     const id=this.workspace;
+    if(id==='music-lab')return;
     this.daw?.midiProfiles.focus(id==='daw'?this.daw.hostMidiContext||'transport':id==='tones'?
       (this.toneEditor.selectedGroup==='Envelopes'?'envelope':'instrument'):id==='seq'?'transport':'performance');
   }
@@ -319,7 +326,12 @@ class Foundation {
   selectWorkspace(id) {
     if(id==='sampler'&&this.samplerWindow?.win&&!this.samplerWindow.win.closed){this.samplerWindow.win.focus();return;}
     if(id==='seq')queueMicrotask(()=>this.sequence?.draw());
+    if(id==='music-lab'&&!this.musicLab){
+      this.musicLab=new MusicLab({bridge:this.bridge,startAudio:()=>this.startAudio(),openSettings:()=>this.showSettings(true)});
+      this.addView(id,this.musicLab.node);
+    }
     if(!this.views.has(id))return;
+    if(id!=='music-lab'&&this.workspace==='music-lab')this.musicLab.stop('Prévia parada.');
     if(id==='daw'&&this.dawTab?.connected)this.dawTab.win.focus();
     this.workspace=id;
     this.showSettings(false);
@@ -334,11 +346,13 @@ class Foundation {
       if(this.tapes.node.parentNode!==parent)parent.append(this.tapes.node);
     }
     if(id==='sampler')this.sampler.activate();
+    if(id==='music-lab')this.musicLab.refresh();
     if(id==='instrument')this.libraryFolders.refresh();
     if(id==='instrument'&&this.frame)this.instrumentSetup.update(this.frame,this.running);
     for(const button of this.workspaceButtons)button.setAttribute('aria-pressed',String(button.dataset.workspace===id));
     document.title=`WASWAN Synth · ${WORKSPACES.find(w=>w[0]===id)[2]}`;
-    // Presentation only: no MIDI, parameter, transport, release or audio command.
+    // Only a running Lab demonstration is stopped on exit. Performer notes and
+    // every other transport stay with their existing owners.
   }
   startAudio() {
     if(this.failed){location.reload();return;}
@@ -354,6 +368,7 @@ class Foundation {
     if(open){this.settingsClose.focus({preventScroll:true});this.settingsPanel.scrollIntoView({block:'nearest'});}
   }
   receive(m) {
+    if(m.t==='music-lab-state'){this.musicLab?.receive(m);return;}
     if(m.t==='audio-owner-busy'){this.midiSetupPending=false;this.openDawTab.disabled=true;this.notice.textContent='Audio is running in another WASWAN tab. Use Open DAW in new tab there to share its session, or close it before starting here.';return;}
     if(m.t==='audio-start-error'){this.midiSetupPending=false;this.notice.textContent=`Unable to start audio: ${m.message}`;return;}
     this.studio.update(m);
@@ -368,7 +383,9 @@ class Foundation {
       if(this.midiSetupPending){this.midiSetupPending=false;this.midiSetup.open({keyboard:this.workspace==='perf'});}
     }
     if(m.t==='error'){if(this.frame)this.toneEditor.update(this.frame,false);this.toneSelector.node.disabled=true;this.midiSetupPending=false;this.midiSetup.close();this.failed=true;this.running=false;this.start.disabled=false;this.start.textContent='Reload instrument';this.notice.textContent=`Audio error: ${m.message??'processing stopped'}`;}
+    if(m.t==='error'||m.t==='ready')this.musicLab?.receive(m);
     if(m.t!=='frame')return;
+    if(this.workspace==='music-lab')this.musicLab.refresh();
     const muted=!!this.bridge.getAudio().muted;this.mute.textContent=muted?'Muted · unmute':'Mute output';this.mute.setAttribute('aria-pressed',String(muted));
     this.frame=m;const f=m.instrument,part=m.track,poly=m.polyphony;
     this.instrumentSetup.update(m,this.running);
@@ -398,7 +415,18 @@ class Foundation {
   }
   attachAudio() {
     const {context,gain}=this.bridge.getAudio();if(!context||!gain||this.audioContext===context)return;
-    this.audioContext=context;context.addEventListener('statechange',()=>{if(!this.audio)return;this.start.disabled=context.state==='running';this.start.textContent=context.state==='running'?'Audio running':'Resume audio';if(context.state!=='running')this.notice.textContent=`Audio context · ${context.state}`;});
+    this.audioContext=context;
+    context.addEventListener('statechange',()=>{
+      if(!this.audio)return;
+      const running=context.state==='running';
+      this.start.disabled=running;
+      this.start.textContent=running?'Audio running':'Resume audio';
+      if(!running){
+        this.notice.textContent=`Audio context · ${context.state}`;
+        this.musicLab?.stop('Prévia parada.');
+      }
+      this.musicLab?.refresh();
+    });
     this.outputMonitor.attach(context,gain);
   }
 }

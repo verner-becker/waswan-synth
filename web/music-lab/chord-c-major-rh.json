@@ -1,0 +1,73 @@
+{
+  "id": "chord-c-major-rh",
+  "version": 1,
+  "title": "Tríade de Dó maior — posição fundamental",
+  "track": "harmony",
+  "mode": "strict",
+  "handMode": "RH",
+  "key": {
+    "tonic": "C",
+    "mode": "major",
+    "fifths": 0
+  },
+  "meter": {
+    "numerator": 4,
+    "denominator": 4
+  },
+  "tempoBpm": 60,
+  "ppq": 480,
+  "learningGoal": "Construir uma tríade maior e identificar fundamental, terça e quinta.",
+  "instructions": "Pressione as três notas próximas no tempo; o dedo é orientação, não algo que o MIDI detecta.",
+  "tags": [
+    "chord",
+    "triad",
+    "fingering"
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "pitch": {
+        "step": "C",
+        "alter": 0,
+        "octave": 4,
+        "midi": 60
+      },
+      "startTick": 0,
+      "durationTick": 1920,
+      "hand": "RH",
+      "finger": 1
+    },
+    {
+      "id": "n2",
+      "pitch": {
+        "step": "E",
+        "alter": 0,
+        "octave": 4,
+        "midi": 64
+      },
+      "startTick": 0,
+      "durationTick": 1920,
+      "hand": "RH",
+      "finger": 3
+    },
+    {
+      "id": "n3",
+      "pitch": {
+        "step": "G",
+        "alter": 0,
+        "octave": 4,
+        "midi": 67
+      },
+      "startTick": 0,
+      "durationTick": 1920,
+      "hand": "RH",
+      "finger": 5
+    }
+  ],
+  "evaluation": {
+    "pitchRequired": true,
+    "rhythmRequired": false,
+    "allowInversions": false,
+    "chordOnsetWindowMs": 120
+  }
+}
