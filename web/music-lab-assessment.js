@@ -6,7 +6,7 @@ export function labMidiEvent({data,timeStamp}) {
     ![pitch,value].every(byte=>Number.isInteger(byte)&&byte>=0&&byte<=127))return null;
   const channel=status&15,kind=status&240;
   const at=Number.isFinite(timeStamp)&&timeStamp>=0?timeStamp:null;
-  if(kind===144&&value>0)return {type:'on',channel,pitch,at};
+  if(kind===144&&value>0)return {type:'on',channel,pitch,velocity:value,at};
   if(kind===128||kind===144)return {type:'off',channel,pitch,at};
   if(kind===176&&pitch===64)return {type:'pedal',channel,down:value>=64,at};
   if(kind===176&&[120,123].includes(pitch))return {type:'reset',channel,at};

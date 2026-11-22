@@ -3,6 +3,8 @@ import {action,el} from './ui-primitives.js';
 import {subscribeDawInput} from './daw-input-events.js';
 import {LabAssessment,labMidiEvent} from './music-lab-assessment.js';
 import {LabProgress} from './music-lab-progress.js';
+import {LabPhrase} from './music-lab-phrase.js';
+import {downloadPracticeProject} from './music-lab-project.js';
 import {midiPitchLabel,pitchLabel} from './music-lab-model.js';
 
 const MAX_PENDING=256;
@@ -21,8 +23,8 @@ function scoreText({matched,expected,extras,missing,retries},kind) {
 }
 
 export class MusicLabMidiPractice {
-  constructor({bridge,conflict,autoChannel,onChannel,onState,onObserved}) {
-    Object.assign(this,{bridge,conflict,autoChannel,onState,onObserved,state:'idle'});
+  constructor({bridge,conflict,autoChannel,onChannel,onState,onObserved,chordAt,playTake}) {
+    Object.assign(this,{bridge,conflict,autoChannel,onState,onObserved,chordAt,playTake,state:'idle'});
     let storage;
     try{storage=window.localStorage;}catch{}
     this.progress=new LabProgress(storage);
@@ -34,8 +36,12 @@ export class MusicLabMidiPractice {
     this.channel.onchange=onChannel;
     const label=el('label','ww-lab-field','Canal MIDI');
     label.append(this.channel);
+    this.capture=el('input');
+    this.capture.type='checkbox';
+    this.captureField=el('label','ww-lab-check');
+    this.captureField.append(this.capture,document.createTextNode('Gravar notas desta frase'));
     this.controls=el('div','ww-lab-midi-controls');
-    this.controls.append(this.start,this.end,label);
+    this.controls.append(this.start,this.end,label,this.captureField);
     this.availability=el('p','ww-lab-midi-availability');
     this.feedback=el('p','ww-lab-midi-feedback');
     this.feedback.setAttribute('role','status');
@@ -44,6 +50,7 @@ export class MusicLabMidiPractice {
     this.historyTitle=el('summary');
     this.historyList=el('ol');
     this.history.append(this.historyTitle,this.historyList);
+    this.takesNode=el('div','ww-lab-takes');
   }
 
   get hasAttempt() {
@@ -56,7 +63,10 @@ export class MusicLabMidiPractice {
 
   setLesson(lesson,groups,getTempo) {
     this.detach();
-    Object.assign(this,{lesson,groups,getTempo,state:'idle',attempt:null,lastHold:null,lastMessage:''});
+    Object.assign(this,{lesson,groups,getTempo,state:'idle',attempt:null,lastHold:null,lastMessage:'',
+      creative:lesson.mode==='creative',takes:[]});
+    this.capture.checked=false;
+    this.takesNode.replaceChildren();
     this.kind=lesson.handMode==='BOTH'?'steps':groups.length===1&&groups[0].notes.length>1?'chord':'notes';
     this.paint();
     this.renderHistory();
@@ -79,7 +89,7 @@ export class MusicLabMidiPractice {
     }
     const input=this.bridge.midi.input;
     const reason=this.lossReason();
-    const disabled=!!demo||!input||input.state==='disconnected'||!!reason||!['strict','guided'].includes(this.lesson?.mode);
+    const disabled=!!demo||!input||input.state==='disconnected'||!!reason||!['strict','guided','creative'].includes(this.lesson?.mode);
     if(this.start.disabled!==disabled)this.start.disabled=disabled;
     const availability=input&&this.bridge.getAudio().context?.state==='running'&&this.state!=='paused'?reason:'';
     if(this.availability.textContent!==availability)this.availability.textContent=availability;
@@ -91,12 +101,16 @@ export class MusicLabMidiPractice {
     const channel=this.selectedChannel??this.autoChannel();
     const resume=this.state==='paused';
     if(resume)this.attempt.resume(channel);
-    else this.attempt=new LabAssessment(this.groups,{channel,bpm:this.getTempo(),ppq:this.lesson.ppq,
-      chordWindowMs:this.lesson.evaluation?.chordOnsetWindowMs??(this.kind==='steps'?180:120)});
+    else{
+      this.attemptBpm=this.getTempo();
+      this.attempt=this.creative?new LabPhrase({channel,capture:this.capture.checked,chordAt:this.chordAt}):
+        new LabAssessment(this.groups,{channel,bpm:this.attemptBpm,ppq:this.lesson.ppq,
+          chordWindowMs:this.lesson.evaluation?.chordOnsetWindowMs??(this.kind==='steps'?180:120)});
+    }
     this.state='listening';
     this.lastHold=null;
-    this.lastMessage=resume?'Prática retomada. Toque o alvo destacado.':
-      this.kind==='steps'?'Comece com as duas notas destacadas. Mantenha a tecla do baixo até o fim.':
+    this.lastMessage=this.creative?'Toque uma frase, faça uma pausa e responda com uma variação.':resume?'Prática retomada. Toque o alvo destacado.':
+      this.kind==='steps'?'Toque o primeiro passo destacado. Mantenha as teclas indicadas ao avançar.':
       this.kind==='chord'?`Toque as notas do acorde juntas. Janela de ${this.attempt.chordWindowMs} ms.`:
         'Toque a nota destacada. A pauta avança a cada acerto.';
     const {input,generation}=this.bridge.midi;
@@ -109,7 +123,7 @@ export class MusicLabMidiPractice {
       if(!lease.frame)lease.frame=requestAnimationFrame(()=>this.consume(lease));
     });
     this.onObserved(null);
-    this.onState('listening',this.attempt.index);
+    this.onState('listening',this.creative?-1:this.attempt.index);
     this.paint();
     if(this.attempt.complete)this.finish();
     else this.end.focus({preventScroll:true});
@@ -137,7 +151,7 @@ export class MusicLabMidiPractice {
       if(result.kind==='release'&&result.ms!==undefined)this.lastHold=result;
       if(result.kind==='match')matched=true;
       if(result.pitch!==undefined&&result.kind!=='release'){
-        observed={pitch:result.pitch,correct:['match','partial','anchor','anchor-missing'].includes(result.kind)};
+        observed={pitch:result.pitch,correct:this.creative?null:['match','partial','anchor','anchor-missing'].includes(result.kind)};
         this.lastMessage=this.describe(result);
       }
       if(this.attempt.complete)break;
@@ -153,17 +167,21 @@ export class MusicLabMidiPractice {
     return note?pitchLabel(note.pitch):midiPitchLabel(pitch);
   }
 
-  describe({kind,pitch,chord,anchor}) {
+  describe({kind,pitch,chord,anchor,structural}) {
     switch(kind){
     case 'match': {
       const hit=chord?(this.kind==='steps'?'✓ Entrada conjunta correta.':'✓ Acorde correto.'):`✓ ${this.name(pitch)} correta.`;
       return this.attempt.index===this.groups.length?hit+' Solte as teclas para concluir.':hit;
     }
     case 'extra': return `! Tocou ${this.name(pitch)} fora do alvo. ${this.kind==='chord'?'Solte as teclas e tente o acorde novamente.':'Tente a nota destacada.'}`;
-    case 'anchor': return `Mantenha ${this.name(pitch)} e toque a nota da melodia destacada.`;
-    case 'anchor-missing': return `Mantenha ${this.name(anchor)} no baixo e repita ${this.name(pitch)}.`;
+    case 'anchor': return `Mantenha ${this.name(pitch)} e toque o próximo alvo destacado.`;
+    case 'anchor-missing': {
+      const held=this.attempt.groups[this.attempt.index].held.find(note=>note.pitch.midi===anchor);
+      return `Mantenha ${this.name(anchor)}${held.hand==='LH'?' no baixo':''} e repita ${this.name(pitch)}.`;
+    }
     case 'wide': return `! Os ataques passaram de ${this.attempt.chordWindowMs} ms. Solte as teclas e toque juntas de novo.`;
     case 'partial': return `${this.name(pitch)} recebida. ${this.kind==='steps'?'Junte a outra nota do primeiro passo.':'Complete o acorde com as teclas juntas.'}`;
+    case 'phrase': return `${this.name(pitch)}`+(chord?` sobre ${chord} · ${structural?'nota do acorde':'nota de tensão'}`:' · nota recebida');
     default: return 'Solte as teclas antes de tentar a entrada novamente.';
     }
   }
@@ -190,12 +208,14 @@ export class MusicLabMidiPractice {
     this.state='paused';
     this.lastMessage=reason;
     this.onObserved(null);
-    this.onState('paused',this.attempt.index);
+    this.onState('paused',this.creative?-1:this.attempt.index);
     this.paint();
   }
 
   discard() {
-    this.setLesson(this.lesson,this.groups,this.getTempo);
+    this.detach();
+    Object.assign(this,{state:'idle',attempt:null,lastHold:null,lastMessage:''});
+    this.paint();
     this.onObserved(null);
     this.onState('observe',0);
     this.start.focus({preventScroll:true});
@@ -219,39 +239,78 @@ export class MusicLabMidiPractice {
       this.paint();
       return;
     }
+    if(this.creative){
+      const take=this.attempt.result(this.attemptBpm);
+      this.takes=[...this.takes.slice(-1),take];
+      this.review('Frase concluída. Compare os descritores das tomadas.');
+      this.renderTakes();
+      return;
+    }
     const summary=this.attempt.summary(),stored=this.progress.record(this.lesson,summary);
-    this.attempt=null;
-    this.state='review';
     const chordClock=summary.windowUnavailable?' Janela do acorde indisponível nesta tentativa.':'';
     const next=summary.missing?' Tente novamente acompanhando o alvo destacado.':'';
     const save=stored?'':' O armazenamento local está indisponível. O resumo fica visível nesta aba.';
-    this.lastMessage=scoreText(summary,this.kind)+'.'+chordClock+next+save;
+    this.review(scoreText(summary,this.kind)+'.'+chordClock+next+save);
+    this.renderHistory();
+  }
+
+  review(message) {
+    this.attempt=null;
+    this.state='review';
+    this.lastMessage=message;
     this.onObserved(null);
     this.onState('review',-1);
     const returnFocus=document.activeElement===this.end;
     this.paint();
-    this.renderHistory();
     if(returnFocus)this.start.focus({preventScroll:true});
+  }
+
+  renderTakes() {
+    this.takesNode.replaceChildren(...this.takes.map((take,index)=>{
+      const label=index===0?'A':'B';
+      const row=el('div','ww-lab-take');
+      row.append(el('strong','','Tomada '+label));
+      row.append(el('p','',`${take.attacks} ${take.attacks===1?'ataque':'ataques'} · ${midiPitchLabel(take.min)}–${midiPitchLabel(take.max)} · velocity ${take.soft}–${take.loud}`));
+      row.append(el('p','',`${take.up} subidas · ${take.down} descidas · ${take.same} notas repetidas · ${take.space} pausas (≥ 250 ms) · ${take.repeats} pares de intervalos repetidos`));
+      if(take.chordAttacks)row.append(el('p','',`${take.chordNotes}/${take.chordAttacks} ataques com referência coincidiram com notas do acorde.`));
+      if(take.notes.length){
+        const listen=action('Ouvir tomada '+label,()=>this.playTake(take));
+        const save=action('Salvar tomada '+label+' para DAW',async()=>{
+          try{
+            await downloadPracticeProject({name:'Music Lab — tomada '+label,bpm:take.bpm,sources:[{label:'Frase MIDI',notes:take.notes}]});
+            this.lastMessage='Cópia em formato .wsproj preparada para a DAW.';
+          }catch{this.lastMessage='Não foi possível salvar a cópia para DAW.';}
+          this.paint();
+        });
+        row.append(listen,save);
+      }
+      return row;
+    }));
   }
 
   paint() {
     this.controls.dataset.state=this.state;
     this.start.hidden=this.state==='listening';
-    this.start.textContent=this.state==='paused'?'Retomar prática MIDI':
+    this.start.textContent=this.state==='paused'?'Retomar prática MIDI':this.creative?
+      this.state==='review'?'Improvisar outra frase':'Iniciar improvisação MIDI':
       this.state==='review'?'Tentar novamente':'Iniciar prática MIDI';
     this.end.hidden=!this.hasAttempt;
-    this.end.textContent=this.state==='paused'?'Descartar tentativa':'Encerrar tentativa';
+    this.end.textContent=this.state==='paused'?'Descartar tentativa':this.creative?'Concluir frase':'Encerrar tentativa';
     this.channel.disabled=this.state==='listening';
+    this.captureField.hidden=!this.creative;
+    this.capture.disabled=this.hasAttempt;
     if(this.feedback.textContent!==this.lastMessage)this.feedback.textContent=this.lastMessage;
     const parts=[];
     if(this.attempt){
       if(this.attempt.channel!==null)parts.push(`Canal ${this.attempt.channel+1}`);
-      if(this.state==='paused')parts.push(`${this.attempt.index}/${this.groups.length} alvos mantidos`);
+      if(this.state==='paused')parts.push(this.creative?`${this.attempt.attacks} ataques observados`:
+        `${this.attempt.index}/${this.groups.length} alvos mantidos`);
       const pedal=this.attempt.pedals.get(this.attempt.channel);
       if(pedal!==undefined)parts.push(pedal?'Pedal pressionado':'Pedal solto');
     }
     if(this.lastHold)parts.push(`${this.name(this.lastHold.pitch)} pressionada por ${duration(this.lastHold.ms)} · referência ${duration(this.lastHold.reference)}`);
-    if(this.hasAttempt||this.state==='review')parts.push('Duração de tecla é informativa. Ritmo sem pontuação.');
+    if(this.hasAttempt||this.state==='review')parts.push(this.creative?'Descritores da frase. Use qualquer nota.':
+      'Duração de tecla é informativa. Ritmo sem pontuação.');
     const detail=parts.join(' / ');
     if(this.details.textContent!==detail)this.details.textContent=detail;
   }

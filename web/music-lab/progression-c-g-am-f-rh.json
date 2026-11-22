@@ -1,0 +1,178 @@
+{
+  "id": "progression-c-g-am-f-rh",
+  "version": 1,
+  "title": "Progressão C–G/B–Am–F/A (inversões)",
+  "track": "harmony",
+  "mode": "guided",
+  "handMode": "RH",
+  "key": {
+    "tonic": "C",
+    "mode": "major",
+    "fifths": 0
+  },
+  "meter": {
+    "numerator": 4,
+    "denominator": 4
+  },
+  "tempoBpm": 72,
+  "ppq": 480,
+  "learningGoal": "Acompanhar quatro compassos com condução suave de vozes.",
+  "instructions": "Cada acorde dura um compasso; identifique sua fundamental e o baixo real.",
+  "tags": [
+    "chord",
+    "progression",
+    "voice-leading"
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "pitch": {
+        "step": "C",
+        "alter": 0,
+        "octave": 4,
+        "midi": 60
+      },
+      "startTick": 0,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n2",
+      "pitch": {
+        "step": "E",
+        "alter": 0,
+        "octave": 4,
+        "midi": 64
+      },
+      "startTick": 0,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n3",
+      "pitch": {
+        "step": "G",
+        "alter": 0,
+        "octave": 4,
+        "midi": 67
+      },
+      "startTick": 0,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n4",
+      "pitch": {
+        "step": "B",
+        "alter": 0,
+        "octave": 3,
+        "midi": 59
+      },
+      "startTick": 1920,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n5",
+      "pitch": {
+        "step": "D",
+        "alter": 0,
+        "octave": 4,
+        "midi": 62
+      },
+      "startTick": 1920,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n6",
+      "pitch": {
+        "step": "G",
+        "alter": 0,
+        "octave": 4,
+        "midi": 67
+      },
+      "startTick": 1920,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n7",
+      "pitch": {
+        "step": "A",
+        "alter": 0,
+        "octave": 3,
+        "midi": 57
+      },
+      "startTick": 3840,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n8",
+      "pitch": {
+        "step": "C",
+        "alter": 0,
+        "octave": 4,
+        "midi": 60
+      },
+      "startTick": 3840,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n9",
+      "pitch": {
+        "step": "E",
+        "alter": 0,
+        "octave": 4,
+        "midi": 64
+      },
+      "startTick": 3840,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n10",
+      "pitch": {
+        "step": "A",
+        "alter": 0,
+        "octave": 3,
+        "midi": 57
+      },
+      "startTick": 5760,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n11",
+      "pitch": {
+        "step": "C",
+        "alter": 0,
+        "octave": 4,
+        "midi": 60
+      },
+      "startTick": 5760,
+      "durationTick": 1920,
+      "hand": "RH"
+    },
+    {
+      "id": "n12",
+      "pitch": {
+        "step": "F",
+        "alter": 0,
+        "octave": 4,
+        "midi": 65
+      },
+      "startTick": 5760,
+      "durationTick": 1920,
+      "hand": "RH"
+    }
+  ],
+  "evaluation": {
+    "pitchRequired": true,
+    "rhythmRequired": false,
+    "allowInversions": false,
+    "chordOnsetWindowMs": 150
+  }
+}

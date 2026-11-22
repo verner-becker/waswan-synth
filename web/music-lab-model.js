@@ -115,18 +115,21 @@ export function lessonClef(notes) {
   return mean<60?'bass':'treble';
 }
 
-export function demoSchedule({notes,bpm,ppq,loop=false},rate,part,transpose) {
-  if(!Array.isArray(notes)||!notes.length||notes.length>128||ppq!==480||
-      !Number.isInteger(bpm)||bpm<40||bpm>240||typeof loop!=='boolean')throw Error('Invalid Music Lab demo');
+export function demoSchedule({notes,bpm,ppq,loop=false,lengthTick,backing},rate,part,transpose) {
+  if(!Array.isArray(notes)||(!notes.length&&!backing)||notes.length>256||ppq!==480||
+      !Number.isInteger(bpm)||bpm<40||bpm>240||typeof loop!=='boolean'||
+      lengthTick!==undefined&&(!Number.isInteger(lengthTick)||lengthTick<1||lengthTick>ppq*128))
+    throw Error('Invalid Music Lab demo');
   const frames=tick=>Math.round(tick*rate*60/(bpm*ppq));
   const events=[];
-  let length=0;
-  for(const {midi,startTick,durationTick} of notes){
+  let length=lengthTick??0;
+  for(const {midi,startTick,durationTick,velocity=86} of notes){
     const note=midi-transpose,end=startTick+durationTick;
     if(!Number.isInteger(midi)||midi<0||midi>127||note<0||note>127||
-        !Number.isInteger(startTick)||startTick<0||!Number.isInteger(durationTick)||durationTick<1||end>ppq*128)
+        !Number.isInteger(startTick)||startTick<0||!Number.isInteger(durationTick)||durationTick<1||end>ppq*128||
+        !Number.isInteger(velocity)||velocity<1||velocity>127||lengthTick!==undefined&&end>lengthTick)
       throw Error('Invalid Music Lab note or transposition');
-    events.push({frame:frames(startTick),part,note,velocity:86},{frame:frames(end),part,note,velocity:0});
+    events.push({frame:frames(startTick),part,note,velocity},{frame:frames(end),part,note,velocity:0});
     length=Math.max(length,end);
   }
   events.sort((a,b)=>a.frame-b.frame||a.velocity-b.velocity);

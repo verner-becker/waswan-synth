@@ -39,6 +39,10 @@ class MonitoredOberVave extends OberVave {
     if(typeof m.token==='string')this.musicLab?.stop('stopped',m.token);
     return;
    }
+   if(m.t==='music-lab-level'){
+    this.musicLab?.mix(m.token,m.level);
+    return;
+   }
    if(this.musicLab?.clock.active&&interruptsPreview(m))this.musicLab.stop('interrupted');
    if(m.t==='pad'&&this.samplerPad(m,original))return;
    if(m.t==='sampler-keyboard-control'){

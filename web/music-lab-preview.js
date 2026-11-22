@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {demoSchedule} from './music-lab-model.js';
 import {StudioClock} from './studio-clock.js';
+import {labBackingClock} from './music-lab-backing.js';
 
 const PARTS=[0,1,2,3];
 const TAKE_PRIORITY=new Set([
@@ -19,9 +20,21 @@ export function interruptsPreview(message) {
 export class MusicLabPreview {
   constructor({engine,conflict,layered,notify}) {
     Object.assign(this,{engine,conflict,layered,notify});
+    this.sounding=new Set();
     this.clock=new StudioClock((part,note,velocity)=>{
-      return !!this.engine()?.waswan_studio_note(part,note,velocity);
-    },state=>this.notify({t:'music-lab-state',token:this.token,part:this.part,...state}));
+      if(!velocity){
+        if(!this.sounding.delete(note))return true;
+        return !!this.engine()?.waswan_studio_note(part,note,0);
+      }
+      if(this.backing&&this.level===0)return true;
+      const attack=this.backing?Math.max(1,Math.round(velocity*this.level/100)):velocity;
+      const applied=!!this.engine()?.waswan_studio_note(part,note,attack);
+      if(applied)this.sounding.add(note);
+      return applied;
+    },state=>{
+      if(this.backing&&!state.playing)labBackingClock.playing=false;
+      this.notify({t:'music-lab-state',token:this.token,part:this.part,startFrame:this.startFrame,...state});
+    });
   }
 
   eligible(x,part) {
@@ -39,16 +52,23 @@ export class MusicLabPreview {
     const x=this.engine();
     if(!x?.waswan_studio_note||!x.waswan_part_limit||x.sim_midi_mode?.())return reject('audio-unavailable');
     if(this.conflict())return reject('busy');
-    const part=[x.sim_track(),...PARTS].find(part=>this.eligible(x,part));
-    if(part===undefined)return reject('no-part');
+    const backing=message.backing===true,level=message.level??70;
+    if(backing&&(!message.loop||!Number.isInteger(level)||level<0||level>100))return reject('invalid-demo');
+    const hasNotes=Array.isArray(message.notes)&&message.notes.length>0;
+    const part=hasNotes?[x.sim_track(),...PARTS].find(part=>this.eligible(x,part)):undefined;
+    if(hasNotes&&part===undefined)return reject('no-part');
     const transpose=x.sim_seq_transpose();
     try{
       const plan=demoSchedule(message,rate,part,transpose);
       this.stop('replaced');
-      Object.assign(this,{token,part,transpose});
-      this.clock.start(plan,frame+256);
+      const startFrame=frame+256;
+      Object.assign(this,{token,part,transpose,backing,level,startFrame});
+      if(backing)Object.assign(labBackingClock,{playing:true,planId:token,startFrame,duration:plan.duration,
+        click:{enabled:level>0,level:level/100,bpm:plan.bpm,meter:[4,4]}});
+      this.clock.start(plan,startFrame);
     }catch{
       this.stop('invalid-demo',token);
+      if(labBackingClock.planId===token)labBackingClock.playing=false;
       reject('invalid-demo');
     }
   }
@@ -57,10 +77,19 @@ export class MusicLabPreview {
     if(token===this.token)this.clock.stop(reason);
   }
 
+  mix(token,level) {
+    if(!this.clock.active||!this.backing||token!==this.token||!Number.isInteger(level)||level<0||level>100)return;
+    this.level=level;
+    labBackingClock.click.enabled=level>0;
+    labBackingClock.click.level=level/100;
+    if(!level)this.clock.release();
+  }
+
   tick(frame) {
     if(!this.clock.active)return;
     const x=this.engine();
-    if(!x||x.sim_midi_mode?.()||this.conflict()||!this.eligible(x,this.part)||x.sim_seq_transpose()!==this.transpose){
+    if(!x||x.sim_midi_mode?.()||this.conflict()||
+      this.part!==undefined&&(!this.eligible(x,this.part)||x.sim_seq_transpose()!==this.transpose)){
       this.stop('interrupted');
       return;
     }
@@ -73,7 +102,7 @@ export class MusicLabPreview {
     for(let i=startIndex;i<clock.events.length&&clock.events[i].frame<=relative;i++){
       if(clock.events[i].velocity)attacks++;
     }
-    if(attacks){
+    if(attacks&&(!this.backing||this.level>0)){
       const limit=x.waswan_voice_limit(),needed=attacks*(x.waswan_mode(this.part)===1?2:1);
       let available=0;
       for(let i=0;i<limit&&available<needed;i++)if(!x.waswan_voice(i,0))available++;

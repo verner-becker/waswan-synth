@@ -5,13 +5,15 @@ import {LAB_LESSONS,lessonChordSymbol} from './music-lab-catalog.js';
 import {loadNotation,renderLessonScore} from './ui-music-lab-score.js';
 import {MusicLabMidiPractice} from './ui-music-lab-practice.js';
 import {MusicLabRange} from './ui-music-lab-range.js';
+import {backingPlan,harmonyAt,observedHarmony} from './music-lab-backing.js';
+import {downloadPracticeProject} from './music-lab-project.js';
 const TRACKS=[
   ['all','Todas'],
   ['melody','Melody Lab'],
   ['harmony','Harmony Lab'],
   ['technique','Technique & Expression']
 ];
-const HANDS={RH:'Mão direita',LH:'Mão esquerda',BOTH:'Duas mãos'};
+const HANDS={RH:'Mão direita',LH:'Mão esquerda',BOTH:'Duas mãos',FREE:'Prática livre'};
 const HAND_SIGNS={RH:'MD',LH:'ME'};
 const LEVELS=[['all','Todos'],['foundation','Fundamentos'],['application','Aplicação'],['coordination','Coordenação']];
 const KEYS=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
@@ -102,7 +104,7 @@ export class MusicLab {
       this.load();
     });
     this.excerpt=excerpt;
-    const tempo=selectField('Andamento',[[40,'40 BPM'],[60,'60 BPM'],[80,'80 BPM'],[100,'100 BPM']],this.bpm,value=>{
+    const tempo=selectField('Andamento',[[40,'40 BPM'],[60,'60 BPM'],[72,'72 BPM'],[80,'80 BPM'],[100,'100 BPM']],this.bpm,value=>{
       this.stop();
       this.bpm=Number(value);
     });
@@ -136,9 +138,12 @@ export class MusicLab {
     this.instructions=el('p','ww-lab-instructions');
     this.status=el('p','ww-lab-status');
     this.status.setAttribute('role','status');
+    this.buildBackingControls();
     this.midiPractice=new MusicLabMidiPractice({
       bridge,conflict:()=>inputConflict()||(this.range.active?'Conclua a calibração para iniciar a prática.':this.rangeReason()),
       autoChannel:()=>this.range.current?.channel??null,onChannel:()=>this.refresh(),
+      chordAt:at=>this.backing?.startFrame!=null?observedHarmony(this.backing.plan,this.backing.startFrame,at,this.bridge.getAudio().context):null,
+      playTake:take=>this.playTake(take),
       onState:(mode,index)=>{
         this.mode=mode;
         this.point(index);
@@ -155,8 +160,9 @@ export class MusicLab {
     });
     this.restoreRange=action('Voltar à oitava original',()=>{this.octaves=0;this.load();});
     this.range.node.append(this.adapt,this.restoreRange);
-    page.append(this.meta,this.lessonTitle,this.goal,controls,this.score,transport,this.range.node,this.midiPractice.controls,this.midiPractice.availability,
-      this.position,this.keyboard,this.status,this.midiPractice.feedback,this.midiPractice.details,this.instructions,this.midiPractice.history);
+    page.append(this.meta,this.lessonTitle,this.goal,controls,this.score,transport,this.range.node,this.backingNode,
+      this.midiPractice.controls,this.midiPractice.availability,this.position,this.keyboard,this.status,this.midiPractice.feedback,
+      this.midiPractice.details,this.instructions,this.midiPractice.takesNode,this.midiPractice.history);
     layout.append(library,page);
     this.node.append(header,layout);
     document.addEventListener('visibilitychange',()=>{
@@ -195,6 +201,10 @@ export class MusicLab {
     this.tonic=entry.data.key.tonic;
     this.hand=entry.data.handMode;
     this.bar=this.octaves=0;
+    if(entry.backing){
+      this.bpm=entry.data.tempoBpm;
+      this.tempo.value=String(this.bpm);
+    }
     this.load();
   }
 
@@ -212,6 +222,8 @@ export class MusicLab {
       ...Array.from({length:bars},(_,i)=>new Option('Compasso '+(i+1),String(i+1))));
     this.excerpt.select.value=String(this.bar);
     this.lesson=lessonVariant(source,{hand:this.hand,bar:this.bar,octaves:this.octaves});
+    this.backingNode.hidden=!this.entry.backing;
+    this.saveExercise.hidden=this.lesson.mode==='creative';
     this.needed=lessonRange(this.lesson);
     this.groups=lessonGroups(this.lesson.notes,{withHolds:this.hand==='BOTH'});
     this.played=null;
@@ -295,6 +307,7 @@ export class MusicLab {
       const played=this.played?.pitch===midi?this.played:null;
       key.classList.toggle('ww-lab-key-played',played?.correct===true);
       key.classList.toggle('ww-lab-key-outside',played?.correct===false);
+      key.classList.toggle('ww-lab-key-observed',played?.correct===null);
     }
   }
 
@@ -331,21 +344,114 @@ export class MusicLab {
       return;
     }
     if(this.bridge.getAudio().context?.state!=='running')return;
-    this.token=crypto.randomUUID();
     this.mode='demonstrate';
     this.point(0);
     this.say('Preparando exemplo…');
-    this.bridge.send({t:'music-lab-start',token:this.token,ppq:this.lesson.ppq,bpm:this.bpm,loop:this.loop.input.checked,
+    this.sendPlayback('example',{ppq:this.lesson.ppq,bpm:this.bpm,loop:this.loop.input.checked,
       notes:this.lesson.notes.map(({pitch:{midi},startTick,durationTick})=>({midi,startTick,durationTick}))});
+    this.showPosition();
+  }
+
+  sendPlayback(kind,plan) {
+    this.playbackKind=kind;
+    this.token=crypto.randomUUID();
+    this.bridge.send({t:'music-lab-start',token:this.token,...plan});
     this.refresh();
   }
 
+  buildBackingControls() {
+    const style=selectField('Acompanhamento',[['click','Metrônomo'],['bass','Baixo e pulso'],
+      ['harmony','Baixo, acordes e pulso']],'bass',()=>this.stop());
+    this.backingStyle=style.select;
+    this.backingPlay=action('Tocar acompanhamento',()=>void this.playBacking());
+    this.backingStop=action('Parar acompanhamento',()=>this.stop());
+    this.backingMute=action('Silenciar acompanhamento',()=>{
+      this.backingMuted=!this.backingMuted;
+      this.backingMute.textContent=this.backingMuted?'Restaurar acompanhamento':'Silenciar acompanhamento';
+      this.backingMute.setAttribute('aria-pressed',String(!!this.backingMuted));
+      this.updateBackingLevel();
+    });
+    this.backingMute.setAttribute('aria-pressed','false');
+    this.backingLevel=el('input');
+    this.backingLevel.type='range';
+    Object.assign(this.backingLevel,{min:0,max:100,step:1,value:65});
+    this.backingLevel.oninput=()=>this.updateBackingLevel();
+    const label=el('label','ww-lab-field','Nível');
+    this.backingLevel.setAttribute('aria-label','Nível do acompanhamento');
+    label.append(this.backingLevel);
+    this.saveExercise=action('Salvar exercício para DAW',async()=>{
+      try{
+        const notes=notes=>notes.map(({pitch:{midi},startTick,durationTick})=>({midi,startTick,durationTick}));
+        const sources=['LH','RH'].map(hand=>({label:HANDS[hand],notes:notes(this.lesson.notes.filter(note=>note.hand===hand))}));
+        await downloadPracticeProject({name:'Music Lab — '+this.lessonTitle.textContent,bpm:this.bpm,sources});
+        this.say('Cópia em formato .wsproj preparada para a DAW.');
+      }catch{this.say('Não foi possível salvar a cópia para DAW.');}
+    });
+    this.currentChord=el('span','ww-lab-backing-chord');
+    this.backingNode=el('div','ww-lab-backing');
+    this.backingNode.append(style.field,this.backingPlay,this.backingStop,label,this.backingMute,this.currentChord,this.saveExercise);
+  }
+
+  updateBackingLevel() {
+    if(this.token&&this.backing)this.bridge.send({t:'music-lab-level',token:this.token,level:this.backingMuted?0:Number(this.backingLevel.value)});
+  }
+
+  async playBacking() {
+    if(this.token||this.pendingBacking||!this.entry.backing||this.backingPlay.disabled)return;
+    const pending=Symbol();
+    this.pendingBacking=pending;
+    const {context,node,gain}=this.bridge.getAudio();
+    this.currentChord.textContent='Preparando acompanhamento…';
+    this.refresh();
+    try{
+      if(this.clickContext!==context){
+        await context.audioWorklet.addModule(new URL('./daw-click.js',import.meta.url));
+        if(this.pendingBacking!==pending||context!==this.bridge.getAudio().context)return;
+        const click=new AudioWorkletNode(context,'waswan-daw-click',{numberOfInputs:1,outputChannelCount:[2],processorOptions:{musicLab:true}});
+        node.connect(click,0);
+        click.connect(gain);
+        this.clickContext=context;
+      }
+      if(this.pendingBacking!==pending||context.state!=='running'||this.bridge.isDawBusy?.()||this.bridge.isStudioBusy?.())return;
+      const plan=backingPlan({form:this.entry.backing,tonic:this.tonic,style:this.backingStyle.value,bpm:this.bpm,bar:this.bar});
+      const {harmony,...schedule}=plan;
+      this.pendingBacking=null;
+      this.backing={plan};
+      this.sendPlayback('backing',{...schedule,backing:true,level:this.backingMuted?0:Number(this.backingLevel.value)});
+    }catch{
+      if(this.pendingBacking===pending)this.say('Não foi possível preparar o acompanhamento.');
+    }finally{
+      if(this.pendingBacking===pending){
+        this.pendingBacking=null;
+        this.currentChord.textContent='';
+        this.refresh();
+      }
+    }
+  }
+
+  playTake(take) {
+    if(this.midiPractice.hasAttempt||this.range.active||this.bridge.getAudio().context?.state!=='running')return;
+    this.stop();
+    this.say('Ouvindo a tomada MIDI.');
+    this.sendPlayback('take',{notes:take.notes,bpm:take.bpm,ppq:480});
+  }
+
   stop(message='') {
+    if(this.pendingBacking){
+      this.pendingBacking=null;
+      this.currentChord.textContent='';
+      this.refresh();
+    }
     if(!this.token)return;
+    const kind=this.playbackKind;
     this.bridge.send({t:'music-lab-stop',token:this.token});
     this.token=null;
-    this.mode='observe';
-    this.point(-1);
+    this.backing=null;
+    this.currentChord.textContent='';
+    if(kind==='example'){
+      this.mode='observe';
+      this.point(-1);
+    }
     this.say(message);
     this.refresh();
   }
@@ -357,6 +463,7 @@ export class MusicLab {
   }
 
   rangeReason() {
+    if(this.lesson.mode==='creative')return '';
     const observed=this.range.current;
     if(!observed)return this.hand==='BOTH'?'Calibre o alcance antes de praticar com as duas mãos.':'';
     if(fittingOctave(this.needed,observed)===0)return '';
@@ -371,6 +478,31 @@ export class MusicLab {
       return;
     }
     if(message.t!=='music-lab-state'||message.token!==this.token)return;
+    if(this.playbackKind==='backing'){
+      if(message.playing){
+        this.backing.startFrame=message.startFrame;
+        const {plan}=this.backing;
+        const tick=message.frame*plan.bpm*plan.ppq/(this.bridge.getAudio().context.sampleRate*60);
+        const chord=harmonyAt(plan,tick);
+        const label=chord?`Acorde ${chord.label} · compasso ${Math.floor(tick/1920)+1}`:'';
+        if(this.currentChord.textContent!==label)this.currentChord.textContent=label;
+      }else{
+        this.token=null;
+        this.backing=null;
+        this.currentChord.textContent='';
+        this.say(MESSAGES[message.reason]||'Acompanhamento encerrado.');
+        this.refresh();
+      }
+      return;
+    }
+    if(this.playbackKind==='take'){
+      if(!message.playing){
+        this.token=null;
+        this.say(message.reason==='ended'?'Escuta concluída.':MESSAGES[message.reason]||'Escuta encerrada.');
+        this.refresh();
+      }
+      return;
+    }
     if(message.playing){
       this.say(`Exemplo em reprodução · Parte ${'ABCD'[message.part]}`);
       const tick=message.frame*this.lesson.ppq*this.bpm/(this.bridge.getAudio().context.sampleRate*60);
@@ -400,7 +532,7 @@ export class MusicLab {
     if(this.audioAction.hidden!==hideStart)this.audioAction.hidden=hideStart;
     const audioAction=context?.state==='suspended'?'Retomar áudio':'Iniciar áudio';
     if(this.audioAction.textContent!==audioAction)this.audioAction.textContent=audioAction;
-    this.range.refresh(!!this.token||this.midiPractice.state==='listening');
+    this.range.refresh(!!this.token||!!this.pendingBacking||this.midiPractice.state==='listening');
     const range=this.range.current;
     this.suggestion=range?fittingOctave(this.needed,range):null;
     const canAdapt=this.suggestion!==null&&this.suggestion!==0&&!this.range.active;
@@ -411,11 +543,16 @@ export class MusicLab {
       if(this.adapt.textContent!==label)this.adapt.textContent=label;
     }
     this.restoreRange.hidden=!this.octaves||this.range.active;
-    const disabled=!running||!!this.token||this.midiPractice.hasAttempt||this.range.active;
+    const disabled=!running||!!this.token||!!this.pendingBacking||this.midiPractice.hasAttempt||this.range.active;
     if(this.listen.disabled!==disabled)this.listen.disabled=disabled;
-    if(this.tempo.disabled!==this.midiPractice.hasAttempt)this.tempo.disabled=this.midiPractice.hasAttempt;
-    if(this.halt.hidden===!!this.token)this.halt.hidden=!this.token;
-    this.midiPractice.refresh(!!this.token);
+    this.tempo.disabled=this.midiPractice.hasAttempt;
+    this.halt.hidden=!this.token||this.playbackKind==='backing';
+    const backing=!!this.backing||!!this.pendingBacking;
+    this.backingPlay.hidden=backing;
+    this.backingStop.hidden=!backing;
+    this.backingPlay.disabled=!running||!!this.token||this.range.active||!!this.bridge.isDawBusy?.()||!!this.bridge.isStudioBusy?.();
+    this.backingStyle.disabled=backing;
+    this.midiPractice.refresh(!!this.token&&this.playbackKind!=='backing'||!!this.pendingBacking);
     this.midiPractice.channel.disabled=this.range.active||this.midiPractice.state==='listening';
     this.loop.input.disabled=this.midiPractice.hasAttempt||this.range.active;
   }

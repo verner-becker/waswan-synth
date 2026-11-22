@@ -7,6 +7,9 @@ import harmonic from './music-lab/scale-a-harmonic-minor-rh.json' with {type:'js
 import chord from './music-lab/chord-c-major-rh.json' with {type:'json'};
 import inversion from './music-lab/chord-c-first-inversion-rh.json' with {type:'json'};
 import together from './music-lab/hands-together-c-basic.json' with {type:'json'};
+import progression from './music-lab/progression-c-g-am-f-rh.json' with {type:'json'};
+import pop from './music-lab/accompany-pop-two-hands.json' with {type:'json'};
+import improv from './music-lab/improv-am-pentatonic-phrase.json' with {type:'json'};
 import additional from './music-lab/additional-lessons.json' with {type:'json'};
 
 const entry=(data,detail,options={})=>({data,label:data.title,detail,level:'application',...options});
@@ -30,7 +33,10 @@ export const LAB_LESSONS=[
   entry(authored['chord-c-major-seventh-rh'],'Quatro notas',{quality:'maj7'}),
   entry(authored['chord-c-dominant-seventh-rh'],'Quatro notas',{quality:'7'}),
   entry(authored['chord-c-diminished-seventh-rh'],'Sétima dobrado bemol',{quality:'dim7'}),
-  entry(together,'Baixo e melodia · duas pautas',{label:'Duas mãos: baixo e melodia',level:'coordination'})
+  entry(together,'Baixo e melodia · duas pautas',{label:'Duas mãos: baixo e melodia',level:'coordination'}),
+  entry(progression,'C · G · Am · F',{label:'Progressão pop',backing:'pop'}),
+  entry(pop,'Baixo e acordes alternados',{label:'Acompanhamento pop',level:'coordination',backing:'pop'}),
+  entry(improv,'Pergunta e resposta · prática livre',{label:'Improvisação pentatônica',backing:'minor'})
 ];
 
 export function lessonChordSymbol(lesson,quality) {
