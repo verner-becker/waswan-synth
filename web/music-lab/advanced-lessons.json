@@ -1,0 +1,352 @@
+[
+  {
+    "id": "mode-d-dorian-rh",
+    "version": 1,
+    "title": "Ré dórico",
+    "track": "melody",
+    "mode": "strict",
+    "handMode": "RH",
+    "key": {
+      "tonic": "D",
+      "mode": "modal",
+      "fifths": 0
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Reconhecer a sexta maior acima de Ré em um modo de terça menor.",
+    "instructions": "Toque Ré como centro. Compare Si natural com a sexta menor de Ré menor natural.",
+    "tags": [
+      "mode",
+      "scale"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "D", "alter": 0, "octave": 4, "midi": 62}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n2", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n3", "pitch": {"step": "F", "alter": 0, "octave": 4, "midi": 65}, "startTick": 960, "durationTick": 480, "hand": "RH"},
+      {"id": "n4", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 1440, "durationTick": 480, "hand": "RH"},
+      {"id": "n5", "pitch": {"step": "A", "alter": 0, "octave": 4, "midi": 69}, "startTick": 1920, "durationTick": 480, "hand": "RH"},
+      {"id": "n6", "pitch": {"step": "B", "alter": 0, "octave": 4, "midi": 71}, "startTick": 2400, "durationTick": 480, "hand": "RH"},
+      {"id": "n7", "pitch": {"step": "C", "alter": 0, "octave": 5, "midi": 72}, "startTick": 2880, "durationTick": 480, "hand": "RH"},
+      {"id": "n8", "pitch": {"step": "D", "alter": 0, "octave": 5, "midi": 74}, "startTick": 3360, "durationTick": 480, "hand": "RH"}
+    ]
+  },
+  {
+    "id": "mode-g-mixolydian-rh",
+    "version": 1,
+    "title": "Sol mixolídio",
+    "track": "melody",
+    "mode": "strict",
+    "handMode": "RH",
+    "key": {
+      "tonic": "G",
+      "mode": "modal",
+      "fifths": 0
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Escutar a sétima menor do modo mixolídio.",
+    "instructions": "Toque Sol como centro e repare no Fá natural antes de voltar à tônica.",
+    "tags": [
+      "mode",
+      "scale"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n2", "pitch": {"step": "A", "alter": 0, "octave": 4, "midi": 69}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n3", "pitch": {"step": "B", "alter": 0, "octave": 4, "midi": 71}, "startTick": 960, "durationTick": 480, "hand": "RH"},
+      {"id": "n4", "pitch": {"step": "C", "alter": 0, "octave": 5, "midi": 72}, "startTick": 1440, "durationTick": 480, "hand": "RH"},
+      {"id": "n5", "pitch": {"step": "D", "alter": 0, "octave": 5, "midi": 74}, "startTick": 1920, "durationTick": 480, "hand": "RH"},
+      {"id": "n6", "pitch": {"step": "E", "alter": 0, "octave": 5, "midi": 76}, "startTick": 2400, "durationTick": 480, "hand": "RH"},
+      {"id": "n7", "pitch": {"step": "F", "alter": 0, "octave": 5, "midi": 77}, "startTick": 2880, "durationTick": 480, "hand": "RH"},
+      {"id": "n8", "pitch": {"step": "G", "alter": 0, "octave": 5, "midi": 79}, "startTick": 3360, "durationTick": 480, "hand": "RH"}
+    ]
+  },
+  {
+    "id": "voice-leading-c-am7-dm7-g7",
+    "version": 1,
+    "title": "Condução de vozes em quatro acordes",
+    "track": "harmony",
+    "mode": "strict",
+    "handMode": "RH",
+    "key": {
+      "tonic": "C",
+      "mode": "major",
+      "fifths": 0
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Conservar alturas comuns entre acordes e mover as outras vozes por pequenos intervalos.",
+    "instructions": "Compare C → Am7/C → Dm7/C → G7/B. Observe o Dó comum nos três primeiros acordes.",
+    "tags": [
+      "voice-leading",
+      "chord"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 0, "durationTick": 1920, "hand": "RH"},
+      {"id": "n2", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 0, "durationTick": 1920, "hand": "RH"},
+      {"id": "n3", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 0, "durationTick": 1920, "hand": "RH"},
+      {"id": "n4", "pitch": {"step": "C", "alter": 0, "octave": 5, "midi": 72}, "startTick": 0, "durationTick": 1920, "hand": "RH"},
+      {"id": "n5", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 1920, "durationTick": 1920, "hand": "RH"},
+      {"id": "n6", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 1920, "durationTick": 1920, "hand": "RH"},
+      {"id": "n7", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 1920, "durationTick": 1920, "hand": "RH"},
+      {"id": "n8", "pitch": {"step": "A", "alter": 0, "octave": 4, "midi": 69}, "startTick": 1920, "durationTick": 1920, "hand": "RH"},
+      {"id": "n9", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 3840, "durationTick": 1920, "hand": "RH"},
+      {"id": "n10", "pitch": {"step": "D", "alter": 0, "octave": 4, "midi": 62}, "startTick": 3840, "durationTick": 1920, "hand": "RH"},
+      {"id": "n11", "pitch": {"step": "F", "alter": 0, "octave": 4, "midi": 65}, "startTick": 3840, "durationTick": 1920, "hand": "RH"},
+      {"id": "n12", "pitch": {"step": "A", "alter": 0, "octave": 4, "midi": 69}, "startTick": 3840, "durationTick": 1920, "hand": "RH"},
+      {"id": "n13", "pitch": {"step": "B", "alter": 0, "octave": 3, "midi": 59}, "startTick": 5760, "durationTick": 1920, "hand": "RH"},
+      {"id": "n14", "pitch": {"step": "D", "alter": 0, "octave": 4, "midi": 62}, "startTick": 5760, "durationTick": 1920, "hand": "RH"},
+      {"id": "n15", "pitch": {"step": "F", "alter": 0, "octave": 4, "midi": 65}, "startTick": 5760, "durationTick": 1920, "hand": "RH"},
+      {"id": "n16", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 5760, "durationTick": 1920, "hand": "RH"}
+    ]
+  },
+  {
+    "id": "independence-c-f-two-hands",
+    "version": 1,
+    "title": "Duas mãos com ritmos diferentes",
+    "track": "technique",
+    "mode": "guided",
+    "handMode": "BOTH",
+    "key": {
+      "tonic": "C",
+      "mode": "major",
+      "fifths": 0
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Manter mínimas na mão esquerda enquanto a direita alterna semínimas e mínimas.",
+    "instructions": "Ensaie cada mão separadamente. Ao juntar, mantenha a tecla marcada durante as notas intermediárias.",
+    "tags": [
+      "two-hands",
+      "coordination",
+      "fingering"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "C", "alter": 0, "octave": 3, "midi": 48}, "startTick": 0, "durationTick": 960, "hand": "LH", "finger": 5},
+      {"id": "n2", "pitch": {"step": "G", "alter": 0, "octave": 3, "midi": 55}, "startTick": 960, "durationTick": 960, "hand": "LH", "finger": 1},
+      {"id": "n3", "pitch": {"step": "F", "alter": 0, "octave": 3, "midi": 53}, "startTick": 1920, "durationTick": 960, "hand": "LH", "finger": 1},
+      {"id": "n4", "pitch": {"step": "C", "alter": 0, "octave": 3, "midi": 48}, "startTick": 2880, "durationTick": 960, "hand": "LH", "finger": 5},
+      {"id": "n5", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 0, "durationTick": 480, "hand": "RH", "finger": 1},
+      {"id": "n6", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 480, "durationTick": 480, "hand": "RH", "finger": 3},
+      {"id": "n7", "pitch": {"step": "A", "alter": 0, "octave": 4, "midi": 69}, "startTick": 960, "durationTick": 960, "hand": "RH", "finger": 4},
+      {"id": "n8", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 1920, "durationTick": 960, "hand": "RH", "finger": 3},
+      {"id": "n9", "pitch": {"step": "F", "alter": 0, "octave": 4, "midi": 65}, "startTick": 2880, "durationTick": 480, "hand": "RH", "finger": 2},
+      {"id": "n10", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 3360, "durationTick": 480, "hand": "RH", "finger": 1}
+    ]
+  },
+  {
+    "id": "ear-echo-c-four-notes",
+    "version": 1,
+    "title": "Eco melódico de quatro notas",
+    "track": "technique",
+    "mode": "strict",
+    "handMode": "RH",
+    "key": {
+      "tonic": "C",
+      "mode": "major",
+      "fifths": 0
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Memorizar e reproduzir uma frase curta.",
+    "instructions": "Escute o exemplo, pause e repita a frase no teclado.",
+    "tags": [
+      "ear",
+      "echo"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n2", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n3", "pitch": {"step": "D", "alter": 0, "octave": 4, "midi": 62}, "startTick": 960, "durationTick": 480, "hand": "RH"},
+      {"id": "n4", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 1440, "durationTick": 480, "hand": "RH"}
+    ]
+  },
+  {
+    "id": "ear-quality-c-major",
+    "version": 1,
+    "title": "Tríade maior",
+    "track": "technique",
+    "mode": "strict",
+    "handMode": "RH",
+    "key": {
+      "tonic": "C",
+      "mode": "major",
+      "fifths": 0
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Identificar uma tríade a partir da escuta.",
+    "instructions": "Compare a distância entre a fundamental e a terça.",
+    "tags": [
+      "ear",
+      "quality"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 0, "durationTick": 1920, "hand": "RH"},
+      {"id": "n2", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 0, "durationTick": 1920, "hand": "RH"},
+      {"id": "n3", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 0, "durationTick": 1920, "hand": "RH"}
+    ]
+  },
+  {
+    "id": "ear-quality-c-minor",
+    "version": 1,
+    "title": "Tríade menor",
+    "track": "technique",
+    "mode": "strict",
+    "handMode": "RH",
+    "key": {
+      "tonic": "C",
+      "mode": "minor",
+      "fifths": -3
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Identificar uma tríade a partir da escuta.",
+    "instructions": "Compare a distância entre a fundamental e a terça.",
+    "tags": [
+      "ear",
+      "quality"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 0, "durationTick": 1920, "hand": "RH"},
+      {"id": "n2", "pitch": {"step": "E", "alter": -1, "octave": 4, "midi": 63}, "startTick": 0, "durationTick": 1920, "hand": "RH"},
+      {"id": "n3", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 0, "durationTick": 1920, "hand": "RH"}
+    ]
+  },
+  {
+    "id": "ear-cadence-tonic",
+    "version": 1,
+    "title": "Cadência de volta à tônica",
+    "track": "technique",
+    "mode": "strict",
+    "handMode": "RH",
+    "key": {
+      "tonic": "C",
+      "mode": "major",
+      "fifths": 0
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Escutar o destino do acorde dominante.",
+    "instructions": "Compare o fechamento em Dó com a chegada na relativa menor.",
+    "tags": [
+      "ear",
+      "cadence"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n2", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n3", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n4", "pitch": {"step": "B", "alter": 0, "octave": 3, "midi": 59}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n5", "pitch": {"step": "D", "alter": 0, "octave": 4, "midi": 62}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n6", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n7", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 960, "durationTick": 960, "hand": "RH"},
+      {"id": "n8", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 960, "durationTick": 960, "hand": "RH"},
+      {"id": "n9", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 960, "durationTick": 960, "hand": "RH"}
+    ]
+  },
+  {
+    "id": "ear-cadence-relative",
+    "version": 1,
+    "title": "Cadência para a relativa menor",
+    "track": "technique",
+    "mode": "strict",
+    "handMode": "RH",
+    "key": {
+      "tonic": "C",
+      "mode": "major",
+      "fifths": 0
+    },
+    "meter": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "tempoBpm": 60,
+    "ppq": 480,
+    "learningGoal": "Escutar o destino do acorde dominante.",
+    "instructions": "Compare a chegada em Lá menor com o fechamento na tônica.",
+    "tags": [
+      "ear",
+      "cadence"
+    ],
+    "evaluation": {
+      "pitchRequired": true,
+      "rhythmRequired": false
+    },
+    "notes": [
+      {"id": "n1", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n2", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n3", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 0, "durationTick": 480, "hand": "RH"},
+      {"id": "n4", "pitch": {"step": "B", "alter": 0, "octave": 3, "midi": 59}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n5", "pitch": {"step": "D", "alter": 0, "octave": 4, "midi": 62}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n6", "pitch": {"step": "G", "alter": 0, "octave": 4, "midi": 67}, "startTick": 480, "durationTick": 480, "hand": "RH"},
+      {"id": "n7", "pitch": {"step": "A", "alter": 0, "octave": 3, "midi": 57}, "startTick": 960, "durationTick": 960, "hand": "RH"},
+      {"id": "n8", "pitch": {"step": "C", "alter": 0, "octave": 4, "midi": 60}, "startTick": 960, "durationTick": 960, "hand": "RH"},
+      {"id": "n9", "pitch": {"step": "E", "alter": 0, "octave": 4, "midi": 64}, "startTick": 960, "durationTick": 960, "hand": "RH"}
+    ]
+  }
+]

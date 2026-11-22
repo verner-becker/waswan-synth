@@ -14,4 +14,4 @@ O observador recebe somente a entrada externa já distribuída pelo controlador.
 
 `tests/music-lab-backing.test.mjs` verificou padrões, relógio, silêncio, descritores e ida e volta de uma cópia DAW. `tests/browser-music-lab-backing.mjs` confirmou clique audível, Synth único, notas ao vivo preservadas, cromatismo aceito, gravação opt-in, reescuta e cópia aberta pelo leitor nativo. O navegador também exerceu a prática de mão direita sobre o baixo. As regressões do transporte da DAW e do Music Lab conferem as ondas anteriores. Relatório e captura em `.local/validation/music-lab/`.
 
-O ensaio físico segue pendente. A W5 acrescenta estudos de ouvido, conteúdo avançado e refinamentos de acessibilidade.
+O ensaio físico segue pendente. A [W5](music-lab-wave-5.md) acrescenta estudos de ouvido, conteúdo avançado e refinamentos de acessibilidade.

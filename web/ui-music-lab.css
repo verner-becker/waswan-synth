@@ -70,6 +70,21 @@
 .ww-lab-take {border:1px solid var(--ww-border);border-radius:8px;padding:10px;font-size:12px;}
 .ww-lab-take p {margin:6px 0;color:var(--ww-muted);}
 .ww-lab-take button {margin:4px 6px 0 0;}
+.ww-lab-ear,.ww-lab-ear-options {display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.ww-lab-ear {margin-top:10px;}
+.ww-lab-ear button,.ww-lab-coach {font-size:12px;}
+.ww-lab-ear-status {font-size:13px;color:var(--ww-accent);}
+.ww-lab-coach {margin-top:8px;}
+.ww-lab-readable {margin-top:10px;font-size:12px;color:var(--ww-text);}
+.ww-lab-readable summary {font-weight:650;cursor:pointer;}
+.ww-lab-readable li {margin:6px 0;color:var(--ww-muted);}
+@media (prefers-contrast:more) {
+  .ww-lab-score-cursor {stroke:#004846;stroke-width:2;}
+  .ww-lab-key-current,.ww-lab-key-held {outline:2px solid #004846;outline-offset:-4px;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .ww-lab-score,.ww-lab-lessons {scroll-behavior:auto;}
+}
 @media (max-width:770px) {
   .ww-lab-layout {grid-template-columns:minmax(0,1fr);}
   .ww-lab-filters {display:flex;flex-wrap:wrap;}

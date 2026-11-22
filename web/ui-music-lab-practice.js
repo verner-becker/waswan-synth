@@ -23,8 +23,8 @@ function scoreText({matched,expected,extras,missing,retries},kind) {
 }
 
 export class MusicLabMidiPractice {
-  constructor({bridge,conflict,autoChannel,onChannel,onState,onObserved,chordAt,playTake}) {
-    Object.assign(this,{bridge,conflict,autoChannel,onState,onObserved,chordAt,playTake,state:'idle'});
+  constructor({bridge,conflict,autoChannel,onChannel,onState,onObserved,chordAt,playTake,onReview}) {
+    Object.assign(this,{bridge,conflict,autoChannel,onState,onObserved,chordAt,playTake,onReview,state:'idle'});
     let storage;
     try{storage=window.localStorage;}catch{}
     this.progress=new LabProgress(storage);
@@ -61,10 +61,10 @@ export class MusicLabMidiPractice {
     return this.channel.value===''?null:Number(this.channel.value);
   }
 
-  setLesson(lesson,groups,getTempo) {
+  setLesson(lesson,groups,getTempo,{echo=false}={}) {
     this.detach();
     Object.assign(this,{lesson,groups,getTempo,state:'idle',attempt:null,lastHold:null,lastMessage:'',
-      creative:lesson.mode==='creative',takes:[]});
+      creative:lesson.mode==='creative',echo,takes:[]});
     this.capture.checked=false;
     this.takesNode.replaceChildren();
     this.kind=lesson.handMode==='BOTH'?'steps':groups.length===1&&groups[0].notes.length>1?'chord':'notes';
@@ -109,7 +109,8 @@ export class MusicLabMidiPractice {
     }
     this.state='listening';
     this.lastHold=null;
-    this.lastMessage=this.creative?'Toque uma frase, faça uma pausa e responda com uma variação.':resume?'Prática retomada. Toque o alvo destacado.':
+    this.lastMessage=this.creative?'Toque uma frase, faça uma pausa e responda com uma variação.':
+      this.echo?'Repita a frase que ouviu.':resume?'Prática retomada. Toque o alvo destacado.':
       this.kind==='steps'?'Toque o primeiro passo destacado. Mantenha as teclas indicadas ao avançar.':
       this.kind==='chord'?`Toque as notas do acorde juntas. Janela de ${this.attempt.chordWindowMs} ms.`:
         'Toque a nota destacada. A pauta avança a cada acerto.';
@@ -173,7 +174,8 @@ export class MusicLabMidiPractice {
       const hit=chord?(this.kind==='steps'?'✓ Entrada conjunta correta.':'✓ Acorde correto.'):`✓ ${this.name(pitch)} correta.`;
       return this.attempt.index===this.groups.length?hit+' Solte as teclas para concluir.':hit;
     }
-    case 'extra': return `! Tocou ${this.name(pitch)} fora do alvo. ${this.kind==='chord'?'Solte as teclas e tente o acorde novamente.':'Tente a nota destacada.'}`;
+    case 'extra': return `! Tocou ${this.name(pitch)} fora do alvo. ${this.echo?'Ouça a referência ou tente outra nota.':
+      this.kind==='chord'?'Solte as teclas e tente o acorde novamente.':'Tente a nota destacada.'}`;
     case 'anchor': return `Mantenha ${this.name(pitch)} e toque o próximo alvo destacado.`;
     case 'anchor-missing': {
       const held=this.attempt.groups[this.attempt.index].held.find(note=>note.pitch.midi===anchor);
@@ -218,6 +220,7 @@ export class MusicLabMidiPractice {
     this.paint();
     this.onObserved(null);
     this.onState('observe',0);
+    this.onReview(null);
     this.start.focus({preventScroll:true});
   }
 
@@ -247,10 +250,12 @@ export class MusicLabMidiPractice {
       return;
     }
     const summary=this.attempt.summary(),stored=this.progress.record(this.lesson,summary);
+    const nextGroup=this.groups[this.attempt.index];
     const chordClock=summary.windowUnavailable?' Janela do acorde indisponível nesta tentativa.':'';
-    const next=summary.missing?' Tente novamente acompanhando o alvo destacado.':'';
+    const next=summary.missing?(this.echo?' Ouça a referência e tente outra vez.':' Tente novamente acompanhando a pauta.'):'';
     const save=stored?'':' O armazenamento local está indisponível. O resumo fica visível nesta aba.';
     this.review(scoreText(summary,this.kind)+'.'+chordClock+next+save);
+    this.onReview(nextGroup);
     this.renderHistory();
   }
 
@@ -293,7 +298,7 @@ export class MusicLabMidiPractice {
     this.start.hidden=this.state==='listening';
     this.start.textContent=this.state==='paused'?'Retomar prática MIDI':this.creative?
       this.state==='review'?'Improvisar outra frase':'Iniciar improvisação MIDI':
-      this.state==='review'?'Tentar novamente':'Iniciar prática MIDI';
+      this.state==='review'?'Tentar novamente':this.echo?'Repetir eco no MIDI':'Iniciar prática MIDI';
     this.end.hidden=!this.hasAttempt;
     this.end.textContent=this.state==='paused'?'Descartar tentativa':this.creative?'Concluir frase':'Encerrar tentativa';
     this.channel.disabled=this.state==='listening';

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action} from './ui-primitives.js';
-import {barCount,fittingOctave,lessonClef,lessonGroups,lessonKeys,lessonRange,lessonVariant,midiPitchLabel,pitchLabel,tonicName,transposeLesson} from './music-lab-model.js';
+import {barCount,barLength,fittingOctave,lessonClef,lessonGroups,lessonKeys,lessonRange,lessonVariant,midiPitchLabel,pitchLabel,tonicName,transposeLesson} from './music-lab-model.js';
 import {LAB_LESSONS,lessonChordSymbol} from './music-lab-catalog.js';
 import {loadNotation,renderLessonScore} from './ui-music-lab-score.js';
 import {MusicLabMidiPractice} from './ui-music-lab-practice.js';
 import {MusicLabRange} from './ui-music-lab-range.js';
+import {MusicLabEar} from './ui-music-lab-ear.js';
 import {backingPlan,harmonyAt,observedHarmony} from './music-lab-backing.js';
 import {downloadPracticeProject} from './music-lab-project.js';
 const TRACKS=[
@@ -15,7 +16,7 @@ const TRACKS=[
 ];
 const HANDS={RH:'Mão direita',LH:'Mão esquerda',BOTH:'Duas mãos',FREE:'Prática livre'};
 const HAND_SIGNS={RH:'MD',LH:'ME'};
-const LEVELS=[['all','Todos'],['foundation','Fundamentos'],['application','Aplicação'],['coordination','Coordenação']];
+const LEVELS=[['all','Todos'],['foundation','Fundamentos'],['application','Aplicação'],['coordination','Coordenação'],['advanced','Avançado']];
 const KEYS=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const MESSAGES={
   'audio-unavailable':'Inicie ou retome o áudio do Synth para ouvir a prévia.',
@@ -93,6 +94,7 @@ export class MusicLab {
       this.load();
     });
     this.key=key.select;
+    this.keyField=key.field;
     const hand=selectField('Mãos',[['BOTH','Juntas'],['RH','Direita'],['LH','Esquerda']],'BOTH',value=>{
       this.hand=value;
       this.bar=this.octaves=0;
@@ -112,7 +114,12 @@ export class MusicLab {
     this.zoom=selectField('Zoom da pauta',[[100,'100%'],[150,'150%'],[200,'200%']],100,value=>{
       this.score.style.setProperty('--lab-zoom',Number(value)/100);
     });
-    this.fingers=checkField('Dedilhado',true,checked=>{this.showFingers=checked;void this.drawScore();this.showPosition();});
+    this.fingers=checkField('Dedilhado',true,checked=>{
+      this.showFingers=checked;
+      void this.drawScore();
+      this.showPosition();
+      this.renderTextScore();
+    });
     this.loop=checkField('Repetir exemplo',false,()=>this.stop('Prévia parada.'));
     controls.append(key.field,hand.field,excerpt.field,tempo.field,this.zoom.field,this.fingers.field);
     this.score=el('div','ww-lab-score');
@@ -139,11 +146,28 @@ export class MusicLab {
     this.status=el('p','ww-lab-status');
     this.status.setAttribute('role','status');
     this.buildBackingControls();
+    this.ear=new MusicLabEar({reload:()=>this.load(),update:reveal=>{
+      this.updateEarVisibility();
+      this.refresh();
+      if(reveal)this.score.focus({preventScroll:true});
+    }});
+    this.textScore=el('details','ww-lab-readable');
+    this.textScoreList=el('ol');
+    this.textScore.append(el('summary','','Ler partitura em texto'),this.textScoreList);
+    this.coach=action('',()=>{
+      this.bar=this.coachBar;
+      this.load();
+      this.excerpt.select.focus({preventScroll:true});
+    });
+    this.coach.classList.add('ww-lab-coach');
+    this.coach.hidden=true;
     this.midiPractice=new MusicLabMidiPractice({
-      bridge,conflict:()=>inputConflict()||(this.range.active?'Conclua a calibração para iniciar a prática.':this.rangeReason()),
+      bridge,conflict:()=>inputConflict()||(this.range.active?'Conclua a calibração para iniciar a prática.':
+        this.ear.config&&!this.ear.quiz&&!this.ear.listened?'Ouça a referência antes de repetir o eco.':this.rangeReason()),
       autoChannel:()=>this.range.current?.channel??null,onChannel:()=>this.refresh(),
       chordAt:at=>this.backing?.startFrame!=null?observedHarmony(this.backing.plan,this.backing.startFrame,at,this.bridge.getAudio().context):null,
       playTake:take=>this.playTake(take),
+      onReview:group=>this.suggestSection(group),
       onState:(mode,index)=>{
         this.mode=mode;
         this.point(index);
@@ -160,9 +184,9 @@ export class MusicLab {
     });
     this.restoreRange=action('Voltar à oitava original',()=>{this.octaves=0;this.load();});
     this.range.node.append(this.adapt,this.restoreRange);
-    page.append(this.meta,this.lessonTitle,this.goal,controls,this.score,transport,this.range.node,this.backingNode,
+    page.append(this.meta,this.lessonTitle,this.goal,controls,this.score,transport,this.ear.node,this.range.node,this.backingNode,
       this.midiPractice.controls,this.midiPractice.availability,this.position,this.keyboard,this.status,this.midiPractice.feedback,
-      this.midiPractice.details,this.instructions,this.midiPractice.takesNode,this.midiPractice.history);
+      this.midiPractice.details,this.coach,this.instructions,this.textScore,this.midiPractice.takesNode,this.midiPractice.history);
     layout.append(library,page);
     this.node.append(header,layout);
     document.addEventListener('visibilitychange',()=>{
@@ -198,6 +222,7 @@ export class MusicLab {
 
   selectLesson(entry) {
     this.entry=entry;
+    this.ear.set(entry.ear);
     this.tonic=entry.data.key.tonic;
     this.hand=entry.data.handMode;
     this.bar=this.octaves=0;
@@ -210,11 +235,12 @@ export class MusicLab {
 
   load() {
     this.stop();
-    const data=this.entry.data,keys=lessonKeys(data);
+    const data=this.ear.trial??this.entry.data,keys=lessonKeys(data);
     const source=transposeLesson(data,this.tonic),base=lessonVariant(source,{hand:this.hand});
     const bars=barCount(base);
     this.key.replaceChildren(...Object.entries(keys).map(([tonic,v])=>new Option(v.name,tonic)));
     this.key.value=this.tonic;
+    this.key.disabled=this.key.options.length===1;
     this.handField.field.hidden=data.handMode!=='BOTH';
     this.handField.select.value=this.hand;
     this.excerpt.field.hidden=bars<2;
@@ -227,26 +253,67 @@ export class MusicLab {
     this.needed=lessonRange(this.lesson);
     this.groups=lessonGroups(this.lesson.notes,{withHolds:this.hand==='BOTH'});
     this.played=null;
-    this.midiPractice.setLesson(this.lesson,this.groups,()=>this.bpm);
+    this.midiPractice.setLesson(this.lesson,this.groups,()=>this.bpm,{echo:this.ear.config?.type==='echo'});
     this.mode='observe';
     this.index=0;
     const {key,handMode,title,instructions,learningGoal}=this.lesson;
     const original=key.tonic===data.key.tonic,root=keys[data.key.tonic].name;
-    this.lessonTitle.textContent=original?title:title.includes(root)?title.replace(root,keys[key.tonic].name):title+' · '+tonicName(key.tonic);
+    this.lessonTitle.textContent=this.ear.quiz?this.entry.label:
+      original?title:title.includes(root)?title.replace(root,keys[key.tonic].name):title+' · '+tonicName(key.tonic);
     const clef=handMode==='BOTH'?'Pauta dupla':lessonClef(this.lesson.notes)==='bass'?'Clave de fá':'Clave de sol';
-    this.meta.textContent=[HAND_SIGNS[handMode]?[HAND_SIGNS[handMode],HANDS[handMode]].join(' · '):HANDS[handMode],
+    this.meta.textContent=this.ear.config?'Prática de ouvido':[HAND_SIGNS[handMode]?[HAND_SIGNS[handMode],HANDS[handMode]].join(' · '):HANDS[handMode],
       clef,lessonChordSymbol(this.lesson,this.entry.quality),this.bar?'Compasso '+this.bar:''].filter(Boolean).join('  /  ');
-    this.goal.textContent=original?learningGoal:learningGoal.includes(root)?learningGoal.replace(root,keys[key.tonic].name):
+    this.goal.textContent=this.ear.quiz?this.ear.config.prompt:original?learningGoal:learningGoal.includes(root)?learningGoal.replace(root,keys[key.tonic].name):
       'Acompanhe os intervalos da lição na nova tonalidade.';
-    this.instructions.textContent=data.handMode==='BOTH'&&handMode!=='BOTH'?'Toque a mão indicada e ouça sua parte separadamente.':
+    this.instructions.textContent=this.ear.quiz?'Compare a resposta com a partitura após ouvir.':
+      data.handMode==='BOTH'&&handMode!=='BOTH'?'Toque a mão indicada e ouça sua parte separadamente.':
       original?instructions:'A transposição mantém o ritmo e os intervalos da lição original.';
     this.fingers.input.disabled=!this.lesson.notes.some(note=>note.finger);
     this.fingers.input.checked=!this.fingers.input.disabled&&this.showFingers;
     this.buildKeyboard();
+    this.updateEarVisibility();
+    this.renderTextScore();
+    this.suggestSection(null);
     void this.drawScore();
     this.showPosition();
     this.say('');
     this.refresh();
+  }
+
+  updateEarVisibility() {
+    const ear=this.ear,hidden=ear.concealed;
+    this.score.hidden=this.position.hidden=this.keyboard.hidden=this.textScore.hidden=hidden;
+    this.zoom.field.hidden=this.fingers.field.hidden=hidden;
+    this.keyField.hidden=this.loop.field.hidden=!!ear.config;
+    this.midiPractice.controls.hidden=this.midiPractice.availability.hidden=ear.quiz;
+    this.practice.hidden=hidden||ear.quiz;
+    this.range.node.hidden=ear.quiz;
+    this.listen.textContent=ear.config?'Ouvir referência':'Ouvir exemplo';
+  }
+
+  renderTextScore() {
+    const size=barLength(this.lesson),ppq=this.lesson.ppq;
+    const unit=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
+    this.textScoreList.replaceChildren(...this.groups.map(group=>{
+      const notes=group.notes.map(note=>{
+        const hand=this.hand==='BOTH'?HANDS[note.hand]+', ':'';
+        const finger=this.showFingers&&note.finger?', dedo sugerido '+note.finger:'';
+        const beats=note.durationTick/ppq;
+        return hand+pitchLabel(note.pitch)+', '+unit.format(beats)+(beats===1?' tempo':' tempos')+finger;
+      });
+      const hold=group.held.length?'. Mantenha '+group.held.map(note=>HANDS[note.hand]+' '+pitchLabel(note.pitch)).join(' e '):'';
+      const bar=Math.floor(group.tick/size)+1;
+      return el('li','',`Compasso ${this.bar||bar}, tempo ${unit.format(group.tick%size/ppq+1)} · ${notes.join(' + ')}`+hold);
+    }));
+  }
+
+  suggestSection(group) {
+    const shouldSuggest=!!group&&!this.bar&&!this.ear.config&&barCount(this.lesson)>1;
+    this.coach.hidden=!shouldSuggest;
+    if(shouldSuggest){
+      this.coachBar=Math.floor(group.tick/barLength(this.lesson))+1;
+      this.coach.textContent='Revisar compasso '+this.coachBar;
+    }
   }
 
   async drawScore() {
@@ -347,7 +414,7 @@ export class MusicLab {
     this.mode='demonstrate';
     this.point(0);
     this.say('Preparando exemplo…');
-    this.sendPlayback('example',{ppq:this.lesson.ppq,bpm:this.bpm,loop:this.loop.input.checked,
+    this.sendPlayback('example',{ppq:this.lesson.ppq,bpm:this.bpm,loop:!this.ear.config&&this.loop.input.checked,
       notes:this.lesson.notes.map(({pitch:{midi},startTick,durationTick})=>({midi,startTick,durationTick}))});
     this.showPosition();
   }
@@ -513,6 +580,7 @@ export class MusicLab {
       this.mode=message.reason==='ended'?'complete':'observe';
       this.point(-1);
       this.say(message.reason==='ended'?'Exemplo concluído.':MESSAGES[message.reason]||'Prévia parada.');
+      if(message.reason==='ended'&&this.ear.config)this.ear.heard();
       this.refresh();
     }
   }

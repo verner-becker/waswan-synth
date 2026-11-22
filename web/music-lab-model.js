@@ -23,8 +23,15 @@ function keyName(tonic,mode) {
   return tonicName(tonic)+(mode==='minor'?' menor':' maior');
 }
 
-export const lessonKeys=lesson=>lesson.key.mode==='minor'?MINOR_KEYS:LAB_KEYS;
-export const notationKey=key=>key.tonic+(key.mode==='minor'?'m':'');
+export function lessonKeys({key}) {
+  if(key.mode==='modal')return {[key.tonic]:{name:tonicName(key.tonic),fifths:key.fifths}};
+  return key.mode==='minor'?MINOR_KEYS:LAB_KEYS;
+}
+
+export function notationKey(key) {
+  if(key.mode==='modal')return SIGNATURES.find(([,,fifths])=>fifths===key.fifths)?.[0]??'C';
+  return key.tonic+(key.mode==='minor'?'m':'');
+}
 
 export function pitchMidi({step,alter,octave}) {
   return (octave+1)*12+SEMITONES[STEPS.indexOf(step)]+alter;

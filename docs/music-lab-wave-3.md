@@ -8,7 +8,7 @@ O catálogo tem 19 lições. **Nível** filtra Fundamentos, Aplicação e Coorde
 
 **Calibrar alcance** lê as teclas extrema grave e aguda na porta e no canal observados. Confirme as notas na oitava escolhida. Recalibre ao mudar a oitava do controlador. Na lição de duas mãos, a prática MIDI é liberada quando a extensão medida abrange toda a variante. Quando cabe em outra oitava, a mudança tem botão explícito. O seletor **Mãos** oferece estudo separado.
 
-A pauta dupla coloca o baixo e a melodia em claves escolhidas pela tessitura e alinha ataques pelo mesmo ticks. A avaliação guiada pede a entrada conjunta e a tecla do baixo durante a melodia. Quando a tecla é solta, o Lab indica como recolocar o baixo e retomar. A orientação de mãos e dedos vem da partitura.
+A pauta dupla coloca o baixo e a melodia em claves escolhidas pela tessitura e alinha os ataques que começam no mesmo ponto do compasso. A avaliação guiada pede a entrada conjunta e a tecla do baixo durante a melodia. Quando a tecla é solta, o Lab indica como recolocar o baixo e retomar. A orientação de mãos e dedos vem da partitura.
 
 ## Evidências
 
