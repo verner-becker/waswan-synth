@@ -18,4 +18,4 @@ O **Progresso local** guarda contagem e até oito resumos por lição, versão e
 - `tests/browser-music-lab-assessment.mjs` usa MIDI simulado e o WASM real. Cobre nota extra, nota ausente, acerto com avanço visual, retomada após troca de workspace, dispositivo e panic, uma única emissão ao Synth, janela do acorde e recuperação do progresso após recarregar.
 - As regressões da W1, do shell e do monitor DAW verificam continuidade do áudio, perfis, pickup e propriedade da rota. Relatório e capturas da W2 ficam em `.local/validation/music-lab/`.
 
-O ensaio físico no SMK-37 Pro segue pendente. A próxima onda amplia o catálogo e acrescenta exercícios de duas mãos com verificação de alcance.
+O usuário aprovou a W2 e autorizou a implementação da W3. O ensaio físico documentado no SMK-37 Pro segue pendente. A próxima onda amplia o catálogo e acrescenta exercícios de duas mãos com verificação de alcance.
