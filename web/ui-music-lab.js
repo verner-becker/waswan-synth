@@ -1,24 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import {el,action} from './ui-primitives.js';
-import {LAB_KEYS,lessonClef,lessonGroups,pitchLabel,transposeLesson} from './music-lab-model.js';
+import {barCount,fittingOctave,lessonClef,lessonGroups,lessonKeys,lessonRange,lessonVariant,midiPitchLabel,pitchLabel,tonicName,transposeLesson} from './music-lab-model.js';
+import {LAB_LESSONS,lessonChordSymbol} from './music-lab-catalog.js';
 import {loadNotation,renderLessonScore} from './ui-music-lab-score.js';
 import {MusicLabMidiPractice} from './ui-music-lab-practice.js';
-import right from './music-lab/scale-c-major-rh-1oct.json' with {type:'json'};
-import left from './music-lab/scale-c-major-lh-1oct.json' with {type:'json'};
-import chord from './music-lab/chord-c-major-rh.json' with {type:'json'};
-
-const LESSONS=[
-  {data:right,label:'Escala de Dó maior',detail:'Mão direita · 1 oitava'},
-  {data:left,label:'Escala de Dó maior',detail:'Mão esquerda · 1 oitava'},
-  {data:chord,label:'Tríade de Dó maior',detail:'Posição fundamental · mão direita'}
-];
+import {MusicLabRange} from './ui-music-lab-range.js';
 const TRACKS=[
   ['all','Todas'],
   ['melody','Melody Lab'],
   ['harmony','Harmony Lab'],
   ['technique','Technique & Expression']
 ];
-const HANDS={RH:'Mão direita',LH:'Mão esquerda'};
+const HANDS={RH:'Mão direita',LH:'Mão esquerda',BOTH:'Duas mãos'};
+const HAND_SIGNS={RH:'MD',LH:'ME'};
+const LEVELS=[['all','Todos'],['foundation','Fundamentos'],['application','Aplicação'],['coordination','Coordenação']];
 const KEYS=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const MESSAGES={
   'audio-unavailable':'Inicie ou retome o áudio do Synth para ouvir a prévia.',
@@ -32,6 +27,7 @@ const MESSAGES={
 
 function selectField(label,options,value,onChange) {
   const field=el('label','ww-lab-field',label),select=el('select');
+  select.setAttribute('aria-label',label);
   for(const [key,text] of options)select.add(new Option(text,key));
   select.value=value;
   select.onchange=()=>onChange(select.value);
@@ -50,7 +46,8 @@ function checkField(label,checked,onChange) {
 
 export class MusicLab {
   constructor({bridge,startAudio,openSettings,inputConflict}) {
-    Object.assign(this,{bridge,startAudio,openSettings,track:'all',tonic:'C',bpm:60,showFingers:true,entry:LESSONS[0]});
+    Object.assign(this,{bridge,startAudio,openSettings,track:'all',tonic:'C',bpm:60,showFingers:true,entry:LAB_LESSONS[0],
+      hand:'RH',bar:0,octaves:0});
     const css=el('link');
     css.rel='stylesheet';
     css.href=new URL('./ui-music-lab.css',import.meta.url).href;
@@ -79,19 +76,32 @@ export class MusicLab {
       return {id,button};
     });
     this.list=el('div','ww-lab-lessons');
-    library.append(el('h2','','Lições'),filter,this.list);
+    const level=selectField('Nível',LEVELS,'all',()=>this.filter(this.track));
+    this.level=level.select;
+    library.append(el('h2','','Lições'),filter,level.field,this.list);
 
     const page=el('section','ww-panel ww-lab-lesson');
     this.lessonTitle=el('h2');
     this.meta=el('p','ww-lab-meta');
     this.goal=el('p','ww-lab-goal');
     const controls=el('div','ww-lab-controls');
-    const key=selectField('Tonalidade',Object.entries(LAB_KEYS).map(([id,v])=>[id,v.name]),this.tonic,value=>{
-      this.stop();
+    const key=selectField('Tonalidade',[],this.tonic,value=>{
       this.tonic=value;
+      this.octaves=0;
       this.load();
     });
     this.key=key.select;
+    const hand=selectField('Mãos',[['BOTH','Juntas'],['RH','Direita'],['LH','Esquerda']],'BOTH',value=>{
+      this.hand=value;
+      this.bar=this.octaves=0;
+      this.load();
+    });
+    this.handField=hand;
+    const excerpt=selectField('Trecho',[],'0',value=>{
+      this.bar=Number(value);
+      this.load();
+    });
+    this.excerpt=excerpt;
     const tempo=selectField('Andamento',[[40,'40 BPM'],[60,'60 BPM'],[80,'80 BPM'],[100,'100 BPM']],this.bpm,value=>{
       this.stop();
       this.bpm=Number(value);
@@ -101,7 +111,8 @@ export class MusicLab {
       this.score.style.setProperty('--lab-zoom',Number(value)/100);
     });
     this.fingers=checkField('Dedilhado',true,checked=>{this.showFingers=checked;void this.drawScore();this.showPosition();});
-    controls.append(key.field,tempo.field,this.zoom.field,this.fingers.field);
+    this.loop=checkField('Repetir exemplo',false,()=>this.stop('Prévia parada.'));
+    controls.append(key.field,hand.field,excerpt.field,tempo.field,this.zoom.field,this.fingers.field);
     this.score=el('div','ww-lab-score');
     this.score.tabIndex=0;
     this.score.setAttribute('role','region');
@@ -117,7 +128,7 @@ export class MusicLab {
       if(this.index+1<this.groups.length)this.point(this.index+1);
       else{this.mode='complete';this.point(-1);this.say('Estudo concluído.');}
     });
-    transport.append(this.listen,this.halt,this.practice,this.previous,this.next);
+    transport.append(this.listen,this.halt,this.practice,this.previous,this.next,this.loop.field);
     this.position=el('p','ww-lab-position');
     this.position.id='ww-lab-position';
     this.keyboard=el('div','ww-lab-keyboard');
@@ -126,7 +137,8 @@ export class MusicLab {
     this.status=el('p','ww-lab-status');
     this.status.setAttribute('role','status');
     this.midiPractice=new MusicLabMidiPractice({
-      bridge,conflict:inputConflict,
+      bridge,conflict:()=>inputConflict()||(this.range.active?'Conclua a calibração para iniciar a prática.':this.rangeReason()),
+      autoChannel:()=>this.range.current?.channel??null,onChannel:()=>this.refresh(),
       onState:(mode,index)=>{
         this.mode=mode;
         this.point(index);
@@ -135,7 +147,15 @@ export class MusicLab {
       },
       onObserved:played=>{this.played=played;this.paintPiano();}
     });
-    page.append(this.meta,this.lessonTitle,this.goal,controls,this.score,transport,this.midiPractice.controls,this.midiPractice.availability,
+    this.range=new MusicLabRange({bridge,conflict:inputConflict,channel:()=>this.midiPractice.selectedChannel,onChange:()=>this.refresh()});
+    this.adapt=action('',()=>{
+      if(this.suggestion===null)return;
+      this.octaves+=this.suggestion;
+      this.load();
+    });
+    this.restoreRange=action('Voltar à oitava original',()=>{this.octaves=0;this.load();});
+    this.range.node.append(this.adapt,this.restoreRange);
+    page.append(this.meta,this.lessonTitle,this.goal,controls,this.score,transport,this.range.node,this.midiPractice.controls,this.midiPractice.availability,
       this.position,this.keyboard,this.status,this.midiPractice.feedback,this.midiPractice.details,this.instructions,this.midiPractice.history);
     layout.append(library,page);
     this.node.append(header,layout);
@@ -150,16 +170,17 @@ export class MusicLab {
   filter(track) {
     this.track=track;
     for(const {id,button} of this.filters)button.setAttribute('aria-pressed',String(id===track));
-    const entries=LESSONS.filter(({data})=>track==='all'||data.track===track||track==='technique'&&data.tags.includes('fingering'));
+    const inTrack=LAB_LESSONS.filter(({data})=>track==='all'||data.track===track||track==='technique'&&data.tags.includes('fingering'));
+    for(const option of this.level.options)option.disabled=option.value!=='all'&&!inTrack.some(entry=>entry.level===option.value);
+    if(this.level.selectedOptions[0]?.disabled)this.level.value='all';
+    const entries=inTrack.filter(entry=>this.level.value==='all'||entry.level===this.level.value);
     if(!entries.includes(this.entry)){
-      this.entry=entries[0];
-      this.load();
+      this.selectLesson(entries[0]);
     }
     this.list.replaceChildren(...entries.map(entry=>{
       const button=action('',()=>{
         if(this.entry===entry)return;
-        this.entry=entry;
-        this.load();
+        this.selectLesson(entry);
         this.filter(this.track);
         this.list.querySelector('[aria-pressed="true"]')?.focus();
       });
@@ -169,25 +190,51 @@ export class MusicLab {
     }));
   }
 
+  selectLesson(entry) {
+    this.entry=entry;
+    this.tonic=entry.data.key.tonic;
+    this.hand=entry.data.handMode;
+    this.bar=this.octaves=0;
+    this.load();
+  }
+
   load() {
     this.stop();
-    this.lesson=transposeLesson(this.entry.data,this.tonic);
-    this.groups=lessonGroups(this.lesson.notes);
+    const data=this.entry.data,keys=lessonKeys(data);
+    const source=transposeLesson(data,this.tonic),base=lessonVariant(source,{hand:this.hand});
+    const bars=barCount(base);
+    this.key.replaceChildren(...Object.entries(keys).map(([tonic,v])=>new Option(v.name,tonic)));
+    this.key.value=this.tonic;
+    this.handField.field.hidden=data.handMode!=='BOTH';
+    this.handField.select.value=this.hand;
+    this.excerpt.field.hidden=bars<2;
+    this.excerpt.select.replaceChildren(new Option('Toda a lição','0'),
+      ...Array.from({length:bars},(_,i)=>new Option('Compasso '+(i+1),String(i+1))));
+    this.excerpt.select.value=String(this.bar);
+    this.lesson=lessonVariant(source,{hand:this.hand,bar:this.bar,octaves:this.octaves});
+    this.needed=lessonRange(this.lesson);
+    this.groups=lessonGroups(this.lesson.notes,{withHolds:this.hand==='BOTH'});
     this.played=null;
     this.midiPractice.setLesson(this.lesson,this.groups,()=>this.bpm);
     this.mode='observe';
     this.index=0;
     const {key,handMode,title,instructions,learningGoal}=this.lesson;
-    this.lessonTitle.textContent=key.tonic==='C'?title:this.entry.label.replace('Dó maior',LAB_KEYS[key.tonic].name);
-    this.meta.textContent=[handMode==='LH'?'ME · Mão esquerda':'MD · Mão direita',lessonClef(this.lesson.notes)==='bass'?'Clave de fá':'Clave de sol'].join('  /  ');
-    this.goal.textContent=key.tonic==='C'?learningGoal:learningGoal.replace('Dó maior',LAB_KEYS[key.tonic].name);
-    this.instructions.textContent=key.tonic==='C'?instructions:'A transposição mantém o ritmo e os intervalos da lição original.';
-    this.fingers.input.disabled=key.tonic!=='C';
-    this.fingers.input.checked=key.tonic==='C'&&this.showFingers;
+    const original=key.tonic===data.key.tonic,root=keys[data.key.tonic].name;
+    this.lessonTitle.textContent=original?title:title.includes(root)?title.replace(root,keys[key.tonic].name):title+' · '+tonicName(key.tonic);
+    const clef=handMode==='BOTH'?'Pauta dupla':lessonClef(this.lesson.notes)==='bass'?'Clave de fá':'Clave de sol';
+    this.meta.textContent=[HAND_SIGNS[handMode]?[HAND_SIGNS[handMode],HANDS[handMode]].join(' · '):HANDS[handMode],
+      clef,lessonChordSymbol(this.lesson,this.entry.quality),this.bar?'Compasso '+this.bar:''].filter(Boolean).join('  /  ');
+    this.goal.textContent=original?learningGoal:learningGoal.includes(root)?learningGoal.replace(root,keys[key.tonic].name):
+      'Acompanhe os intervalos da lição na nova tonalidade.';
+    this.instructions.textContent=data.handMode==='BOTH'&&handMode!=='BOTH'?'Toque a mão indicada e ouça sua parte separadamente.':
+      original?instructions:'A transposição mantém o ritmo e os intervalos da lição original.';
+    this.fingers.input.disabled=!this.lesson.notes.some(note=>note.finger);
+    this.fingers.input.checked=!this.fingers.input.disabled&&this.showFingers;
     this.buildKeyboard();
     void this.drawScore();
     this.showPosition();
     this.say('');
+    this.refresh();
   }
 
   async drawScore() {
@@ -206,7 +253,7 @@ export class MusicLab {
 
   buildKeyboard() {
     const pitches=this.lesson.notes.map(n=>n.pitch.midi);
-    const low=Math.floor(Math.min(...pitches)/12)*12,high=Math.ceil(Math.max(...pitches)/12)*12;
+    const low=Math.floor(Math.min(...pitches)/12)*12,high=Math.min(127,Math.ceil(Math.max(...pitches)/12)*12);
     const natural=el('div','ww-lab-white-keys'),black=el('div','ww-lab-black-keys');
     const whites=[];
     this.keys=new Map();
@@ -239,9 +286,12 @@ export class MusicLab {
   paintPiano() {
     const group=this.groups[this.index];
     for(const [midi,{key,highlighted}] of this.keys){
-      const note=group?.notes.find(item=>item.pitch.midi===midi);
-      key.classList.toggle('ww-lab-key-current',!!note);
-      highlighted.textContent=note?(this.showFingers&&note.finger?note.finger:pitchLabel(note.pitch)):'';
+      const attack=group?.notes.find(item=>item.pitch.midi===midi),hold=group?.held.find(item=>item.pitch.midi===midi);
+      const note=attack||hold;
+      key.classList.toggle('ww-lab-key-current',!!attack);
+      key.classList.toggle('ww-lab-key-held',!!hold);
+      const hand=this.hand==='BOTH'&&note?HAND_SIGNS[note.hand]+' ':'';
+      highlighted.textContent=note?hand+(this.showFingers&&note.finger?note.finger:pitchLabel(note.pitch)):'';
       const played=this.played?.pitch===midi?this.played:null;
       key.classList.toggle('ww-lab-key-played',played?.correct===true);
       key.classList.toggle('ww-lab-key-outside',played?.correct===false);
@@ -250,11 +300,12 @@ export class MusicLab {
 
   showPosition() {
     const group=this.groups[this.index];
-    this.markScore?.(group?.tick);
+    this.markScore?.(group?.tick,group?.held);
     this.paintPiano();
     if(group){
-      const notes=group.notes.map(({pitch,finger})=>pitchLabel(pitch)+(finger&&this.showFingers?' · dedo '+finger:''));
-      this.position.textContent=`${this.index+1} de ${this.groups.length}  /  ${notes.join('  +  ')}`;
+      const notes=group.notes.map(({pitch,finger,hand})=>(this.hand==='BOTH'?HAND_SIGNS[hand]+' ':'')+pitchLabel(pitch)+(finger&&this.showFingers?' · dedo '+finger:''));
+      const holds=group.held.length?'  /  Mantenha '+group.held.map(note=>HAND_SIGNS[note.hand]+' '+pitchLabel(note.pitch)).join(' + '):'';
+      this.position.textContent=`${this.index+1} de ${this.groups.length}  /  ${notes.join('  +  ')}`+holds;
       const cursor=this.score.querySelector('.ww-lab-score-cursor');
       if(cursor){
         const bounds=this.score.getBoundingClientRect(),target=cursor.getBoundingClientRect();
@@ -284,7 +335,7 @@ export class MusicLab {
     this.mode='demonstrate';
     this.point(0);
     this.say('Preparando exemplo…');
-    this.bridge.send({t:'music-lab-start',token:this.token,ppq:this.lesson.ppq,bpm:this.bpm,
+    this.bridge.send({t:'music-lab-start',token:this.token,ppq:this.lesson.ppq,bpm:this.bpm,loop:this.loop.input.checked,
       notes:this.lesson.notes.map(({pitch:{midi},startTick,durationTick})=>({midi,startTick,durationTick}))});
     this.refresh();
   }
@@ -302,6 +353,15 @@ export class MusicLab {
   deactivate(reason='Prática pausada ao sair do Music Lab.') {
     this.stop('Prévia parada.');
     this.midiPractice.pause(reason);
+    this.range.cancel();
+  }
+
+  rangeReason() {
+    const observed=this.range.current;
+    if(!observed)return this.hand==='BOTH'?'Calibre o alcance antes de praticar com as duas mãos.':'';
+    if(fittingOctave(this.needed,observed)===0)return '';
+    const required=midiPitchLabel(this.needed.min)+'–'+midiPitchLabel(this.needed.max);
+    return `O trecho exige ${required}. ${this.hand==='BOTH'?'Ajuste a oitava ou estude cada mão separadamente.':'Ajuste a oitava ou recalibre o teclado.'}`;
   }
 
   receive(message) {
@@ -340,10 +400,23 @@ export class MusicLab {
     if(this.audioAction.hidden!==hideStart)this.audioAction.hidden=hideStart;
     const audioAction=context?.state==='suspended'?'Retomar áudio':'Iniciar áudio';
     if(this.audioAction.textContent!==audioAction)this.audioAction.textContent=audioAction;
-    const disabled=!running||!!this.token||this.midiPractice.hasAttempt;
+    this.range.refresh(!!this.token||this.midiPractice.state==='listening');
+    const range=this.range.current;
+    this.suggestion=range?fittingOctave(this.needed,range):null;
+    const canAdapt=this.suggestion!==null&&this.suggestion!==0&&!this.range.active;
+    this.adapt.hidden=!canAdapt;
+    if(canAdapt){
+      const size=Math.abs(this.suggestion),verb=this.suggestion>0?'Subir':'Descer';
+      const label=`${verb} ${size} ${size===1?'oitava':'oitavas'}`;
+      if(this.adapt.textContent!==label)this.adapt.textContent=label;
+    }
+    this.restoreRange.hidden=!this.octaves||this.range.active;
+    const disabled=!running||!!this.token||this.midiPractice.hasAttempt||this.range.active;
     if(this.listen.disabled!==disabled)this.listen.disabled=disabled;
     if(this.tempo.disabled!==this.midiPractice.hasAttempt)this.tempo.disabled=this.midiPractice.hasAttempt;
     if(this.halt.hidden===!!this.token)this.halt.hidden=!this.token;
     this.midiPractice.refresh(!!this.token);
+    this.midiPractice.channel.disabled=this.range.active||this.midiPractice.state==='listening';
+    this.loop.input.disabled=this.midiPractice.hasAttempt||this.range.active;
   }
 }

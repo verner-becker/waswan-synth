@@ -58,8 +58,8 @@ export class LabAssessment {
       return {kind:'release',pitch,ms,reference:held.reference};
     }
 
-    const target=this.groups[this.index]?.notes;
-    if(!target){
+    const group=this.groups[this.index];
+    if(!group){
       const prior=this.held.get(pitch);
       if(prior?.reference!==undefined)prior.at=null;
       return null;
@@ -67,12 +67,22 @@ export class LabAssessment {
     // A repeated attack replaces an unfinished hold without inventing a release time.
     this.attacks++;
     this.held.set(pitch,{at});
+    const target=group.notes;
     const note=target.find(note=>note.pitch.midi===pitch);
     if(!note){
+      if(group.held?.some(note=>note.pitch.midi===pitch)){
+        this.held.get(pitch).anchor=true;
+        return {kind:'anchor',pitch};
+      }
       this.extras++;
       if(target.length>1)this.chordRejected=true;
       return {kind:'extra',pitch};
     }
+    const missing=group.held?.find(note=>{
+      const held=this.held.get(note.pitch.midi);
+      return !held||held.reference===undefined&&!held.anchor;
+    });
+    if(missing)return {kind:'anchor-missing',pitch,anchor:missing.pitch.midi};
     const chord=target.length>1;
     if(chord){
       if(this.chordRejected)return {kind:'retry',pitch};

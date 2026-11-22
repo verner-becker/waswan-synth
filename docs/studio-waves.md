@@ -1,6 +1,6 @@
 # WASWAN Studio — controle das ondas
 
-O Music Lab tem uma série própria. O [diagnóstico e plano W0](music-lab-wave-0.md) registram o assessment Astra 6.2 extra high. O usuário testou e aprovou as três lições com partitura e prévia da [W1](music-lab-wave-1.md). A [W2](music-lab-wave-2.md) acrescenta avaliação MIDI, retomada e progresso local na branch `feat/music-lab-w2`, empilhada sobre `feat/music-lab-w1`. O ensaio físico segue pendente.
+O Music Lab tem uma série própria. O [diagnóstico e plano W0](music-lab-wave-0.md) registram o assessment Astra 6.2 extra high. O usuário aprovou a [W1](music-lab-wave-1.md) e a [W2](music-lab-wave-2.md). A [W3](music-lab-wave-3.md) acrescenta catálogo, treino de duas mãos e calibração. O usuário autorizou prosseguir pela W4 e W5 com validação em software antes do ensaio físico.
 
 Em 20/11/2026, o usuário solicitou o discovery do **WASWAN Sampler Studio** e a apresentação da arquitetura antes da Onda 1. A Onda 0 foi concluída na branch `docs/sampler-studio-discovery`, sobre `5c2338b`. A auditoria inclui regressões Node, WASM e Chrome da base. O usuário aprovou a execução do roadmap em branches empilhadas e a publicação dessas branches no GitHub. A [Onda 1](sampler-studio-wave-1.md) implementa e testa instrumentos tocáveis. [Roadmap e critérios de aceite](sampler-studio-roadmap.md) · [Auditoria e evidência](sampler-studio-discovery.md) · [Modelo e API](sampler-studio-api.md)
 

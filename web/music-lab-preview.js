@@ -65,8 +65,12 @@ export class MusicLabPreview {
       return;
     }
     const clock=this.clock;
+    const elapsed=frame-clock.startFrame;
+    const cycle=clock.loop?Math.max(0,Math.floor((elapsed+.499999)/clock.duration)):0;
+    const startIndex=cycle>clock.cycle?0:clock.index;
+    const relative=elapsed-Math.round(cycle*clock.duration);
     let attacks=0;
-    for(let i=clock.index;i<clock.events.length&&clock.events[i].frame<=frame-clock.startFrame;i++){
+    for(let i=startIndex;i<clock.events.length&&clock.events[i].frame<=relative;i++){
       if(clock.events[i].velocity)attacks++;
     }
     if(attacks){

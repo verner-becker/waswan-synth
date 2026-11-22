@@ -2,12 +2,12 @@
 export const PROGRESS_KEY='waswan-music-lab-progress-v1';
 const FORMAT='waswan-music-lab-progress';
 const HISTORY_LIMIT=8;
-const KEY_PATTERN=/^[a-z0-9-]{1,64}@[1-9]\d{0,5}:[A-G][#b]?$/;
+const KEY_PATTERN=/^[a-z0-9-]{1,64}@[1-9]\d{0,5}:[A-G][#b]?(?::[a-z0-9-]{1,32})?$/;
 const COUNT_LIMIT=1000000;
 const count=value=>Number.isInteger(value)&&value>=0&&value<=COUNT_LIMIT;
 
 export function lessonProgressKey(lesson) {
-  return `${lesson.id}@${lesson.version}:${lesson.key.tonic}`;
+  return `${lesson.id}@${lesson.version}:${lesson.key.tonic}`+(lesson.variant?':'+lesson.variant:'');
 }
 
 function checkedAttempt(attempt) {
@@ -29,7 +29,7 @@ export function readLabProgress(storage) {
     const data=JSON.parse(raw);
     if(data?.format!==FORMAT||data.version!==1||!data.lessons||Array.isArray(data.lessons))return new Map();
     const lessons=new Map();
-    for(const [key,record] of Object.entries(data.lessons).slice(0,64)){
+    for(const [key,record] of Object.entries(data.lessons).slice(-512)){
       if(!KEY_PATTERN.test(key)||!count(record?.attempts)||!Array.isArray(record.history))continue;
       const history=record.history.slice(0,HISTORY_LIMIT).map(checkedAttempt).filter(Boolean);
       if(history.length&&record.attempts>=history.length)lessons.set(key,{attempts:record.attempts,history});
@@ -57,8 +57,15 @@ export class LabProgress {
     const current=this.lessons.get(key);
     this.lessons.set(key,{attempts:Math.min(COUNT_LIMIT,(current?.attempts??0)+1),
       history:[attempt,...(current?.history??[])].slice(0,HISTORY_LIMIT)});
+    const serialize=()=>JSON.stringify({format:FORMAT,version:1,lessons:Object.fromEntries(this.lessons)});
+    let json=serialize();
+    while(json.length>262144||this.lessons.size>512){
+      const [oldest]=[...this.lessons].reduce((a,b)=>b[1].history[0].at<a[1].history[0].at?b:a);
+      this.lessons.delete(oldest);
+      json=serialize();
+    }
     try {
-      this.storage.setItem(PROGRESS_KEY,JSON.stringify({format:FORMAT,version:1,lessons:Object.fromEntries(this.lessons)}));
+      this.storage.setItem(PROGRESS_KEY,json);
       this.unsaved=false;
     }catch{
       this.unsaved=true;

@@ -3,25 +3,26 @@ import {action,el} from './ui-primitives.js';
 import {subscribeDawInput} from './daw-input-events.js';
 import {LabAssessment,labMidiEvent} from './music-lab-assessment.js';
 import {LabProgress} from './music-lab-progress.js';
-import {pitchLabel} from './music-lab-model.js';
+import {midiPitchLabel,pitchLabel} from './music-lab-model.js';
 
 const MAX_PENDING=256;
-const NAMES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const seconds=new Intl.NumberFormat('pt-BR',{style:'unit',unit:'second',maximumFractionDigits:2});
 const dates=new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'});
 const duration=ms=>seconds.format(ms/1000);
 
-function scoreText({matched,expected,extras,missing,retries},chord) {
-  const parts=[`${matched}/${expected} ${chord?'acorde':'notas na ordem'}`];
+function scoreText({matched,expected,extras,missing,retries},kind) {
+  const chord=kind==='chord',steps=kind==='steps';
+  const parts=[`${matched}/${expected} ${chord?'acorde':steps?'passos na ordem':'notas na ordem'}`];
   if(extras)parts.push(extras===1?'1 nota fora do alvo':`${extras} notas fora do alvo`);
-  if(missing)parts.push(chord?'Acorde incompleto':missing===1?'1 nota faltou':`${missing} notas faltaram`);
-  if(retries)parts.push(retries===1?'1 acorde fora da janela':`${retries} acordes fora da janela`);
+  if(missing)parts.push(chord?'Acorde incompleto':steps?`${missing} ${missing===1?'passo faltou':'passos faltaram'}`:missing===1?'1 nota faltou':`${missing} notas faltaram`);
+  if(retries)parts.push(retries===1?(steps?'1 entrada fora da janela':'1 acorde fora da janela'):
+    `${retries} ${steps?'entradas':'acordes'} fora da janela`);
   return parts.join(' · ');
 }
 
 export class MusicLabMidiPractice {
-  constructor({bridge,conflict,onState,onObserved}) {
-    Object.assign(this,{bridge,conflict,onState,onObserved,state:'idle'});
+  constructor({bridge,conflict,autoChannel,onChannel,onState,onObserved}) {
+    Object.assign(this,{bridge,conflict,autoChannel,onState,onObserved,state:'idle'});
     let storage;
     try{storage=window.localStorage;}catch{}
     this.progress=new LabProgress(storage);
@@ -30,6 +31,7 @@ export class MusicLabMidiPractice {
     this.channel=el('select');
     this.channel.add(new Option('Automático',''));
     for(let i=0;i<16;i++)this.channel.add(new Option(String(i+1),String(i)));
+    this.channel.onchange=onChannel;
     const label=el('label','ww-lab-field','Canal MIDI');
     label.append(this.channel);
     this.controls=el('div','ww-lab-midi-controls');
@@ -48,10 +50,14 @@ export class MusicLabMidiPractice {
     return !!this.attempt;
   }
 
+  get selectedChannel() {
+    return this.channel.value===''?null:Number(this.channel.value);
+  }
+
   setLesson(lesson,groups,getTempo) {
     this.detach();
     Object.assign(this,{lesson,groups,getTempo,state:'idle',attempt:null,lastHold:null,lastMessage:''});
-    this.chord=groups.some(group=>group.notes.length>1);
+    this.kind=lesson.handMode==='BOTH'?'steps':groups.length===1&&groups[0].notes.length>1?'chord':'notes';
     this.paint();
     this.renderHistory();
   }
@@ -73,7 +79,7 @@ export class MusicLabMidiPractice {
     }
     const input=this.bridge.midi.input;
     const reason=this.lossReason();
-    const disabled=!!demo||!input||input.state==='disconnected'||!!reason||this.lesson?.mode!=='strict';
+    const disabled=!!demo||!input||input.state==='disconnected'||!!reason||!['strict','guided'].includes(this.lesson?.mode);
     if(this.start.disabled!==disabled)this.start.disabled=disabled;
     const availability=input&&this.bridge.getAudio().context?.state==='running'&&this.state!=='paused'?reason:'';
     if(this.availability.textContent!==availability)this.availability.textContent=availability;
@@ -82,15 +88,16 @@ export class MusicLabMidiPractice {
   begin() {
     this.refresh();
     if(this.lease||this.start.disabled)return;
-    const channel=this.channel.value===''?null:Number(this.channel.value);
+    const channel=this.selectedChannel??this.autoChannel();
     const resume=this.state==='paused';
     if(resume)this.attempt.resume(channel);
     else this.attempt=new LabAssessment(this.groups,{channel,bpm:this.getTempo(),ppq:this.lesson.ppq,
-      chordWindowMs:this.lesson.evaluation?.chordOnsetWindowMs??120});
+      chordWindowMs:this.lesson.evaluation?.chordOnsetWindowMs??(this.kind==='steps'?180:120)});
     this.state='listening';
     this.lastHold=null;
     this.lastMessage=resume?'Prática retomada. Toque o alvo destacado.':
-      this.chord?`Toque as notas do acorde juntas. Janela de ${this.attempt.chordWindowMs} ms.`:
+      this.kind==='steps'?'Comece com as duas notas destacadas. Mantenha a tecla do baixo até o fim.':
+      this.kind==='chord'?`Toque as notas do acorde juntas. Janela de ${this.attempt.chordWindowMs} ms.`:
         'Toque a nota destacada. A pauta avança a cada acerto.';
     const {input,generation}=this.bridge.midi;
     const lease={input,generation,pending:[],frame:0};
@@ -130,7 +137,7 @@ export class MusicLabMidiPractice {
       if(result.kind==='release'&&result.ms!==undefined)this.lastHold=result;
       if(result.kind==='match')matched=true;
       if(result.pitch!==undefined&&result.kind!=='release'){
-        observed={pitch:result.pitch,correct:result.kind==='match'||result.kind==='partial'};
+        observed={pitch:result.pitch,correct:['match','partial','anchor','anchor-missing'].includes(result.kind)};
         this.lastMessage=this.describe(result);
       }
       if(this.attempt.complete)break;
@@ -143,19 +150,21 @@ export class MusicLabMidiPractice {
 
   name(pitch) {
     const note=this.lesson.notes.find(note=>note.pitch.midi===pitch);
-    return note?pitchLabel(note.pitch):NAMES[pitch%12]+(Math.floor(pitch/12)-1);
+    return note?pitchLabel(note.pitch):midiPitchLabel(pitch);
   }
 
-  describe({kind,pitch,chord}) {
+  describe({kind,pitch,chord,anchor}) {
     switch(kind){
     case 'match': {
-      const hit=chord?'✓ Acorde correto.':`✓ ${this.name(pitch)} correta.`;
+      const hit=chord?(this.kind==='steps'?'✓ Entrada conjunta correta.':'✓ Acorde correto.'):`✓ ${this.name(pitch)} correta.`;
       return this.attempt.index===this.groups.length?hit+' Solte as teclas para concluir.':hit;
     }
-    case 'extra': return `! Tocou ${this.name(pitch)} fora do alvo. ${this.chord?'Solte as teclas e tente o acorde novamente.':'Tente a nota destacada.'}`;
+    case 'extra': return `! Tocou ${this.name(pitch)} fora do alvo. ${this.kind==='chord'?'Solte as teclas e tente o acorde novamente.':'Tente a nota destacada.'}`;
+    case 'anchor': return `Mantenha ${this.name(pitch)} e toque a nota da melodia destacada.`;
+    case 'anchor-missing': return `Mantenha ${this.name(anchor)} no baixo e repita ${this.name(pitch)}.`;
     case 'wide': return `! Os ataques passaram de ${this.attempt.chordWindowMs} ms. Solte as teclas e toque juntas de novo.`;
-    case 'partial': return `${this.name(pitch)} recebida. Complete o acorde com as teclas juntas.`;
-    default: return 'Solte as teclas antes de tentar o acorde novamente.';
+    case 'partial': return `${this.name(pitch)} recebida. ${this.kind==='steps'?'Junte a outra nota do primeiro passo.':'Complete o acorde com as teclas juntas.'}`;
+    default: return 'Solte as teclas antes de tentar a entrada novamente.';
     }
   }
 
@@ -216,7 +225,7 @@ export class MusicLabMidiPractice {
     const chordClock=summary.windowUnavailable?' Janela do acorde indisponível nesta tentativa.':'';
     const next=summary.missing?' Tente novamente acompanhando o alvo destacado.':'';
     const save=stored?'':' O armazenamento local está indisponível. O resumo fica visível nesta aba.';
-    this.lastMessage=scoreText(summary,this.chord)+'.'+chordClock+next+save;
+    this.lastMessage=scoreText(summary,this.kind)+'.'+chordClock+next+save;
     this.onObserved(null);
     this.onState('review',-1);
     const returnFocus=document.activeElement===this.end;
@@ -255,7 +264,7 @@ export class MusicLabMidiPractice {
     this.historyTitle.textContent=`Progresso local · ${count} ${count===1?'tentativa':'tentativas'}`;
     this.historyList.replaceChildren(...record.history.map(({at,summary})=>{
       const hold=summary.holdSamples?` · média de tecla ${duration(summary.holdMeanMs)}`:'';
-      return el('li','',`${dates.format(at)} · ${scoreText(summary,this.chord)}${hold}`);
+      return el('li','',`${dates.format(at)} · ${scoreText(summary,this.kind)}${hold}`);
     }));
   }
 }
